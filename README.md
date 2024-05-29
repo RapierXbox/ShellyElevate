@@ -7,7 +7,7 @@ Shelly Elevate is an app designed for the Shelly Wall Display, codenamed Stargat
 ## Hacking your Wall Display
 There are two different methods to jailbreak your wall display, and you'll need to choose one:
 * **UART**: This method is highly reliable, with nearly a 100% success rate. However, it requires soldering cables to your device and purchasing an inexpensive [USB2UART](https://aliexpress.com/item/32694152202.html) adapter.
-* **MTKClient**: Although this method didn't work for me, it has been successful for others in the community. But it **can** work for you.
+* **MTKClient**: Although this method didn't work for me, it has been successful for others in the community. But it **can** work for you. **TODO**
 
 ### Using UART
 #### Install the required Software
