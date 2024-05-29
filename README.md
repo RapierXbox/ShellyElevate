@@ -30,7 +30,7 @@ There are two different methods to jailbreak your wall display, and you'll need 
 ![img1](https://github.com/RapierXbox/ShellyElevate/assets/65401386/df5491c8-02c4-4b11-9984-849048d78136)
 ##### 4. Reconnect Power and Connect Adapter
 * Connect power to the daughterboard and connect it to the motherboard
-![img2](https://github.com/RapierXbox/ShellyElevate/assets/65401386/948a7e51-815b-4deb-8b2d-58e2f3c88134)
+![img2](https://github.com/RapierXbox/ShellyElevate/assets/65401386/948a7e51-815b-4deb-8b2d-58e2f3c88134) <sub>picture by luka177<sub/>
 * Connect the UART-to-USB adapter. Your setup should look like this:
 ![img3](https://github.com/RapierXbox/ShellyElevate/assets/65401386/af3a176d-3b8d-4a5e-9afe-1b01265e4920)
 #### Connect to your Display
@@ -63,3 +63,32 @@ There are two different methods to jailbreak your wall display, and you'll need 
 * After rebooting, Chrome should open with your Home Assistant instance. If it doesn't, specify your IP and compile the app yourself.
 ##### 9. Troublshooting:
 * To return to the home screen, use: `./adb shell input keyevent 3`
+## Configuration in Home Assistant
+* In your homeassistant.yaml file add this:
+```
+switch:
+  - platform: rest
+    name: Relay Shelly Walldisplay
+    resource: http://<your ip>:8080/relay
+    body_on: "true"
+    body_off: "false"
+    is_on_template: "{{ value_json.state }}"
+    headers:
+      Content-Type: application/json
+    scan_interval: 10
+
+sensor:
+  - platform: rest
+    name: Temperature Shelly Walldisplay
+    resource: http://<your ip>:8080/getTemp
+    value_template: "{{ value_json.temperature }}"
+    unit_of_measurement: "°C"
+    scan_interval: 120
+
+  - platform: rest
+    name: Humidity Shelly Walldisplay
+    resource: http://<your ip>:8080/getHumidity
+    value_template: "{{ value_json.humidity }}"
+    unit_of_measurement: "%"
+    scan_interval: 120```
+
