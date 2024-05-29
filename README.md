@@ -90,5 +90,5 @@ sensor:
     resource: http://<your ip>:8080/getHumidity
     value_template: "{{ value_json.humidity }}"
     unit_of_measurement: "%"
-    scan_interval: 120```
-
+    scan_interval: 120
+```
