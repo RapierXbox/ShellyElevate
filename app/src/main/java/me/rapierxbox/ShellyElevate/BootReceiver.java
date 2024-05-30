@@ -5,6 +5,10 @@ import android.content.Context;
 import android.content.Intent;
 import android.net.Uri;
 
+import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.net.UnknownHostException;
+
 public class BootReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
@@ -23,38 +27,38 @@ public class BootReceiver extends BroadcastReceiver {
         }
     }
 
-    public static String getIPFromHostname(String hostname) {
+    private static String getIPFromHostname(String hostname) {
+        try {
+            boolean wifiConnected = waitForWiFiConnection(60_000);
+            if (!wifiConnected) {return "homeassistant.local"}
+            InetAddress address = InetAddress.getByName(hostname);
+            return address.getHostAddress();
+        } catch (UnknownHostException e) {
+            e.printStackTrace();
+            return "homeassistant.local";
+        }
+    }
+    private static boolean waitForWiFiConnection(long timeoutMillis) {
         long startTime = System.currentTimeMillis();
-        long maxWaitTime = 60000;
-
-        while (System.currentTimeMillis() - startTime < maxWaitTime) {
+        while (!isWiFiConnected()) {
             try {
-                InetAddress address = InetAddress.getByName("8.8.8.8");
-                if (address.isReachable(2000)) {
-                    try (JmDNS jmdns = JmDNS.create()) {
-                        ServiceInfo[] services = jmdns.list("_http._tcp.local.");
-                        for (ServiceInfo serviceInfo : services) {
-                            if (serviceInfo.getName().equalsIgnoreCase(hostname)) {
-                                InetAddress[] addresses = serviceInfo.getInetAddresses();
-                                if (addresses.length > 0) {
-                                    return addresses[0].getHostAddress();
-                                }
-                            }
-                        }
-                    } catch (IOException e) {
-                        e.printStackTrace();
-                        return "homeassistant.local";
-                    }
-                } else {
-                    System.out.println("homeassistant.local");
-                    Thread.sleep(5000);
-                }
-            } catch (IOException | InterruptedException e) {
+                Thread.sleep(5000);
+            } catch (InterruptedException e) {
                 e.printStackTrace();
-                return "homeassistant.local";
+            }
+            if (System.currentTimeMillis() - startTime >= timeoutMillis) {
+                return false;
             }
         }
+        return true;
+    }
 
-        return "homeassistant.local";
+    private static boolean isWiFiConnected() {
+        try {
+            NetworkInterface networkInterface = NetworkInterface.getByName("wlan0");
+            return networkInterface != null && networkInterface.isUp();
+        } catch (Exception e) {
+            return false;
+        }
     }
 }
