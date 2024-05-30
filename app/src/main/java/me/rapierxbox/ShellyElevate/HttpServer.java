@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.os.IBinder;
 
 import androidx.annotation.Nullable;
+import androidx.legacy.content.WakefulBroadcastReceiver;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -24,6 +25,7 @@ public class HttpServer extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         startHttpServer();
+        WakefulBroadcastReceiver.completeWakefulIntent(intent);
         return START_STICKY;
     }
 
