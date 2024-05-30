@@ -30,7 +30,7 @@ public class BootReceiver extends BroadcastReceiver {
     private static String getIPFromHostname(String hostname) {
         try {
             boolean wifiConnected = waitForWiFiConnection(60_000);
-            if (!wifiConnected) {return "homeassistant.local"}
+            if (!wifiConnected) {return "homeassistant.local";}
             InetAddress address = InetAddress.getByName(hostname);
             return address.getHostAddress();
         } catch (UnknownHostException e) {
