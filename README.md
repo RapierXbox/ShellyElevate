@@ -63,7 +63,7 @@ There are two different methods to jailbreak your wall display, and you'll need 
 `./adb install ShellyElevate.apk`
 ##### 8. Reboot and Launch
 * Reboot the device with: `./adb shell reboot`
-* After rebooting, Chrome should open with your Home Assistant instance. If it doesn't, specify your IP and compile the app yourself.
+* After rebooting, Chrome should open with your Home Assistant instance. It can take up to one minute if your wifi doesnt connect!
 ##### 9. Troublshooting:
 * To return to the home screen, use: `./adb shell input keyevent 3`
 ## Configuration in Home Assistant
