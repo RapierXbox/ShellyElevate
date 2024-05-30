@@ -19,20 +19,23 @@ There are two different methods to jailbreak your wall display, and you'll need 
 
 #### Disassembly and Soldering
 ##### 1. Remove Backplate:
-* Remove the four screws holding the backplate in place and store them safely.
-* Lift the backplate cautiously and disconnect the FPC cable from the motherboard.
+* Remove the four screws holding the backplate in place and store them safely.<br>
+<img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/9e2cd91a-49cb-4e09-ba2c-795ce61a37f5" width=350><img/>
+* Lift the backplate cautiously and disconnect the FPC cable from the motherboard.<br>
+<img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/e191d87a-7436-48a0-b0da-768f65cfd05b" width=550><img/>
 ##### 2. Remove Daughterboard:
-* Remove the three screws securing the small daughterboard.
+* Remove the three screws securing the small daughterboard.<br>
+<img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/0c880fed-36c8-47e6-9321-e538faafdd22" width=350><img/>
 ##### 3. Soldering:
 * Prepare your soldering iron and two small wires.
 * Prepare your soldering iron and two small wires. <sub>rip two wall displays</sub>
-* Your setup should look like this this:
-![img1](https://github.com/RapierXbox/ShellyElevate/assets/65401386/df5491c8-02c4-4b11-9984-849048d78136)
+* Your setup should look like this this:<br>
+<img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/df5491c8-02c4-4b11-9984-849048d78136" width=300><img/>
 ##### 4. Reconnect Power and Connect Adapter
-* Connect power to the daughterboard and connect it to the motherboard
-![img2](https://github.com/RapierXbox/ShellyElevate/assets/65401386/948a7e51-815b-4deb-8b2d-58e2f3c88134) <sub>picture by luka177<sub/>
-* Connect the UART-to-USB adapter. Your setup should look like this:
-![img3](https://github.com/RapierXbox/ShellyElevate/assets/65401386/af3a176d-3b8d-4a5e-9afe-1b01265e4920)
+* Connect power to the daughterboard and connect it to the motherboard<br>
+<img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/948a7e51-815b-4deb-8b2d-58e2f3c88134" width=300><img/><sub>picture by luka177<sub/>
+* Connect the UART-to-USB adapter. Your setup should look like this:<br>
+<img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/af3a176d-3b8d-4a5e-9afe-1b01265e4920" width=400><img/>
 #### Connect to your Display
 ##### 1. Connect to UART Adapter:
 * Connect to your UART adapter at 921600bps.
