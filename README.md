@@ -60,7 +60,7 @@ There are two different methods to jailbreak your wall display, and you'll need 
 * Install the ultra-small launcher: `./adb install ultra-small-launcher.apk`
 * Install Chrome and the ShellyElevate app: <br>
 `./adb install Chrome.apk` <br>
-`./adb install ShellyElevate.apk`
+`./adb install -g ShellyElevate.apk`
 ##### 8. Reboot and Launch
 * Reboot the device with: `./adb shell reboot`
 * After rebooting, Chrome should open with your Home Assistant instance. It can take up to one minute if your wifi doesnt connect!
