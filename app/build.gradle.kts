@@ -64,4 +64,5 @@ dependencies {
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
     implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation("androidx.legacy:legacy-support-core-utils:1.0.0")
 }
