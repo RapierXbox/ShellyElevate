@@ -36,6 +36,7 @@ There are two different methods to jailbreak your wall display, and you'll need 
 <img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/948a7e51-815b-4deb-8b2d-58e2f3c88134" width=300><img/><sub>picture by luka177<sub/>
 * Connect the UART-to-USB adapter. Your setup should look like this:<br>
 <img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/af3a176d-3b8d-4a5e-9afe-1b01265e4920" width=400><img/>
+(**NOTE:** I accidentally switched up 3v3 and rx in this picture but you should get the idea.)
 #### Connect to your Display
 ##### 1. Connect to UART Adapter:
 * Connect to your UART adapter at 921600bps.
