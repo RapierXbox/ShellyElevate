@@ -68,7 +68,7 @@ There are two different methods to jailbreak your wall display, and you'll need 
 ##### 9. Troublshooting:
 * To return to the home screen, use: `./adb shell input keyevent 3`
 ## Configuration in Home Assistant
-* In your homeassistant.yaml file add this:
+* In your configuration.yaml file add this:
 ```
 switch:
   - platform: rest
@@ -96,3 +96,13 @@ sensor:
     unit_of_measurement: "%"
     scan_interval: 120
 ```
+### Using the Wall Display as a Thermostat
+To use the Wall Display as a thermostat, add the following code to your configuration.yaml file. You can also replace the target heater with another entity if needed.
+```
+climate:
+  - platform: generic_thermostat
+    name: Thermostat Shelly Wall Display
+    heater: switch.relay_shelly_walldisplay
+    target_sensor: sensor.temperature_shelly_walldisplay
+```
+
