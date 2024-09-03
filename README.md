@@ -3,7 +3,7 @@
 > All content in this repository is provided "as is" and may render your device unusable. Always exercise caution when working with your device. No warranty or guarantee is provided.
 
 Shelly Elevate is an app designed for the Shelly Wall Display, codenamed Stargate, that hosts a NanoHTTPD REST server as a background service upon booting. It automatically launches Chrome with Home Assistant, if available. The README provides a detailed tutorial on hacking your device, installing a launcher, setting up Chrome, configuring Shelly Elevate, and integrating it with Home Assistant.
-
+https://github.com/user-attachments/assets/d6095593-97f1-4036-b6d5-d9b3466c385f
 ## Hacking your Wall Display
 There are two different methods to jailbreak your wall display, and you'll need to choose one:
 * **UART**: This method is highly reliable, with nearly a 100% success rate. However, it requires soldering cables to your device and purchasing an inexpensive [USB2UART](https://aliexpress.com/item/32694152202.html) adapter.
