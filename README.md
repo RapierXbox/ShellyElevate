@@ -2,8 +2,8 @@
 > [!CAUTION]
 > All content in this repository is provided "as is" and may render your device unusable. Always exercise caution when working with your device. No warranty or guarantee is provided.
 
-Shelly Elevate is an app designed for the Shelly Wall Display, codenamed Stargate, that hosts a NanoHTTPD REST server as a background service upon booting. It automatically launches Chrome with Home Assistant, if available. The README provides a detailed tutorial on hacking your device, installing a launcher, setting up Chrome, configuring Shelly Elevate, and integrating it with Home Assistant.<br>
-Video: https://github.com/user-attachments/assets/d6095593-97f1-4036-b6d5-d9b3466c385f
+Shelly Elevate is an app designed for the Shelly Wall Display, codenamed Stargate, that add's full homeassistant functionality to the device. . The README provides a detailed tutorial on hacking your device, installing a launcher, configuring Shelly Elevate, and integrating it with Home Assistant.<br>
+Video: https://github.com/user-attachments/assets/d6095593-97f1-4036-b6d5-d9b3466c385f <sub>old video<sub/>
 ## Hacking your Wall Display
 There are two different methods to jailbreak your wall display, and you'll need to choose one:
 * **UART**: This method is highly reliable, with nearly a 100% success rate. However, it requires soldering cables to your device and purchasing an inexpensive [USB2UART](https://aliexpress.com/item/32694152202.html) adapter.
@@ -15,7 +15,7 @@ There are two different methods to jailbreak your wall display, and you'll need 
 
 * Obtain the [Anroid plattform tools](https://developer.android.com/tools/releases/platform-tools) for necessary interactions with your device.
 
-* From the release tab, download the latest versions of the ShellyElevate APK, Chrome APK, and the ultra-small launcher APK.
+* From the release tab, download the latest versions of the ShellyElevate APK, and the ultra-small launcher APK.
 
 #### Disassembly and Soldering
 ##### 1. Remove Backplate:
@@ -28,7 +28,7 @@ There are two different methods to jailbreak your wall display, and you'll need 
 <img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/0c880fed-36c8-47e6-9321-e538faafdd22" width=350><img/>
 ##### 3. Soldering:
 * Prepare your soldering iron and two small wires.
-* Prepare your soldering iron and two small wires. <sub>rip two wall displays</sub>
+* Prepare your soldering iron and two small wires.
 * Your setup should look like this this:<br>
 <img src="https://github.com/RapierXbox/ShellyElevate/assets/65401386/df5491c8-02c4-4b11-9984-849048d78136" width=300><img/>
 ##### 4. Reconnect Power and Connect Adapter
@@ -59,13 +59,18 @@ There are two different methods to jailbreak your wall display, and you'll need 
 `./adb shell pm disable cloud.shelly.stargate`<br>
 ##### 7. Install Launchers and Apps:
 * Install the ultra-small launcher: `./adb install ultra-small-launcher.apk`
-* Install Chrome and the ShellyElevate app: <br>
-`./adb install Chrome.apk` <br>
-`./adb install -g ShellyElevate.apk`
+* Install the ShellyElevate app: <br>
+`./adb install -g ShellyElevateV2.apk`
 ##### 8. Reboot and Launch
 * Reboot the device with: `./adb shell reboot`
-* After rebooting, Chrome should open with your Home Assistant instance. It can take up to one minute if your wifi doesnt connect!
-##### 9. Troublshooting:
+* After rebooting you are going to be met with a white screen!
+##### 9. Setting up the Shelly Elevate app
+* Click the bottom right of the display 10 times <br>
+* After that click the bottom left of the display 10 times <br>
+* You now will be in the settings. If you lost track of the times you pressed the right button just press the left button once to reset the count. <br>
+* Now press on the Button to automaticly get the Home Assistant IP <br>
+* If that doesnt work for you enter it in the text field below <br>
+##### 10. Troublshooting:
 * To return to the home screen, use: `./adb shell input keyevent 3`
 ## Configuration in Home Assistant
 * In your configuration.yaml file add this:
