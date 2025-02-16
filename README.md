@@ -90,7 +90,7 @@ switch:
 sensor:
   - platform: rest
     name: Temperature Shelly Walldisplay
-    resource: http://<your ip>:8080/getTemp
+    resource: http://<your ip>:8080/getTemperature
     value_template: "{{ value_json.temperature }}"
     unit_of_measurement: "°C"
     scan_interval: 120
