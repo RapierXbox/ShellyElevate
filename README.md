@@ -60,7 +60,8 @@ There are two different methods to jailbreak your wall display, and you'll need 
 ##### 7. Install Launchers and Apps:
 * Install the ultra-small launcher: `./adb install ultra-small-launcher.apk`
 * Install the ShellyElevate app: <br>
-`./adb install -g ShellyElevateV2.apk`
+`./adb install -g ShellyElevateV2.apk`<br>
+* To update the app add the `-r` flag
 ##### 8. Reboot and Launch
 * Reboot the device with: `./adb shell reboot`
 * After rebooting you are going to be met with a white screen!
