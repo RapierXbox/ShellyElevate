@@ -68,7 +68,9 @@ There are two different methods to jailbreak your wall display, and you'll need 
 ##### 9. Setting up the Shelly Elevate app <sub>you should only have to do this one time<sub/>
 * Click the bottom right of the display 10 times <br>
 * After that click the bottom left of the display 10 times <br>
+<img src="https://github.com/user-attachments/assets/d4aabd7e-0bd7-48a0-9560-39342f8197bb" width=200><img/><sub>the invisible buttons are highlightet red in this image<sub/>
 * You now will be in the settings. If you lost track of the times you pressed the right button just press the left button once to reset the count. <br>
+<img src="https://github.com/user-attachments/assets/d24f4cbb-d7df-4740-b5fa-666779adca94" width=200><img/>
 * Now press on the Button to automaticly get the Home Assistant IP <br>
 * If that doesnt work for you enter it in the text field below <br>
 * Press back to save and load Home Assistant <br>
