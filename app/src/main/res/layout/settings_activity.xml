@@ -31,7 +31,9 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
             android:hint="192.168.1.123"
-            android:textSize="20sp" />
+            android:textSize="20sp"
+            android:imeOptions="actionDone"
+            android:inputType="textUri"/>
 
         <Switch
             android:id="@+id/switchOnSwipe"

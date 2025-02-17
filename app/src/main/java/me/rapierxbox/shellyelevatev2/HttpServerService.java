@@ -15,7 +15,7 @@ public class HttpServerService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        server = new HttpServer();
+        server = new HttpServer(this);
         try {
             server.start();
             Log.i("ShellyElevateV2", "HTTP server started");

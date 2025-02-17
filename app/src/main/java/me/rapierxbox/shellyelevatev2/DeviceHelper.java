@@ -1,5 +1,11 @@
 package me.rapierxbox.shellyelevatev2;
 
+import static androidx.core.content.ContextCompat.getSystemService;
+
+import android.content.Context;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
+
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.FileWriter;
@@ -24,6 +30,7 @@ public class DeviceHelper {
         double humidity = ((Double.parseDouble(humiditySplit[0]) * 100.0) / 65535.0) + 18.0;
         return Math.round(humidity);
     }
+
     private static String readFileContent(String filePath) {
         StringBuilder content = new StringBuilder();
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
