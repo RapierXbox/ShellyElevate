@@ -22,4 +22,5 @@
     <string name="switchOnSwipeText">Switch on swipe</string>
     <string name="backButtonText">Back</string>
     <string name="automaticBrightnessText">Automatic Brightness</string>
+    <string name="ScreenSaverText">Screen Saver</string>
 </resources>

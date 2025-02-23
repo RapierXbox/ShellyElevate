@@ -16,6 +16,8 @@ class SettingsActivity: Activity() {
     private lateinit var switchOnSwipeSwitch: Switch
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private lateinit var automaticBrightnessSwitch: Switch
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    private lateinit var screenSaverSwitch: Switch
     private lateinit var sharedPreferences: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -42,11 +44,15 @@ class SettingsActivity: Activity() {
         automaticBrightnessSwitch = findViewById(R.id.automaticBrightness)
         automaticBrightnessSwitch.isChecked = sharedPreferences.getBoolean("automaticBrightness", true)
 
+        screenSaverSwitch = findViewById(R.id.screenSaver)
+        screenSaverSwitch.isChecked = sharedPreferences.getBoolean("screenSaver", true)
+
         backButton = findViewById(R.id.backButton)
         backButton.setOnClickListener {
             sharedPreferences.edit().putString("homeAssistantIp", ipEditText.text.toString())
                 .putBoolean("switchOnSwipe", switchOnSwipeSwitch.isChecked)
-                .putBoolean("automaticBrightness", automaticBrightnessSwitch.isChecked).apply()
+                .putBoolean("automaticBrightness", automaticBrightnessSwitch.isChecked)
+                .putBoolean("screenSaver", screenSaverSwitch.isChecked).apply()
             finish()
         }
     }

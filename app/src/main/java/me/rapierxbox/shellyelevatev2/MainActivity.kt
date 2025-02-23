@@ -24,6 +24,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var sensorManager: SensorManager
     private lateinit var lightSensor: Sensor
     private lateinit var deviceSensorManager: DeviceSensorManager
+    private lateinit var screenSaverHelper: ScreenSaverHelper
     private lateinit var swipeHelper: SwipeHelper
 
 
@@ -83,6 +84,7 @@ class MainActivity : ComponentActivity() {
 
         swipeDetectionOverlay = findViewById(R.id.swipeDetectionOverlay)
         swipeDetectionOverlay.setOnTouchListener { _, event ->
+            screenSaverHelper.onTouchEvent()
             if (swipeHelper.onTouchEvent(event)) {
                 myWebView.onTouchEvent(event)
             }
@@ -93,6 +95,8 @@ class MainActivity : ComponentActivity() {
         lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)!!
         deviceSensorManager = DeviceSensorManager(sharedPreferences)
         sensorManager.registerListener(deviceSensorManager, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
+
+        screenSaverHelper = ScreenSaverHelper(sharedPreferences)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -114,5 +118,6 @@ class MainActivity : ComponentActivity() {
     override fun onDestroy() {
         super.onDestroy()
         sensorManager.unregisterListener(deviceSensorManager)
+        screenSaverHelper.onDestroy()
     }
 }

@@ -14,12 +14,11 @@ public class DeviceHelper {
     public static String screenBrightnessFile = "/sys/class/leds/lcd-backlight/brightness";
 
     private static boolean screenOn = true;
-    private static int lastScreenBrightness = 255;
 
 
     public static void setScreenOn(boolean on) {
         screenOn = on;
-        forceScreenBrightness(on ? lastScreenBrightness : 0);
+        forceScreenBrightness(on ? DeviceSensorManager.getScreenBrightnessFromLux(DeviceSensorManager.getLastMeasuredLux()) : 0);
     }
 
     public static boolean getScreenOn() {
@@ -29,7 +28,6 @@ public class DeviceHelper {
     public static void setScreenBrightness(int brightness) {
         if (screenOn) {
             forceScreenBrightness(brightness);
-            lastScreenBrightness = brightness;
         }
     }
 
