@@ -4,11 +4,14 @@ import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
-import android.util.Log;
 
 public class DeviceSensorManager implements SensorEventListener {
-    public static float lastMeasuredLux = 0.0f;
+    private static float lastMeasuredLux = 0.0f;
     private final SharedPreferences sharedPreferences;
+
+    public static float getLastMeasuredLux() {
+        return lastMeasuredLux;
+    }
 
     DeviceSensorManager(SharedPreferences sP) {
         super();
@@ -28,7 +31,7 @@ public class DeviceSensorManager implements SensorEventListener {
 
     }
 
-    private int getScreenBrightnessFromLux(float lux) {
+    public static int getScreenBrightnessFromLux(float lux) {
         if (lux >= 500) return 255;
         if (lux <= 30) return 48;
 

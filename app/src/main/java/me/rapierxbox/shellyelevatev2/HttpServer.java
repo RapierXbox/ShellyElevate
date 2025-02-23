@@ -49,6 +49,9 @@ public class HttpServer extends NanoHTTPD {
                 case "/getHumidity":
                     jsonResponse.put("humidity", DeviceHelper.getHumidity());
                     return newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse.toString());
+                case "/getLux":
+                    jsonResponse.put("lux", DeviceSensorManager.getLastMeasuredLux());
+                    return newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse.toString());
                 case "/playSound":
                     if (method.equals(Method.POST)) {
                         Map<String, String> files = new HashMap<>();
@@ -73,6 +76,27 @@ public class HttpServer extends NanoHTTPD {
 
                     }
                     return newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse.toString());
+                case "/settings":
+                    if (method.equals(Method.GET)) {
+                        jsonResponse.put("settings", SettingsParser.getSettings(context.getSharedPreferences("ShellyElevateV2", Context.MODE_PRIVATE)));
+                        return newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse.toString());
+                    } else if (method.equals(Method.POST)) {
+                        try {
+                            Map<String, String> bodyParams = new HashMap<>();
+                            session.parseBody(bodyParams);
+                            String body = bodyParams.get("postData");
+
+                            JSONObject jsonObject = new JSONObject(body);
+
+                            SettingsParser.setSettings(context.getSharedPreferences("ShellyElevateV2", Context.MODE_PRIVATE), jsonObject);
+
+                            jsonResponse.put("settings", SettingsParser.getSettings(context.getSharedPreferences("ShellyElevateV2", Context.MODE_PRIVATE)));
+
+                            return newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse.toString());
+                        } catch (Exception e) {
+                            return newFixedLengthResponse(Response.Status.INTERNAL_ERROR, MIME_PLAINTEXT, "Error processing request");
+                        }
+                    }
                 default:
                     jsonResponse.put("message", "ShellyElevate by RapierXbox");
                     return newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse.toString());
