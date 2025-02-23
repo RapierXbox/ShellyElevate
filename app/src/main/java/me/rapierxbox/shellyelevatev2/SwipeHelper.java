@@ -1,8 +1,5 @@
 package me.rapierxbox.shellyelevatev2;
 
-import android.content.SharedPreferences;
-import android.util.Log;
-import android.view.GestureDetector;
 import android.view.MotionEvent;
 
 public class SwipeHelper{
@@ -11,7 +8,7 @@ public class SwipeHelper{
 
     public float minVel = 1.35F;
     public float minDist = 250.0F;
-    private Runnable action;
+    private final Runnable action;
 
     public SwipeHelper(Runnable runnable){
         this.action = runnable;

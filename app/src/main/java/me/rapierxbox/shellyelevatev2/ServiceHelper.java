@@ -1,8 +1,6 @@
 package me.rapierxbox.shellyelevatev2;
 
 import android.content.Context;
-import android.content.Intent;
-import android.net.Uri;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.util.Log;

@@ -72,5 +72,4 @@ dependencies {
     androidTestImplementation(libs.ui.test.junit4)
     debugImplementation(libs.ui.tooling)
     debugImplementation(libs.ui.test.manifest)
-    implementation("org.tensorflow:tensorflow-lite:2.9.0")
 }

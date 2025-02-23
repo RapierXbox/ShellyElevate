@@ -1,12 +1,9 @@
 package me.rapierxbox.shellyelevatev2
 
+import android.annotation.SuppressLint
 import android.app.Activity
-import android.content.Context
 import android.content.SharedPreferences
 import android.os.Bundle
-import android.view.KeyEvent
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Switch
@@ -15,7 +12,10 @@ class SettingsActivity: Activity() {
     private lateinit var findIPButton: Button
     private lateinit var ipEditText: EditText
     private lateinit var backButton: Button
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
     private lateinit var switchOnSwipeSwitch: Switch
+    @SuppressLint("UseSwitchCompatOrMaterialCode")
+    private lateinit var automaticBrightnessSwitch: Switch
     private lateinit var sharedPreferences: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -39,10 +39,14 @@ class SettingsActivity: Activity() {
         switchOnSwipeSwitch = findViewById(R.id.switchOnSwipe)
         switchOnSwipeSwitch.isChecked = sharedPreferences.getBoolean("switchOnSwipe", true)
 
+        automaticBrightnessSwitch = findViewById(R.id.automaticBrightness)
+        automaticBrightnessSwitch.isChecked = sharedPreferences.getBoolean("automaticBrightness", true)
+
         backButton = findViewById(R.id.backButton)
         backButton.setOnClickListener {
-            sharedPreferences.edit().putString("homeAssistantIp", ipEditText.text.toString()).apply()
-            sharedPreferences.edit().putBoolean("switchOnSwipe", switchOnSwipeSwitch.isChecked).apply()
+            sharedPreferences.edit().putString("homeAssistantIp", ipEditText.text.toString())
+                .putBoolean("switchOnSwipe", switchOnSwipeSwitch.isChecked)
+                .putBoolean("automaticBrightness", automaticBrightnessSwitch.isChecked).apply()
             finish()
         }
     }

@@ -17,4 +17,9 @@
     <string name="attachment_summary_on">Automatically download attachments for incoming emails
     </string>
     <string name="attachment_summary_off">Only download attachments when manually requested</string>
+    <string name="homeAssistantIpEditTextPreviewIp">192.168.1.123</string>
+    <string name="findIPButtonText">Search for HA IP</string>
+    <string name="switchOnSwipeText">Switch on swipe</string>
+    <string name="backButtonText">Back</string>
+    <string name="automaticBrightnessText">Automatic Brightness</string>
 </resources>

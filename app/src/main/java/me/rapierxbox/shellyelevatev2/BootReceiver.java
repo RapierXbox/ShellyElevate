@@ -1,9 +1,11 @@
 package me.rapierxbox.shellyelevatev2;
 
-import android.app.Activity;
-import android.content.BroadcastReceiver;
+import static android.content.Context.MODE_PRIVATE;
+
 import android.content.Context;
 import android.content.Intent;
+import android.hardware.Sensor;
+import android.hardware.SensorManager;
 import android.util.Log;
 
 import androidx.legacy.content.WakefulBroadcastReceiver;

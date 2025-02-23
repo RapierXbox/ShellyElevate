@@ -18,7 +18,7 @@ public class HttpServerService extends Service {
         server = new HttpServer(this);
         try {
             server.start();
-            Log.i("ShellyElevateV2", "HTTP server started");
+            Log.i("HttpServerService", "HTTP server started");
         } catch (IOException e) {
             throw new RuntimeException(e);
         }

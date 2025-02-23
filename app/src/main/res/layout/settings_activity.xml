@@ -22,7 +22,7 @@
             android:id="@+id/findIPButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Search for HA IP"
+            android:text="@string/findIPButtonText"
             android:textSize="20sp" />
 
         <EditText
@@ -30,7 +30,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:hint="192.168.1.123"
+            android:hint="@string/homeAssistantIpEditTextPreviewIp"
             android:textSize="20sp"
             android:imeOptions="actionDone"
             android:inputType="textUri"/>
@@ -39,7 +39,16 @@
             android:id="@+id/switchOnSwipe"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Switch on swipe"
+            android:text="@string/switchOnSwipeText"
+            android:layout_marginTop="24dp"
+            android:textSize="18sp"
+            tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+        <Switch
+            android:id="@+id/automaticBrightness"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/automaticBrightnessText"
             android:layout_marginTop="24dp"
             android:textSize="18sp"
             tools:ignore="UseSwitchCompatOrMaterialXml" />
@@ -49,7 +58,7 @@
         android:id="@+id/backButton"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Back"
+        android:text="@string/backButtonText"
         android:layout_margin="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"

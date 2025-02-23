@@ -15,7 +15,7 @@ import java.util.Map;
 import fi.iki.elonen.NanoHTTPD;
 
 public class HttpServer extends NanoHTTPD {
-    private Context context;
+    private final Context context;
     public HttpServer(Context c) {
         super(8080);
         this.context = c;

@@ -3,8 +3,9 @@ package me.rapierxbox.shellyelevatev2
 import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.SharedPreferences
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.os.Bundle
-import android.util.Log
 import android.view.MotionEvent
 import android.view.View
 import android.webkit.WebChromeClient
@@ -13,8 +14,6 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
-import androidx.core.view.GestureDetectorCompat
-
 class MainActivity : ComponentActivity() {
     private lateinit var myWebView: WebView
     private lateinit var settingsButtonOverlay1: View
@@ -22,6 +21,9 @@ class MainActivity : ComponentActivity() {
     private lateinit var swipeDetectionOverlay: View
 
     private lateinit var sharedPreferences: SharedPreferences
+    private lateinit var sensorManager: SensorManager
+    private lateinit var lightSensor: Sensor
+    private lateinit var deviceSensorManager: DeviceSensorManager
     private lateinit var swipeHelper: SwipeHelper
 
 
@@ -86,6 +88,11 @@ class MainActivity : ComponentActivity() {
             }
             return@setOnTouchListener true
         }
+
+        sensorManager = getSystemService(SENSOR_SERVICE) as SensorManager
+        lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT)!!
+        deviceSensorManager = DeviceSensorManager(sharedPreferences)
+        sensorManager.registerListener(deviceSensorManager, lightSensor, SensorManager.SENSOR_DELAY_NORMAL)
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -102,6 +109,10 @@ class MainActivity : ComponentActivity() {
 
         myWebView.webViewClient = WebViewClient()
         myWebView.webChromeClient = WebChromeClient()
+    }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        sensorManager.unregisterListener(deviceSensorManager)
     }
 }
