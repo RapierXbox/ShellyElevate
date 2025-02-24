@@ -15,6 +15,7 @@ Video: https://github.com/user-attachments/assets/d6095593-97f1-4036-b6d5-d9b346
 * hidden settings
 * auto brightness
 * screen saver
+* changing settings over the api
 
 If you'd like to contribute or have a feature request, please do so by creating a pull request or opening an issue.
 
