@@ -6,6 +6,8 @@ APK_PATH="$INSTALL_PATH/$APK_NAME"
 
 mount -o remount,rw /system
 
+mkdir -p "$INSTALL_PATH"
+
 curl -s "https://api.github.com/repos/RapierXbox/ShellyElevate/releases/latest" \
 | grep "browser_download_url.*$APK_NAME" \
 | cut -d : -f 2,3 \
