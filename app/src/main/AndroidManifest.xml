@@ -30,13 +30,17 @@
             android:name=".SettingsActivity"
             android:exported="true"
             android:label="ShellyElevateV2"
-            android:theme="@style/Theme.ShellyElevateV2">
+            android:theme="@style/Theme.ShellyElevateV2"
+            android:launchMode="singleInstance"
+            android:hardwareAccelerated="true">
         </activity>
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:label="ShellyElevateV2"
-            android:theme="@style/Theme.ShellyElevateV2">
+            android:theme="@style/Theme.ShellyElevateV2"
+            android:launchMode="singleInstance"
+            android:hardwareAccelerated="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
