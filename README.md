@@ -1,9 +1,11 @@
 # ShellyElevate
+> [!IMPORTANT]
+> Make sure to update your Home Assistant config.yaml file to comply with the new API. You can find the new yaml in the wiki.
+
 > [!CAUTION]
 > All content in this repository is provided "as is" and may render your device unusable. Always exercise caution when working with your device. No warranty or guarantee is provided.
 
 Shelly Elevate is an app designed for the Shelly Wall Display, codenamed Stargate, that add's full Home Assistant functionality to the device. The Wiki also provides a detailed tutorial on hacking your device, installing a launcher, configuring Shelly Elevate, and integrating it with Home Assistant.<br>
-Video: https://github.com/user-attachments/assets/d6095593-97f1-4036-b6d5-d9b3466c385f <sub>old video<sub/>
 
 ### Features
 * full screen Home Assistant controll
