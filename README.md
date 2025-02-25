@@ -20,5 +20,5 @@ Video: https://github.com/user-attachments/assets/d6095593-97f1-4036-b6d5-d9b346
 If you'd like to contribute or have a feature request, please do so by creating a pull request or opening an issue.
 
 ### Dont know where to start?
-Hack your display using the [guide](https://github.com/RapierXbox/ShellyElevate/wiki/Jailbreak-using-UART) or check out the [releases](https://github.com/RapierXbox/ShellyElevate/releases).
+Hack your display using the [guide](https://github.com/RapierXbox/ShellyElevate/wiki/Jailbreak) or check out the [releases](https://github.com/RapierXbox/ShellyElevate/releases).
 If you want to add the modified display to Home Assistant, check out [this](https://github.com/RapierXbox/ShellyElevate/wiki/Integration-into-Home-Assistant).
