@@ -1,27 +1,19 @@
 #!/system/bin/sh
 
-APK_NAME="ShellyElevateV2.apk"
-INSTALL_PATH="/system/priv-app/ShellyElevateV2"
-APK_PATH="$INSTALL_PATH/$APK_NAME"
+pm disable cloud.shelly.stargate
 
-mount -o remount,rw /system
+APK_URLS=$(curl -s "https://api.github.com/repos/RapierXbox/ShellyElevate/releases/latest" \
+    | grep "browser_download_url.*apk" \
+    | cut -d '"' -f 4)
 
-mkdir -p "$INSTALL_PATH"
 
-curl -s "https://api.github.com/repos/RapierXbox/ShellyElevate/releases/latest" \
-| grep "browser_download_url.*$APK_NAME" \
-| cut -d : -f 2,3 \
-| tr -d " \" \
-| wget -O "$APK_PATH" -q -
+for url in $APK_URLS; do
+    wget "$url"
+done
 
-if [ ! -f "$APK_PATH" ]; then
-    echo "Download failed"
-    exit 1
-fi
 
-chmod 644 "$APK_PATH"
-chown root:root "$APK_PATH"
-
-mount -o remount,ro /system
+for apk in *.apk; do
+    pm install -r "$apk"
+done
 
 reboot
