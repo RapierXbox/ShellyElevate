@@ -23,4 +23,6 @@
     <string name="backButtonText">Back</string>
     <string name="automaticBrightnessText">Automatic Brightness</string>
     <string name="ScreenSaverText">Screen Saver</string>
+    <string name="http_server_status_default">HTTP Server:</string>
+    <string name="start">START</string>
 </resources>

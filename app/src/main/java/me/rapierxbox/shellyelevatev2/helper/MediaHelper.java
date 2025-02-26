@@ -56,12 +56,11 @@ public class MediaHelper {
         mediaPlayerMusic.stop();
     }
     public void setVolume(double volume) {
-        audioManager.setStreamVolume(AudioManager.USE_DEFAULT_STREAM_TYPE, (int) (audioManager.getStreamMaxVolume(AudioManager.USE_DEFAULT_STREAM_TYPE) * volume), 0);
         audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (int) (audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC) * volume), 0);
     }
 
     public double getVolume() {
-        return (double) audioManager.getStreamVolume(AudioManager.USE_DEFAULT_STREAM_TYPE) / (double) audioManager.getStreamMaxVolume(AudioManager.USE_DEFAULT_STREAM_TYPE);
+        return (double) audioManager.getStreamVolume(AudioManager.STREAM_MUSIC) / (double) audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC);
     }
 
     public void onDestroy() {
