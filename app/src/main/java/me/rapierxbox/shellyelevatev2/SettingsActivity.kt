@@ -15,7 +15,7 @@ import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 
 class SettingsActivity: Activity() {
     private lateinit var findIPButton: Button
-    private lateinit var ipEditText: EditText
+    private lateinit var urlEditText: EditText
     private lateinit var backButton: Button
     @SuppressLint("UseSwitchCompatOrMaterialCode")
     private lateinit var switchOnSwipeSwitch: Switch
@@ -25,6 +25,7 @@ class SettingsActivity: Activity() {
     private lateinit var screenSaverSwitch: Switch
     private lateinit var httpServerText: TextView
     private lateinit var httpServerButton: Button
+    private lateinit var liteModeSwitch: Switch
     private lateinit var sharedPreferences: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -35,14 +36,14 @@ class SettingsActivity: Activity() {
 
         sharedPreferences = getSharedPreferences("ShellyElevateV2", MODE_PRIVATE)
 
-        ipEditText = findViewById(R.id.homeAssistantIp)
-        ipEditText.setText(sharedPreferences.getString("homeAssistantIp", ""))
+        urlEditText = findViewById(R.id.webviewURL)
+        urlEditText.setText(ServiceHelper.getWebviewUrl(sharedPreferences))
 
         findIPButton = findViewById(R.id.findIPButton)
         findIPButton.setOnClickListener {
-            ServiceHelper.getHAIP(applicationContext) { ip: String ->
+            ServiceHelper.getHAURL(applicationContext) { url: String ->
                 runOnUiThread {
-                    ipEditText.setText(ip)
+                    urlEditText.setText(url)
                 }
             }
         }
@@ -68,13 +69,16 @@ class SettingsActivity: Activity() {
             httpServerButton.visibility = Button.GONE
         }
 
+        liteModeSwitch = findViewById(R.id.liteMode)
+        liteModeSwitch.isChecked = sharedPreferences.getBoolean("liteMode", false)
 
         backButton = findViewById(R.id.backButton)
         backButton.setOnClickListener {
-            sharedPreferences.edit().putString("homeAssistantIp", ipEditText.text.toString())
+            sharedPreferences.edit().putString("webviewUrl", urlEditText.text.toString())
                 .putBoolean("switchOnSwipe", switchOnSwipeSwitch.isChecked)
                 .putBoolean("automaticBrightness", automaticBrightnessSwitch.isChecked)
-                .putBoolean("screenSaver", screenSaverSwitch.isChecked).apply()
+                .putBoolean("screenSaver", screenSaverSwitch.isChecked)
+                .putBoolean("liteMode", liteModeSwitch.isChecked).apply()
             finish()
         }
     }

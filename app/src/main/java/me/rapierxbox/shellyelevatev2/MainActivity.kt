@@ -16,6 +16,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper
 import me.rapierxbox.shellyelevatev2.helper.ScreenSaverHelper
+import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper
 
 class MainActivity : ComponentActivity() {
@@ -42,8 +43,7 @@ class MainActivity : ComponentActivity() {
         setContentView(R.layout.main_activity)
 
         sharedPreferences = getSharedPreferences("ShellyElevateV2", MODE_PRIVATE)
-        var ip = sharedPreferences.getString("homeAssistantIp", "192.168.4.188")
-        var url = "http://$ip:8123"
+        var url = ServiceHelper.getWebviewUrl(sharedPreferences)
 
         swipeHelper = SwipeHelper {
             if (sharedPreferences.getBoolean("switchOnSwipe", true)) {
@@ -75,8 +75,7 @@ class MainActivity : ComponentActivity() {
 
                 if (clicksButton2 == 10) {
                     startActivity(Intent(this, SettingsActivity::class.java))
-                    ip = sharedPreferences.getString("homeAssistantIp", "")
-                    url = "http://$ip:8123"
+                    url = ServiceHelper.getWebviewUrl(sharedPreferences)
                     myWebView.loadUrl(url)
 
                     clicksButton1 = 0

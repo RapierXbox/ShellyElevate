@@ -1,6 +1,7 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.util.Log;
@@ -8,7 +9,7 @@ import android.util.Log;
 import java.util.function.Consumer;
 
 public class ServiceHelper {
-    public static <T> void getHAIP(Context context, Consumer<T> action) {
+    public static void getHAURL(Context context, Consumer<String> action) {
         NsdManager nsdManager = (NsdManager) context.getSystemService(Context.NSD_SERVICE);
         NsdManager.DiscoveryListener discoveryListener = new NsdManager.DiscoveryListener() {
             @Override
@@ -45,9 +46,9 @@ public class ServiceHelper {
                         @Override
                         public void onServiceResolved(NsdServiceInfo serviceInfo) {
                             Log.i("discovery", "Service resolved: " + serviceInfo);
-                            String ipAddress = serviceInfo.getHost().getHostAddress();
-                            Log.i("discovery", "Home Assistant IP Address: " + ipAddress);
-                            action.accept((T) ipAddress);
+                            String url = "http://" + serviceInfo.getHost().getHostAddress() + ":" + serviceInfo.getPort();
+                            Log.i("discovery", "Home Assistant URL: " + url);
+                            action.accept(url);
                         }
                     };
 
@@ -66,5 +67,13 @@ public class ServiceHelper {
         nsdManager.discoverServices("_home-assistant._tcp.", NsdManager.PROTOCOL_DNS_SD, discoveryListener);
     }
 
-
+    public static String getWebviewUrl(SharedPreferences sP) {
+        if (sP.contains("homeAssistantIp")) {
+            sP.edit()
+                    .putString("webviewUrl", "http://" + sP.getString("homeAssistantIp", "") + ":8123")
+                    .remove("homeAssistantIp")
+                    .apply();
+        }
+        return sP.getString("webviewUrl", "");
+    }
 }

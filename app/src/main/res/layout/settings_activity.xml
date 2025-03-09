@@ -5,92 +5,96 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_gravity="top"
-        android:layout_margin="24dp"
-        android:layout_marginTop="16dp"
-        android:layout_marginEnd="16dp"
-        android:orientation="vertical"
-        android:padding="24dp"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <Button
-            android:id="@+id/findIPButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/findIPButtonText"
-            android:textSize="20sp" />
-
-        <EditText
-            android:id="@+id/homeAssistantIp"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:hint="@string/homeAssistantIpEditTextPreviewIp"
-            android:textSize="20sp"
-            android:imeOptions="actionDone"
-            android:inputType="textUri"/>
-
-        <Switch
-            android:id="@+id/switchOnSwipe"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/switchOnSwipeText"
-            android:layout_marginTop="24dp"
-            android:textSize="18sp"
-            tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-        <Switch
-            android:id="@+id/automaticBrightness"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/automaticBrightnessText"
-            android:layout_marginTop="24dp"
-            android:textSize="18sp"
-            tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-        <Switch
-            android:id="@+id/screenSaver"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/ScreenSaverText"
-            android:layout_marginTop="24dp"
-            android:textSize="18sp"
-            tools:ignore="UseSwitchCompatOrMaterialXml" />
+        android:layout_height="0dp"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/backButton">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintTop_toTopOf="parent">
-            <TextView
-                android:id="@+id/httpServerText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                app:layout_constraintStart_toStartOf="parent"
-                android:layout_marginTop="24dp"
-                android:layout_marginBottom="24dp"
-                android:textSize="18sp"
-                android:textColor="@color/black"
-                android:text="@string/http_server_status_default"/>
+            android:orientation="vertical"
+            android:layout_margin="24dp"
+            android:padding="24dp">
 
             <Button
-                android:id="@+id/httpServerButton"
+                android:id="@+id/findIPButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_margin="24dp"
-                android:text="@string/start"
-                app:layout_constraintEnd_toEndOf="parent" />
+                android:text="@string/findIPButtonText"
+                android:textSize="20sp" />
 
+            <EditText
+                android:id="@+id/webviewURL"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:hint="@string/homeAssistantIpEditTextPreviewIp"
+                android:textSize="20sp"
+                android:imeOptions="actionDone"
+                android:inputType="textUri"/>
+
+            <Switch
+                android:id="@+id/switchOnSwipe"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/switchOnSwipeText"
+                android:layout_marginTop="24dp"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <Switch
+                android:id="@+id/automaticBrightness"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/automaticBrightnessText"
+                android:layout_marginTop="24dp"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <Switch
+                android:id="@+id/screenSaver"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/ScreenSaverText"
+                android:layout_marginTop="24dp"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="24dp">
+                <TextView
+                    android:id="@+id/httpServerText"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:textSize="18sp"
+                    android:textColor="@color/black"
+                    android:text="@string/http_server_status_default"/>
+
+                <Button
+                    android:id="@+id/httpServerButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/start" />
+            </LinearLayout>
+
+            <Switch
+                android:id="@+id/liteMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/lite_mode"
+                android:layout_marginTop="24dp"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
 
         </LinearLayout>
 
-    </LinearLayout>
+    </ScrollView>
 
     <Button
         android:id="@+id/backButton"
@@ -99,7 +103,6 @@
         android:text="@string/backButtonText"
         android:layout_margin="16dp"
         app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        />
+        app:layout_constraintEnd_toEndOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

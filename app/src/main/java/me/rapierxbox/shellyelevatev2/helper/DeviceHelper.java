@@ -3,6 +3,7 @@ package me.rapierxbox.shellyelevatev2.helper;
 import android.util.Log;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -11,11 +12,27 @@ import java.util.Objects;
 import me.rapierxbox.shellyelevatev2.DeviceSensorManager;
 
 public class DeviceHelper {
-    public static String[] relayFiles = {"/sys/devices/platform/leds/green_enable", "/sys/devices/platform/leds/red_enable"};
-    public static String tempAndHumFile = "/sys/devices/platform/sht3x-user/sht3x_access";
-    public static String screenBrightnessFile = "/sys/class/leds/lcd-backlight/brightness";
-
+    public static final String[] relayFiles = {"/sys/devices/platform/leds/green_enable", "/sys/devices/platform/leds/red_enable"};
+    public static final String tempAndHumFile = "/sys/devices/platform/sht3x-user/sht3x_access";
+    public static final String[] screenBrightnessFiles = {
+            "/sys/devices/platform/leds-mt65xx/leds/lcd-backlight/brightness",
+            "/sys/devices/platform/sprd_backlight/backlight/sprd_backlight/brightness",
+            "/sys/devices/platform/backlight/backlight/backlight/brightness"
+            };
+    public static String screenBrightnessFile;
     private static boolean screenOn = true;
+
+    public static void init() {
+        for (String brightnessFile : screenBrightnessFiles) {
+            if (new File(brightnessFile).exists()){
+                screenBrightnessFile = brightnessFile;
+            }
+        }
+        if (screenBrightnessFile == null) {
+            Log.e("FATAL ERROR", "no brightness file found");
+            screenBrightnessFile = "";
+        }
+    }
 
 
     public static void setScreenOn(boolean on) {
