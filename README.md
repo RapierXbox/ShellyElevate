@@ -20,6 +20,9 @@ https://github.com/user-attachments/assets/adf46edd-9bf1-45da-b553-bf7781d17fbd
 * automatic brightness
 * screen saver after 45s (TODO: make a setting for the delay)
 * changing settings over the api
+* lite mode
+* support for all displays
+* viewing any url
 
 If you'd like to contribute or have a feature request, please do so by creating a pull request or opening an issue.
 
