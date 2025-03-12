@@ -18,11 +18,13 @@ https://github.com/user-attachments/assets/adf46edd-9bf1-45da-b553-bf7781d17fbd
 * playing sound files over the api
 * hidden settings
 * automatic brightness
-* screen saver after 45s (TODO: make a setting for the delay)
+* multiple screen savers with settable delay
 * changing settings over the api
 * lite mode
 * support for all displays
 * viewing any url
+
+And of couse you can disable each feature compeltely.
 
 If you'd like to contribute or have a feature request, please do so by creating a pull request or opening an issue.
 
