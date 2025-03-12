@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">ShellyElevateV2</string>
+    <string name="title_activity_main">MainActivity</string>
+    <string name="title_activity_settings">SettingsActivity</string>
+
+    <!-- Preference Titles -->
+    <string name="messages_header">Messages</string>
+    <string name="sync_header">Sync</string>
+
+    <!-- Messages Preferences -->
+    <string name="signature_title">Your signature</string>
+    <string name="reply_title">Default reply action</string>
+
+    <!-- Sync Preferences -->
+    <string name="sync_title">Sync email periodically</string>
+    <string name="attachment_title">Download incoming attachments</string>
+    <string name="attachment_summary_on">Automatically download attachments for incoming emails
+    </string>
+    <string name="attachment_summary_off">Only download attachments when manually requested</string>
+    <string name="homeAssistantIpEditTextPreviewIp">http://192.168.1.123:8123</string>
+    <string name="findIPButtonText">Search for HA URL</string>
+    <string name="switchOnSwipeText">Switch on swipe</string>
+    <string name="backButtonText">Back</string>
+    <string name="automaticBrightnessText">Automatic Brightness</string>
+    <string name="ScreenSaverText">Screen Saver</string>
+    <string name="http_server_status_default">HTTP Server:</string>
+    <string name="start">START</string>
+    <string name="lite_mode">Lite Mode</string>
+    <string name="screen_saver_delay">Screen Saver Delay</string>
+    <string name="screen_saver_delay_hint">45</string>
+    <string name="screenSaverTypeText">Screen Saver Type</string>
+</resources>
