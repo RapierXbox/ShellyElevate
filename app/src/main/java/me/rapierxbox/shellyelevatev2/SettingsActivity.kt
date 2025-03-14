@@ -14,7 +14,9 @@ import android.widget.Toast
 import me.rapierxbox.shellyelevatev2.Constants.*
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 
 @SuppressLint("UseSwitchCompatOrMaterialCode")
@@ -65,7 +67,7 @@ class SettingsActivity: Activity() {
         setContentView(R.layout.settings_activity)
 
         findViews()
-
+        screenSaverTypeSpinner.adapter = mScreenSaverManager.screenSaverSpinnerAdapter
         loadValues()
 
         findURLButton.setOnClickListener {
@@ -75,8 +77,6 @@ class SettingsActivity: Activity() {
                 }
             }
         }
-
-        screenSaverTypeSpinner.adapter = ShellyElevateApplication.mScreenSaverManager.screenSaverSpinnerAdapter
 
         httpServerButton.setOnClickListener {
             mHttpServer.start()
@@ -98,8 +98,8 @@ class SettingsActivity: Activity() {
         }
 
         swipeDetectionOverlayView.setOnTouchListener { _, event ->
-            ShellyElevateApplication.mScreenSaverManager.onTouchEvent()
-            ShellyElevateApplication.mSwipeHelper.onTouchEvent(event)
+            mScreenSaverManager.onTouchEvent()
+            mSwipeHelper.onTouchEvent(event)
 
             return@setOnTouchListener false
         }

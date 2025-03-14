@@ -1,12 +1,19 @@
 package me.rapierxbox.shellyelevatev2;
 
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSettingsParser;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
+import android.content.Intent;
 import android.net.Uri;
 import android.util.Log;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -33,6 +40,8 @@ public class HttpServer extends NanoHTTPD {
                 return handleMediaRequest(session);
             } else if (uri.startsWith("/device/")) {
                 return handleDeviceRequest(session);
+            } else if (uri.startsWith("/webview/") && false) { //NOT TESTED!!!!
+                return handleWebviewRequest(session);
             } else if (uri.equals("/settings")) {
                 if (method.equals(Method.GET)) {
                     jsonResponse.put("success", true);
@@ -61,6 +70,37 @@ public class HttpServer extends NanoHTTPD {
         }
 
         return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", jsonResponse.toString());
+    }
+
+    private Response handleWebviewRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
+        Method method = session.getMethod();
+        String uri = session.getUri();
+        JSONObject jsonResponse = new JSONObject();
+
+        switch (uri.replace("/webview/", "")) {
+            case "refresh":
+                if (method.equals(Method.GET)) {
+                    Intent intent = new Intent(INTENT_WEBVIEW_REFRESH);
+                    LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
+                    jsonResponse.put("success", true);}
+            case "inject":
+                if (method.equals(Method.POST)) {
+                    Map<String, String> files = new HashMap<>();
+                    session.parseBody(files);
+                    String postData = files.get("postData");
+                    JSONObject jsonObject = new JSONObject(postData);
+
+                    String javascript = jsonObject.getString("javascript");
+
+                    Intent intent = new Intent(INTENT_WEBVIEW_INJECT_JAVASCRIPT);
+                    intent.putExtra("javascript", javascript);
+                    LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
+
+                    jsonResponse.put("success", true);
+                }
+        }
+
+        return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
     private Response handleMediaRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
         Method method = session.getMethod();
@@ -203,6 +243,15 @@ public class HttpServer extends NanoHTTPD {
                     jsonResponse.put("error", "Invalid request method");
                 }
                 break;
+            case "wake":
+                if (method.equals(Method.GET)) {
+                    mScreenSaverManager.stopScreenSaver();
+                }
+                break;
+            case "sleep":
+                if (method.equals(Method.GET)) {
+                    mScreenSaverManager.startScreenSaver();
+                }
             default:
                 jsonResponse.put("success", false);
                 jsonResponse.put("error", "Invalid request URI");
@@ -213,6 +262,7 @@ public class HttpServer extends NanoHTTPD {
     }
 
     public void onDestroy() {
+        stop();
         mMediaHelper.onDestroy();
     }
 }

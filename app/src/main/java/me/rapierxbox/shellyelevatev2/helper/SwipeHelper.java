@@ -20,16 +20,13 @@ public class SwipeHelper{
             case MotionEvent.ACTION_DOWN:
                 touchStartY = event.getY();
                 touchStartEventTime = event.getEventTime();
-                Log.d("Swipe", "touch start");
                 return true;
             case MotionEvent.ACTION_UP:
                 float deltaY = Math.abs(touchStartY - event.getY());
                 float deltaT = Math.abs(touchStartEventTime - event.getEventTime());
                 float velocity = deltaY / deltaT;
-                Log.d("Swipe", "touch end:" + deltaY + " " + deltaT + " " + velocity);
                 if (velocity > minVel && deltaY > minDist && doSwitchOnSwipe){
                     mDeviceHelper.setRelay(!mDeviceHelper.getRelay());
-                    Log.d("Swipe", "swipe yay");
                     return false;
                 }
         }

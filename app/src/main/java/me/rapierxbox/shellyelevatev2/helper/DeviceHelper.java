@@ -87,7 +87,7 @@ public class DeviceHelper {
                 content.append(line).append("\n");
             }
         } catch (IOException e) {
-            Log.e("DeviceHelper", Objects.requireNonNull(e.getMessage()));
+            Log.e("DeviceHelper", "Error when reading file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
         }
         return content.toString();
     }
@@ -96,7 +96,7 @@ public class DeviceHelper {
         try (FileWriter writer = new FileWriter(filePath)) {
             writer.write(content);
         } catch (IOException e) {
-            Log.e("DeviceHelper", Objects.requireNonNull(e.getMessage()));
+            Log.e("DeviceHelper", "Error when writing file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
         }
     }
 }

@@ -3,7 +3,9 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:focusable="true"
+    android:focusableInTouchMode="true">
 
     <ScrollView
         android:layout_width="match_parent"
@@ -48,10 +50,9 @@
                 android:id="@+id/automaticBrightness"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="@string/automaticBrightnessText"
                 android:layout_marginTop="24dp"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
+                android:text="@string/automaticBrightnessText"
+                android:textSize="18sp"/>
 
             <Switch
                 android:id="@+id/screenSaver"

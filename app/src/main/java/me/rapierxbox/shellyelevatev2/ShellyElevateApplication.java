@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2;
 
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE;
 
@@ -10,6 +11,8 @@ import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import android.util.Log;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.io.IOException;
 
@@ -68,6 +71,9 @@ public class ShellyElevateApplication extends Application {
             startActivity(activityIntent);
         }
 
+
+
+
         Log.i("ShellyElevateV2", "Application started");
     }
 
@@ -75,11 +81,14 @@ public class ShellyElevateApplication extends Application {
         mScreenSaverManager.updateValues();
         mDeviceSensorManager.updateValues();
         mSwipeHelper.updateValues();
+
+        Intent intent = new Intent(INTENT_WEBVIEW_REFRESH);
+        LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
     }
 
     @Override
     public void onTerminate() {
-        mHttpServer.stop();
+        mHttpServer.onDestroy();
         mSensorManager.unregisterListener(mDeviceSensorManager);
         mScreenSaverManager.onDestroy();
 

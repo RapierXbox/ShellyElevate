@@ -1,7 +1,10 @@
 package me.rapierxbox.shellyelevatev2
 
 import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.SharedPreferences
 import android.hardware.Sensor
 import android.hardware.SensorManager
@@ -15,6 +18,9 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -33,6 +39,18 @@ class MainActivity : ComponentActivity() {
 
     private var clicksButton1: Int = 0
     private var clicksButton2: Int = 0
+
+    private var webviewRefreshBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            myWebView.reload()
+        }
+    }
+
+    private var webviewJavascriptInjectorBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            myWebView.evaluateJavascript(intent!!.getStringExtra("javascript")!!, null)
+        }
+    }
 
 
     private fun findViews() {
@@ -108,5 +126,9 @@ class MainActivity : ComponentActivity() {
 
             return@setOnTouchListener true
         }
+
+        val localBroadcastManager : LocalBroadcastManager = LocalBroadcastManager.getInstance(this)
+        localBroadcastManager.registerReceiver(webviewRefreshBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_REFRESH))
+        localBroadcastManager.registerReceiver(webviewJavascriptInjectorBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
     }
 }
