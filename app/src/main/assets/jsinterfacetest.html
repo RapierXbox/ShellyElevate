@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JS Interface Test</title>
+    <style>
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+<h2>Test ShellyElevate Interface</h2>
+<button onclick="testGetRelay()">Get Relay</button>
+<button onclick="testGetLux()">Get Lux</button>
+<button onclick="testGetTemperature()">Get Temperature</button>
+<button onclick="testGetHumidity()">Get Humidity</button>
+<button onclick="testGetScreenBrightness()">Get Screen Brightness</button>
+<button onclick="testGetScreenSaverRunning()">Get Screen Saver Status</button>
+<button onclick="testGetScreenSaverEnabled()">Get Screen Saver Enabled</button>
+<button onclick="testGetScreenSaverId()">Get Screen Saver ID</button>
+<button onclick="testGetExtendedJavascriptInterfaceEnabled()">Get Extended JS Enabled</button>
+<button onclick="testSetRelay(true)">Set Relay On</button>
+<button onclick="testSetRelay(false)">Set Relay Off</button>
+<button onclick="testSleep()">Sleep</button>
+<button onclick="testWake()">Wake</button>
+<button onclick="testSetScreenBrightness(50)">Set Screen Brightness</button>
+<button onclick="testSetScreenSaverEnabled(true)">Enable Screen Saver</button>
+<button onclick="testSetScreenSaverEnabled(false)">Disable Screen Saver</button>
+<button onclick="testSetScreenSaverId(1)">Set Screen Saver ID</button>
+
+<p id="output"></p>
+
+<script>
+    function testGetRelay() {
+        document.getElementById("output").innerText = "Relay: " + ShellyElevate.getRelay("");
+    }
+
+    function testGetLux() {
+        document.getElementById("output").innerText = "Lux: " + ShellyElevate.getLux();
+    }
+
+    function testGetTemperature() {
+        document.getElementById("output").innerText = "Temperature: " + ShellyElevate.getTemperature();
+    }
+
+    function testGetHumidity() {
+        document.getElementById("output").innerText = "Humidity: " + ShellyElevate.getHumidity();
+    }
+
+    function testGetScreenBrightness() {
+        document.getElementById("output").innerText = "Screen Brightness: " + ShellyElevate.getScreenBrightness();
+    }
+
+    function testGetScreenSaverRunning() {
+        document.getElementById("output").innerText = "Screen Saver Running: " + ShellyElevate.getScreenSaverRunning();
+    }
+
+    function testGetScreenSaverEnabled() {
+        document.getElementById("output").innerText = "Screen Saver Enabled: " + ShellyElevate.getScreenSaverEnabled();
+    }
+
+    function testGetScreenSaverId() {
+        document.getElementById("output").innerText = "Screen Saver ID: " + ShellyElevate.getScreenSaverId();
+    }
+
+    function testGetExtendedJavascriptInterfaceEnabled() {
+        document.getElementById("output").innerText = "Extended JS Enabled: " + ShellyElevate.getExtendedJavascriptInterfaceEnabled();
+    }
+
+    function testSetRelay(state) {
+        ShellyElevate.setRelay(state);
+        document.getElementById("output").innerText = "Set Relay: " + state;
+    }
+
+    function testSleep() {
+        ShellyElevate.sleep();
+        document.getElementById("output").innerText = "Device is sleeping.";
+    }
+
+    function testWake() {
+        ShellyElevate.wake();
+        document.getElementById("output").innerText = "Device woke up.";
+    }
+
+    function testSetScreenBrightness(brightness) {
+        ShellyElevate.setScreenBrightness(brightness);
+        document.getElementById("output").innerText = "Set Screen Brightness: " + brightness;
+    }
+
+    function testSetScreenSaverEnabled(enabled) {
+        ShellyElevate.setScreenSaverEnabled(enabled);
+        document.getElementById("output").innerText = "Set Screen Saver Enabled: " + enabled;
+    }
+
+    function testSetScreenSaverId(id) {
+        ShellyElevate.setScreenSaverId(id);
+        document.getElementById("output").innerText = "Set Screen Saver ID: " + id;
+    }
+</script>
+</body>
+</html>

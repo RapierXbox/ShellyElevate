@@ -16,6 +16,7 @@ import android.webkit.WebChromeClient
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -25,6 +26,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
@@ -42,7 +44,7 @@ class MainActivity : ComponentActivity() {
 
     private var webviewRefreshBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            myWebView.reload()
+            myWebView.loadUrl(ServiceHelper.getWebviewUrl())
         }
     }
 
@@ -80,8 +82,6 @@ class MainActivity : ComponentActivity() {
 
                 if (clicksButton2 == 10) {
                     startActivity(Intent(this, SettingsActivity::class.java))
-                    ShellyElevateApplication.updateSPValues()
-                    myWebView.loadUrl(ServiceHelper.getWebviewUrl())
 
                     clicksButton1 = 0
                     clicksButton2 = 0
@@ -106,6 +106,8 @@ class MainActivity : ComponentActivity() {
         myWebView.webViewClient = WebViewClient()
         myWebView.webChromeClient = WebChromeClient()
 
+        myWebView.addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
+
         myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
 
@@ -120,7 +122,10 @@ class MainActivity : ComponentActivity() {
         setupSettingsButtons()
 
         swipeDetectionOverlay.setOnTouchListener { _, event ->
-            mScreenSaverManager.onTouchEvent()
+            if (mScreenSaverManager.onTouchEvent()) {
+                Log.d("ShellyElevateV2", "Touch blocked by ScreenSaverManager")
+                return@setOnTouchListener true
+            }
             mSwipeHelper.onTouchEvent(event)
             myWebView.onTouchEvent(event)
 

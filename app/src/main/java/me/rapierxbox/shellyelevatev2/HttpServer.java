@@ -2,6 +2,7 @@ package me.rapierxbox.shellyelevatev2;
 
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper;
@@ -12,6 +13,7 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPref
 import android.content.Intent;
 import android.net.Uri;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
@@ -40,7 +42,7 @@ public class HttpServer extends NanoHTTPD {
                 return handleMediaRequest(session);
             } else if (uri.startsWith("/device/")) {
                 return handleDeviceRequest(session);
-            } else if (uri.startsWith("/webview/") && false) { //NOT TESTED!!!!
+            } else if (uri.startsWith("/webview/")) {
                 return handleWebviewRequest(session);
             } else if (uri.equals("/settings")) {
                 if (method.equals(Method.GET)) {
@@ -244,14 +246,36 @@ public class HttpServer extends NanoHTTPD {
                 }
                 break;
             case "wake":
-                if (method.equals(Method.GET)) {
+                jsonResponse.put("success", false);
+                if (method.equals(Method.POST)) {
                     mScreenSaverManager.stopScreenSaver();
+                    jsonResponse.put("success", true);
                 }
                 break;
             case "sleep":
-                if (method.equals(Method.GET)) {
+                jsonResponse.put("success", false);
+                if (method.equals(Method.POST)) {
                     mScreenSaverManager.startScreenSaver();
+                    jsonResponse.put("success", true);
                 }
+                break;
+            case "reboot":
+                jsonResponse.put("success", false);
+                if (method.equals(Method.POST)) {
+                    long deltaTime = System.currentTimeMillis() - ShellyElevateApplication.getApplicationStartTime();
+                    deltaTime /= 1000;
+                    if (deltaTime > 20) {
+                        try {
+                            Runtime.getRuntime().exec("reboot");
+                            jsonResponse.put("success", true);
+                        } catch (IOException e) {
+                            Log.e("MQTT", "Error rebooting:", e);
+                        }
+                    } else {
+                        Toast.makeText(mApplicationContext, "Please wait %s seconds before rebooting".replace("%s",String.valueOf(20-deltaTime) ), Toast.LENGTH_LONG).show();
+                    }
+                }
+                break;
             default:
                 jsonResponse.put("success", false);
                 jsonResponse.put("error", "Invalid request URI");
@@ -262,6 +286,7 @@ public class HttpServer extends NanoHTTPD {
     }
 
     public void onDestroy() {
+        closeAllConnections();
         stop();
         mMediaHelper.onDestroy();
     }

@@ -2,6 +2,7 @@ package me.rapierxbox.shellyelevatev2.screensavers;
 
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.util.Log;
@@ -40,9 +41,13 @@ public class ScreenSaverManager {
         };
     }
 
-    public void onTouchEvent() {
+    public boolean onTouchEvent() {
         lastTouchEventTime = System.currentTimeMillis();
-        stopScreenSaver();
+        if (screenSaverRunning) {
+            stopScreenSaver();
+            return true;
+        }
+        return false;
     }
 
     public void updateValues() {
@@ -74,6 +79,12 @@ public class ScreenSaverManager {
         return adapter;
     }
 
+    public boolean isScreenSaverRunning() {
+        return screenSaverRunning;
+    }
+    public int getCurrentScreenSaverId() {return currentScreenSaverId;}
+    public boolean isScreenSaverEnabled() {return screenSaverEnabled;}
+
     public void onDestroy() {
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
@@ -91,6 +102,10 @@ public class ScreenSaverManager {
             screenSaverRunning = true;
             screenSavers[currentScreenSaverId].onStart(mApplicationContext);
             Log.i("ShellyElevateV2", "Starting screen saver with id: " + currentScreenSaverId);
+
+            if (mMQTTServer.shouldSend()) {
+                mMQTTServer.publishSleeping(true);
+            }
         }
     }
 
@@ -98,7 +113,12 @@ public class ScreenSaverManager {
         if (screenSaverRunning) {
             screenSaverRunning = false;
             screenSavers[currentScreenSaverId].onEnd(mApplicationContext);
+            lastTouchEventTime = System.currentTimeMillis();
             Log.i("ShellyElevateV2", "Ending screen saver with id: " + currentScreenSaverId);
+
+            if (mMQTTServer.shouldSend()) {
+                mMQTTServer.publishSleeping(false);
+            }
         }
     }
 }

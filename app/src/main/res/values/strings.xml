@@ -29,4 +29,9 @@
     <string name="screen_saver_delay">Screen Saver Delay</string>
     <string name="screen_saver_delay_hint">45</string>
     <string name="screenSaverTypeText">Screen Saver Type</string>
+    <string name="http_server_enabled">HTTP Server enabled:</string>
+    <string name="extended_js_interface">Extended JS Interface</string>
+    <string name="brightness">Brightness</string>
+    <string name="mqtt">MQTT</string>
+    <string name="broker_address">Broker address</string>
 </resources>

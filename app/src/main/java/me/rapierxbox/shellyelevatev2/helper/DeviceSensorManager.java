@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 
@@ -27,7 +28,12 @@ public class DeviceSensorManager implements SensorEventListener {
     public void onSensorChanged(SensorEvent event) {
         if (event.sensor.getType() == Sensor.TYPE_LIGHT && automaticBrightness) {
             lastMeasuredLux = event.values[0];
-            ShellyElevateApplication.mDeviceHelper.setScreenBrightness(getScreenBrightnessFromLux(lastMeasuredLux));
+            if (automaticBrightness) {
+                ShellyElevateApplication.mDeviceHelper.setScreenBrightness(getScreenBrightnessFromLux(lastMeasuredLux));
+            }
+            if (mMQTTServer.shouldSend()) {
+                mMQTTServer.publishLux(lastMeasuredLux);
+            }
         }
     }
 

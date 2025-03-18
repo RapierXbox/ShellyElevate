@@ -2,6 +2,7 @@ package me.rapierxbox.shellyelevatev2;
 
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE;
 
 import android.app.Application;
@@ -20,6 +21,7 @@ import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
+import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 
 public class ShellyElevateApplication extends Application {
@@ -30,6 +32,8 @@ public class ShellyElevateApplication extends Application {
     public static ScreenSaverManager mScreenSaverManager;
     public static DeviceSensorManager mDeviceSensorManager;
     public static SwipeHelper mSwipeHelper;
+    public static ShellyElevateJavascriptInterface mShellyElevateJavascriptInterface;
+    public static MQTTServer mMQTTServer;
 
     public static SensorManager mSensorManager;
     public static Sensor mLightSensor;
@@ -37,9 +41,13 @@ public class ShellyElevateApplication extends Application {
     public static Context mApplicationContext;
     public static SharedPreferences mSharedPreferences;
 
+    private static long applicationStartTime;
+
     @Override
     public void onCreate() {
         super.onCreate();
+
+        applicationStartTime = System.currentTimeMillis();
 
         mApplicationContext = getApplicationContext();
         mSharedPreferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
@@ -54,14 +62,19 @@ public class ShellyElevateApplication extends Application {
         mScreenSaverManager = new ScreenSaverManager();
         mDeviceSensorManager = new DeviceSensorManager();
         mSwipeHelper = new SwipeHelper();
+        mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
+        mMQTTServer = new MQTTServer();
 
         updateSPValues();
 
-        try {
-            mHttpServer.start();
-        } catch (IOException e) {
-            throw new RuntimeException(e);
+        if (mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)) {
+            try {
+                mHttpServer.start();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
         }
+
         mSensorManager.registerListener(mDeviceSensorManager, mLightSensor, SensorManager.SENSOR_DELAY_NORMAL);
 
         if (!mSharedPreferences.getBoolean(SP_LITE_MODE, false)) {
@@ -71,16 +84,20 @@ public class ShellyElevateApplication extends Application {
             startActivity(activityIntent);
         }
 
-
-
-
         Log.i("ShellyElevateV2", "Application started");
+    }
+
+    public static long getApplicationStartTime() {
+        return applicationStartTime;
     }
 
     public static void updateSPValues() {
         mScreenSaverManager.updateValues();
         mDeviceSensorManager.updateValues();
         mSwipeHelper.updateValues();
+        mShellyElevateJavascriptInterface.updateValues();
+        mDeviceHelper.updateValues();
+        mMQTTServer.updateValues();
 
         Intent intent = new Intent(INTENT_WEBVIEW_REFRESH);
         LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
@@ -91,6 +108,7 @@ public class ShellyElevateApplication extends Application {
         mHttpServer.onDestroy();
         mSensorManager.unregisterListener(mDeviceSensorManager);
         mScreenSaverManager.onDestroy();
+        mMQTTServer.onDestroy();
 
         mDeviceHelper.setScreenOn(true);
 

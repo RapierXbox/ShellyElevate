@@ -47,9 +47,6 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
-    aaptOptions {
-        noCompress("tflite")
-    }
 }
 
 dependencies {
@@ -65,6 +62,7 @@ dependencies {
     implementation(libs.material3)
     implementation(libs.preference)
     implementation(libs.nanohttpd)
+    implementation("org.eclipse.paho:org.eclipse.paho.mqttv5.client:1.2.5")
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

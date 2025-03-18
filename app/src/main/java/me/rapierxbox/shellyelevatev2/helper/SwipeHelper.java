@@ -2,6 +2,7 @@ package me.rapierxbox.shellyelevatev2.helper;
 
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.util.Log;
@@ -25,8 +26,13 @@ public class SwipeHelper{
                 float deltaY = Math.abs(touchStartY - event.getY());
                 float deltaT = Math.abs(touchStartEventTime - event.getEventTime());
                 float velocity = deltaY / deltaT;
-                if (velocity > minVel && deltaY > minDist && doSwitchOnSwipe){
-                    mDeviceHelper.setRelay(!mDeviceHelper.getRelay());
+                if (velocity > minVel && deltaY > minDist){
+                    if (doSwitchOnSwipe) {
+                        mDeviceHelper.setRelay(!mDeviceHelper.getRelay());
+                    }
+                    if (mMQTTServer.shouldSend()) {
+                        mMQTTServer.publishSwipeEvent();
+                    }
                     return false;
                 }
         }
