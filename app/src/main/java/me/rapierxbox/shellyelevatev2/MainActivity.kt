@@ -5,86 +5,66 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.SharedPreferences
-import android.hardware.Sensor
-import android.hardware.SensorManager
 import android.os.Bundle
 import android.util.Log
 import android.view.MotionEvent
-import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
-import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
-import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager
+import me.rapierxbox.shellyelevatev2.databinding.MainActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
-import me.rapierxbox.shellyelevatev2.helper.SwipeHelper
-import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
 
 class MainActivity : ComponentActivity() {
-    private lateinit var myWebView: WebView
-    private lateinit var settingsButtonOverlay1: View
-    private lateinit var settingsButtonOverlay2: View
-    private lateinit var swipeDetectionOverlay: View
+    private lateinit var binding: MainActivityBinding // Declare the binding object
 
-    private var clicksButton1: Int = 0
-    private var clicksButton2: Int = 0
+    private var clicksButtonRight: Int = 0
+    private var clicksButtonLeft: Int = 0
 
     private var webviewRefreshBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            myWebView.loadUrl(ServiceHelper.getWebviewUrl())
+            binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
         }
     }
 
     private var webviewJavascriptInjectorBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
-            myWebView.evaluateJavascript(intent!!.getStringExtra("javascript")!!, null)
+            intent?.getStringExtra("javascript")?.let { extra ->
+                binding.myWebView.evaluateJavascript(extra, null)
+            }
         }
-    }
-
-
-    private fun findViews() {
-        myWebView = findViewById(R.id.myWebView)
-        settingsButtonOverlay1 = findViewById(R.id.settingButtonOverlay1)
-        settingsButtonOverlay2 = findViewById(R.id.settingButtonOverlay2)
-        swipeDetectionOverlay = findViewById(R.id.swipeDetectionOverlay)
     }
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupSettingsButtons() {
-        settingsButtonOverlay1.setOnTouchListener { _, event ->
+        binding.settingButtonOverlayRight.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
-                clicksButton1++
+                clicksButtonRight++
             }
             return@setOnTouchListener false
         }
 
-        settingsButtonOverlay2.setOnTouchListener { _, event ->
+        binding.settingButtonOverlayLeft.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
-                if (clicksButton1 == 10) {
-                    clicksButton2++
+                if (clicksButtonRight == 10) {
+                    clicksButtonLeft++
                 } else {
-                    clicksButton1 = 0
-                    clicksButton2 = 0
+                    clicksButtonRight = 0
+                    clicksButtonLeft = 0
                 }
 
-                if (clicksButton2 == 10) {
+                if (clicksButtonLeft == 10) {
                     startActivity(Intent(this, SettingsActivity::class.java))
 
-                    clicksButton1 = 0
-                    clicksButton2 = 0
+                    clicksButtonRight = 0
+                    clicksButtonLeft = 0
                 }
             }
             return@setOnTouchListener false
@@ -93,7 +73,7 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
-        val webSettings: WebSettings = myWebView.settings
+        val webSettings: WebSettings = binding.myWebView.settings
 
         webSettings.javaScriptEnabled = true
         webSettings.domStorageEnabled = true
@@ -103,36 +83,37 @@ class MainActivity : ComponentActivity() {
 
         webSettings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
-        myWebView.webViewClient = WebViewClient()
-        myWebView.webChromeClient = WebChromeClient()
+        binding.myWebView.webViewClient = WebViewClient()
+        binding.myWebView.webChromeClient = WebChromeClient()
 
-        myWebView.addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
+        binding.myWebView.addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
 
-        myWebView.loadUrl(ServiceHelper.getWebviewUrl())
+        binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContentView(R.layout.main_activity)
 
-        findViews()
+        binding = MainActivityBinding.inflate(layoutInflater) // Inflate the binding
+        setContentView(binding.root) // Set the content view using binding.root
+
         configureWebView()
         setupSettingsButtons()
 
-        swipeDetectionOverlay.setOnTouchListener { _, event ->
+        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
             if (mScreenSaverManager.onTouchEvent()) {
                 Log.d("ShellyElevateV2", "Touch blocked by ScreenSaverManager")
                 return@setOnTouchListener true
             }
             mSwipeHelper.onTouchEvent(event)
-            myWebView.onTouchEvent(event)
+            binding.myWebView.onTouchEvent(event)
 
             return@setOnTouchListener true
         }
 
-        val localBroadcastManager : LocalBroadcastManager = LocalBroadcastManager.getInstance(this)
+        val localBroadcastManager: LocalBroadcastManager = LocalBroadcastManager.getInstance(this)
         localBroadcastManager.registerReceiver(webviewRefreshBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_REFRESH))
         localBroadcastManager.registerReceiver(webviewJavascriptInjectorBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
     }
