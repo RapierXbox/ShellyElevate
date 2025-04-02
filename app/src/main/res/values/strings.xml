@@ -34,4 +34,8 @@
     <string name="brightness">Brightness</string>
     <string name="mqtt">MQTT</string>
     <string name="broker_address">Broker address</string>
+    <string name="http_server_running">HTTP Server: Running</string>
+    <string name="http_server_not_running">HTTP Server: Not running</string>
+    <string name="settings_saved">Settings saved</string>
+    <string name="delay_must_be_bigger_then_5s">Delay must be bigger then 5s</string>
 </resources>

@@ -6,10 +6,10 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import android.view.inputmethod.EditorInfo
-import android.widget.Button
-import android.widget.LinearLayout
 import android.widget.SeekBar
 import android.widget.Toast
+import androidx.core.content.edit
+import androidx.core.view.isVisible
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH
 import me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS
@@ -27,7 +27,6 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ENABLED
 import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID
 import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -45,29 +44,29 @@ class SettingsActivity : Activity() {
         binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
         binding.switchOnSwipe.isChecked = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
         binding.automaticBrightness.isChecked = mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
-        binding.brightnessSetting.progress = mSharedPreferences.getInt(SP_BRIGHTNESS, 255)
+        binding.brightnessSetting.progress = mSharedPreferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS)
         binding.screenSaver.isChecked = mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
-        binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, 45).toString())
+        binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
         binding.screenSaverType.setSelection(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0))
         binding.httpServerEnabled.isChecked = mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
-        binding.httpServerText.text = if (mHttpServer.isAlive) "HTTP Server: Running" else "HTTP Server: Not running"
+        binding.httpServerText.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
         binding.extendedJavascriptInterface.isChecked = mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
         binding.liteMode.isChecked = mSharedPreferences.getBoolean(SP_LITE_MODE, false)
         binding.mqttEnabled.isChecked = mSharedPreferences.getBoolean(SP_MQTT_ENABLED, false)
         binding.mqttBroker.setText(mSharedPreferences.getString(SP_MQTT_BROKER, ""))
-        binding.mqttPort.setText(mSharedPreferences.getInt(SP_MQTT_PORT, 1883).toString())
+        binding.mqttPort.setText(mSharedPreferences.getInt(SP_MQTT_PORT, MQTT_DEFAULT_PORT).toString())
         binding.mqttUsername.setText(mSharedPreferences.getString(SP_MQTT_USERNAME, ""))
         binding.mqttPassword.setText(mSharedPreferences.getString(SP_MQTT_PASSWORD, ""))
 
-        binding.screenSaverDelayLayout.visibility = if (binding.screenSaver.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        binding.screenSaverTypeLayout.visibility = if (binding.screenSaver.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        binding.brightnessSettingLayout.visibility = if (binding.automaticBrightness.isChecked) LinearLayout.GONE else LinearLayout.VISIBLE
-        binding.httpServerLayout.visibility = if (binding.screenSaver.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        binding.httpServerButton.visibility = if (mHttpServer.isAlive) Button.GONE else Button.VISIBLE
-        binding.mqttBrokerLayout.visibility = if (binding.mqttEnabled.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        binding.mqttPortLayout.visibility = if (binding.mqttEnabled.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        binding.mqttUsernameLayout.visibility = if (binding.mqttEnabled.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        binding.mqttPasswordLayout.visibility = if (binding.mqttEnabled.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+        binding.screenSaverDelayLayout.isVisible = binding.screenSaver.isChecked
+        binding.screenSaverTypeLayout.isVisible = binding.screenSaver.isChecked
+        binding.brightnessSettingLayout.isVisible = !binding.automaticBrightness.isChecked
+        binding.httpServerLayout.isVisible = binding.screenSaver.isChecked
+        binding.httpServerButton.isVisible = !mHttpServer.isAlive
+        binding.mqttBrokerLayout.isVisible = binding.mqttEnabled.isChecked
+        binding.mqttPortLayout.isVisible = binding.mqttEnabled.isChecked
+        binding.mqttUsernameLayout.isVisible = binding.mqttEnabled.isChecked
+        binding.mqttPasswordLayout.isVisible = binding.mqttEnabled.isChecked
 
     }
 
@@ -95,57 +94,67 @@ class SettingsActivity : Activity() {
             override fun onStartTrackingTouch(seekBar: SeekBar?) {}
 
             override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                if (seekBar != null) {
-                    mDeviceHelper.forceScreenBrightness(seekBar.progress)
-                }
+                seekBar ?: return
+
+                mDeviceHelper.forceScreenBrightness(seekBar.progress)
             }
         })
 
         binding.screenSaver.setOnCheckedChangeListener { _, isChecked ->
-            binding.screenSaverDelayLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            binding.screenSaverTypeLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+            binding.screenSaverDelayLayout.isVisible = isChecked
+            binding.screenSaverTypeLayout.isVisible = isChecked
         }
 
         binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
-            binding.brightnessSettingLayout.visibility = if (isChecked) LinearLayout.GONE else LinearLayout.VISIBLE
+            binding.brightnessSettingLayout.isVisible = !isChecked
         }
 
         binding.mqttEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.mqttBrokerLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            binding.mqttPortLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            binding.mqttUsernameLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            binding.mqttPasswordLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+            binding.mqttBrokerLayout.isVisible = isChecked
+            binding.mqttPortLayout.isVisible = isChecked
+            binding.mqttUsernameLayout.isVisible = isChecked
+            binding.mqttPasswordLayout.isVisible = isChecked
         }
 
         binding.httpServerEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.httpServerLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+            binding.httpServerLayout.isVisible = isChecked
         }
 
         binding.httpServerButton.setOnClickListener {
             mHttpServer.start()
-            binding.httpServerText.text = "HTTP Server: Running"
-            binding.httpServerButton.visibility = Button.GONE
+            binding.httpServerText.text = getString(R.string.http_server_running)
+            binding.httpServerButton.isVisible = false
         }
 
         binding.backButton.setOnClickListener {
-            mSharedPreferences.edit().putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString()).putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
-                .putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString()).putString(SP_MQTT_PASSWORD, binding.mqttPassword.text.toString())
-                .putBoolean(SP_SWITCH_ON_SWIPE, binding.switchOnSwipe.isChecked).putBoolean(SP_AUTOMATIC_BRIGHTNESS, binding.automaticBrightness.isChecked)
-                .putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked).putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked).putBoolean(
-                    SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked
-                ).putBoolean(SP_LITE_MODE, binding.liteMode.isChecked).putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked).putInt(
-                    SP_SCREEN_SAVER_DELAY, Integer.parseInt(binding.screenSaverDelay.text.toString())
-                ).putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition).putInt(SP_BRIGHTNESS, binding.brightnessSetting.progress)
-                .putInt(SP_MQTT_PORT, Integer.parseInt(binding.mqttPort.text.toString())).apply()
+            mSharedPreferences.edit {
+                putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
+                putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
+                putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString())
+                putString(SP_MQTT_PASSWORD, binding.mqttPassword.text.toString())
+                putBoolean(SP_SWITCH_ON_SWIPE, binding.switchOnSwipe.isChecked)
+                putBoolean(SP_AUTOMATIC_BRIGHTNESS, binding.automaticBrightness.isChecked)
+                putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked)
+                putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
+                putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
+                putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
+                putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
+                putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
+                putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
+                putInt(SP_BRIGHTNESS, binding.brightnessSetting.progress)
+                putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
+            }
 
-            if (!binding.httpServerEnabled.isChecked && mHttpServer.isAlive) {
+            val serverEnabled = binding.httpServerEnabled.isChecked
+
+            if (!serverEnabled && mHttpServer.isAlive) {
                 mHttpServer.stop()
-            } else if (binding.httpServerEnabled.isChecked && !mHttpServer.isAlive) {
+            } else if (serverEnabled && !mHttpServer.isAlive) {
                 mHttpServer.start()
             }
 
             ShellyElevateApplication.updateSPValues()
-            Toast.makeText(mApplicationContext, "Settings saved", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
 
             val intent = Intent(INTENT_WEBVIEW_REFRESH)
             LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
@@ -165,15 +174,20 @@ class SettingsActivity : Activity() {
 
         binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if (Integer.parseInt(binding.screenSaverDelay.text.toString()) < 5) {
+
+                if ((binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
                     binding.screenSaverDelay.setText("5")
-                    Toast.makeText(
-                        mApplicationContext, "Delay must be bigger then 5s", Toast.LENGTH_SHORT
-                    ).show()
+                    Toast.makeText(this, R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
                 }
             }
 
             return@setOnEditorActionListener false
         }
+    }
+
+    companion object {
+        const val SCREEN_SAVER_DEFAULT_DELAY = 45
+        const val MQTT_DEFAULT_PORT = 1833
+        const val DEFAULT_BRIGHTNESS = 255
     }
 }
