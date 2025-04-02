@@ -5,12 +5,13 @@ plugins {
 
 android {
     namespace = "me.rapierxbox.shellyelevatev2"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "me.rapierxbox.shellyelevatev2"
         minSdk = 24
-        targetSdk = 34
+        //noinspection ExpiredTargetSdkVersion
+        targetSdk = 24
         versionCode = 1
         versionName = "1.0"
 
@@ -50,7 +51,7 @@ dependencies {
     implementation(libs.lifecycle.runtime.ktx)
     implementation(libs.preference)
     implementation(libs.nanohttpd)
-    implementation("org.eclipse.paho:org.eclipse.paho.mqttv5.client:1.2.5")
+    implementation(libs.org.eclipse.paho.mqttv5.client)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)

@@ -1,12 +1,14 @@
 [versions]
-agp = "8.4.0"
+agp = "8.8.2"
 junit = "4.13.2"
-junitVersion = "1.1.5"
-espressoCore = "3.5.1"
+junitVersion = "1.2.1"
+espressoCore = "3.6.1"
 appcompat = "1.7.0"
 material = "1.12.0"
-kotlin = "1.9.0"
-lifecycleRuntimeKtx = "2.8.1"
+kotlin = "2.1.20"
+lifecycleRuntimeKtx = "2.8.7"
+orgEclipsePahoMqttv5Client = "1.2.5"
+preference = "1.2.1"
 nanohttpd = "2.3.1"
 
 [libraries]
@@ -16,6 +18,7 @@ espresso-core = { group = "androidx.test.espresso", name = "espresso-core", vers
 appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+org-eclipse-paho-mqttv5-client = { module = "org.eclipse.paho:org.eclipse.paho.mqttv5.client", version.ref = "orgEclipsePahoMqttv5Client" }
 preference = { group = "androidx.preference", name = "preference", version.ref = "preference" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
 
