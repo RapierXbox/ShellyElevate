@@ -19,15 +19,13 @@ import java.io.IOException;
 
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
-import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 
 public class ShellyElevateApplication extends Application {
     public static HttpServer mHttpServer;
-    public static SettingsParser mSettingsParser;
-    public static MediaHelper mMediaHelper;
+
     public static DeviceHelper mDeviceHelper;
     public static ScreenSaverManager mScreenSaverManager;
     public static DeviceSensorManager mDeviceSensorManager;
@@ -56,8 +54,7 @@ public class ShellyElevateApplication extends Application {
         mLightSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
 
         mHttpServer = new HttpServer();
-        mSettingsParser = new SettingsParser();
-        mMediaHelper = new MediaHelper();
+
         mDeviceHelper = new DeviceHelper();
         mScreenSaverManager = new ScreenSaverManager();
         mDeviceSensorManager = new DeviceSensorManager();

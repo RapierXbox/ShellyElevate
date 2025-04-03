@@ -5,10 +5,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSettingsParser;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.content.Intent;
 import android.net.Uri;
@@ -25,11 +22,15 @@ import java.util.HashMap;
 import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
+import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 
 public class HttpServer extends NanoHTTPD {
     public HttpServer() {
         super(8080);
     }
+
+    SettingsParser mSettingsParser = new SettingsParser();
+    MediaHelper   mMediaHelper = new MediaHelper();
 
     @Override
     public Response serve(IHTTPSession session) {
@@ -84,7 +85,8 @@ public class HttpServer extends NanoHTTPD {
                 if (method.equals(Method.GET)) {
                     Intent intent = new Intent(INTENT_WEBVIEW_REFRESH);
                     LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
-                    jsonResponse.put("success", true);}
+                    jsonResponse.put("success", true);
+                }
             case "inject":
                 if (method.equals(Method.POST)) {
                     Map<String, String> files = new HashMap<>();
@@ -104,6 +106,7 @@ public class HttpServer extends NanoHTTPD {
 
         return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
+
     private Response handleMediaRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
         Method method = session.getMethod();
         String uri = session.getUri();
@@ -194,6 +197,7 @@ public class HttpServer extends NanoHTTPD {
 
         return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
+
     private Response handleDeviceRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
         Method method = session.getMethod();
         String uri = session.getUri();
@@ -272,7 +276,7 @@ public class HttpServer extends NanoHTTPD {
                             Log.e("MQTT", "Error rebooting:", e);
                         }
                     } else {
-                        Toast.makeText(mApplicationContext, "Please wait %s seconds before rebooting".replace("%s",String.valueOf(20-deltaTime) ), Toast.LENGTH_LONG).show();
+                        Toast.makeText(mApplicationContext, "Please wait %s seconds before rebooting".replace("%s", String.valueOf(20 - deltaTime)), Toast.LENGTH_LONG).show();
                     }
                 }
                 break;
