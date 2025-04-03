@@ -1,17 +1,18 @@
 package me.rapierxbox.shellyelevatev2
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
+import android.view.Menu
+import android.view.MenuItem
 import android.view.inputmethod.EditorInfo
 import android.widget.SeekBar
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.core.view.isVisible
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH
 import me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE
@@ -34,9 +35,11 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.SettingsActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
+import java.net.NetworkInterface
+import kotlin.system.exitProcess
 
 @SuppressLint("UseSwitchCompatOrMaterialCode")
-class SettingsActivity : Activity() {
+class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: SettingsActivityBinding // Declare the binding object
 
@@ -48,7 +51,10 @@ class SettingsActivity : Activity() {
         binding.screenSaver.isChecked = mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
         binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
         binding.screenSaverType.setSelection(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0))
+
         binding.httpServerEnabled.isChecked = mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
+        binding.httpServerAddress.text = getString(R.string.server_url, getLocalIpAddress())
+
         binding.httpServerText.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
         binding.extendedJavascriptInterface.isChecked = mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
         binding.liteMode.isChecked = mSharedPreferences.getBoolean(SP_LITE_MODE, false)
@@ -76,6 +82,14 @@ class SettingsActivity : Activity() {
 
         binding = SettingsActivityBinding.inflate(layoutInflater) // Inflate the binding
         setContentView(binding.root) // Set the content view using binding.root
+
+        setSupportActionBar(binding.toolbar)
+
+        supportActionBar?.let {
+            it.setHomeButtonEnabled(true)
+            it.setDisplayHomeAsUpEnabled(true)
+            title = getString(R.string.settings)
+        }
 
         binding.screenSaverType.adapter = mScreenSaverManager.screenSaverSpinnerAdapter
         loadValues()
@@ -126,42 +140,6 @@ class SettingsActivity : Activity() {
             binding.httpServerButton.isVisible = false
         }
 
-        binding.backButton.setOnClickListener {
-            mSharedPreferences.edit {
-                putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
-                putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
-                putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString())
-                putString(SP_MQTT_PASSWORD, binding.mqttPassword.text.toString())
-                putBoolean(SP_SWITCH_ON_SWIPE, binding.switchOnSwipe.isChecked)
-                putBoolean(SP_AUTOMATIC_BRIGHTNESS, binding.automaticBrightness.isChecked)
-                putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked)
-                putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
-                putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
-                putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
-                putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
-                putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
-                putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
-                putInt(SP_BRIGHTNESS, binding.brightnessSetting.progress)
-                putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
-            }
-
-            val serverEnabled = binding.httpServerEnabled.isChecked
-
-            if (!serverEnabled && mHttpServer.isAlive) {
-                mHttpServer.stop()
-            } else if (serverEnabled && !mHttpServer.isAlive) {
-                mHttpServer.start()
-            }
-
-            ShellyElevateApplication.updateSPValues()
-            Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
-
-            val intent = Intent(INTENT_WEBVIEW_REFRESH)
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-
-            finish()
-        }
-
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
             if (mScreenSaverManager.onTouchEvent()) {
                 Log.d("ShellyElevateV2", "Touch blocked by ScreenSaverManager")
@@ -184,6 +162,69 @@ class SettingsActivity : Activity() {
             return@setOnEditorActionListener false
         }
     }
+
+    override fun onSupportNavigateUp(): Boolean {
+        saveSettings()
+        return true
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.settings_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+                val intent = Intent(Settings.ACTION_SETTINGS)
+                startActivity(intent)
+                true
+            }
+
+            R.id.action_exit -> {
+                finish()
+                exitProcess(0)
+                true
+            }
+
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun saveSettings() {
+        mSharedPreferences.edit {
+            putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
+            putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
+            putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString())
+            putString(SP_MQTT_PASSWORD, binding.mqttPassword.text.toString())
+            putBoolean(SP_SWITCH_ON_SWIPE, binding.switchOnSwipe.isChecked)
+            putBoolean(SP_AUTOMATIC_BRIGHTNESS, binding.automaticBrightness.isChecked)
+            putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked)
+            putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
+            putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
+            putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
+            putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
+            putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
+            putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
+            putInt(SP_BRIGHTNESS, binding.brightnessSetting.progress)
+            putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
+        }
+
+        val serverEnabled = binding.httpServerEnabled.isChecked
+
+        if (!serverEnabled && mHttpServer.isAlive) {
+            mHttpServer.stop()
+        } else if (serverEnabled && !mHttpServer.isAlive) {
+            mHttpServer.start()
+        }
+
+        ShellyElevateApplication.updateSPValues()
+        Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
+
+        finish()
+    }
+
+    fun getLocalIpAddress() = NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { it.isSiteLocalAddress }?.hostAddress
 
     companion object {
         const val SCREEN_SAVER_DEFAULT_DELAY = 45

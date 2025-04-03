@@ -91,6 +91,11 @@ class MainActivity : ComponentActivity() {
         binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
 
+    override fun onResume() {
+        super.onResume()
+        binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)

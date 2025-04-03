@@ -1,326 +1,353 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+
+
+<androidx.coordinatorlayout.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:focusable="true"
-    android:focusableInTouchMode="true">
+    android:layout_height="match_parent">
 
-    <ScrollView
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:overScrollMode="never"
-        app:layout_constraintTop_toTopOf="parent"
-        app:layout_constraintBottom_toTopOf="@id/backButton">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:layout_margin="24dp"
-            android:padding="24dp">
-
-            <Button
-                android:id="@+id/findURLButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/findIPButtonText"
-                android:textSize="18sp" />
-
-            <EditText
-                android:id="@+id/webviewURL"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:hint="@string/homeAssistantIpEditTextPreviewIp"
-                android:textSize="18sp"
-                android:imeOptions="actionDone"
-                android:inputType="textUri"/>
-
-            <Switch
-                android:id="@+id/switchOnSwipe"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/switchOnSwipeText"
-                android:layout_marginTop="24dp"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-            <Switch
-                android:id="@+id/automaticBrightness"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:text="@string/automaticBrightnessText"
-                android:textSize="18sp"/>
-
-            <LinearLayout
-                android:id="@+id/brightnessSettingLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/brightness"
-                    android:textColor="@color/black"
-                    android:textSize="18sp" />
-
-                <SeekBar
-                    android:id="@+id/brightnessSetting"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:max="255"
-                    android:min="1"
-                    />
-
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/screenSaver"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/ScreenSaverText"
-                android:layout_marginTop="24dp"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-            <LinearLayout
-                android:id="@+id/screenSaverDelayLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/screen_saver_delay"
-                    android:textColor="@color/black"
-                    android:textSize="18sp" />
-
-                <EditText
-                    android:id="@+id/screenSaverDelay"
-                    android:layout_width="60dp"
-                    android:layout_height="wrap_content"
-                    android:hint="@string/screen_saver_delay_hint"
-                    android:inputType="number"
-                    android:textSize="18sp"
-                    android:imeOptions="actionDone"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/screenSaverTypeLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/screenSaverTypeText"
-                    android:textColor="@color/black"
-                    android:textSize="18sp" />
-
-                <Spinner
-                    android:id="@+id/screenSaverType"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:spinnerMode="dialog"/>
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/httpServerEnabled"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/http_server_enabled"
-                android:layout_marginTop="24dp"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-            <LinearLayout
-                android:id="@+id/httpServerLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:layout_marginTop="24dp">
-                <TextView
-                    android:id="@+id/httpServerText"
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:textSize="18sp"
-                    android:textColor="@color/black"
-                    android:text="@string/http_server_status_default"/>
-
-                <Button
-                    android:id="@+id/httpServerButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:textSize="18sp"
-                    android:text="@string/start"
-                    android:paddingVertical="0dp"/>
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/extendedJavascriptInterface"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/extended_js_interface"
-                android:layout_marginTop="24dp"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml"/>
-
-            <Switch
-                android:id="@+id/mqttEnabled"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/mqtt"
-                android:layout_marginTop="24dp"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-            <LinearLayout
-                android:id="@+id/mqttBrokerLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/broker_address"
-                    android:textColor="@color/black"
-                    android:textSize="18sp" />
-
-                <EditText
-                    android:id="@+id/mqttBroker"
-                    android:layout_width="200dp"
-                    android:layout_height="wrap_content"
-                    android:hint="tcp://192.168.1.123"
-                    android:inputType="textUri"
-                    android:textSize="18sp"
-                    android:imeOptions="actionDone"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/mqttPortLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Broker port"
-                    android:textColor="@color/black"
-                    android:textSize="18sp" />
-
-                <EditText
-                    android:id="@+id/mqttPort"
-                    android:layout_width="60dp"
-                    android:layout_height="wrap_content"
-                    android:hint="1883"
-                    android:inputType="number"
-                    android:textSize="18sp"
-                    android:imeOptions="actionDone"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/mqttUsernameLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Username"
-                    android:textColor="@color/black"
-                    android:textSize="18sp" />
-
-                <EditText
-                    android:id="@+id/mqttUsername"
-                    android:layout_width="200dp"
-                    android:layout_height="wrap_content"
-                    android:hint="username"
-                    android:inputType="text"
-                    android:textSize="18sp"
-                    android:imeOptions="actionDone"/>
-            </LinearLayout>
-
-            <LinearLayout
-                android:id="@+id/mqttPasswordLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="Password"
-                    android:textColor="@color/black"
-                    android:textSize="18sp" />
-
-                <EditText
-                    android:id="@+id/mqttPassword"
-                    android:layout_width="200dp"
-                    android:layout_height="wrap_content"
-                    android:hint="password"
-                    android:inputType="text"
-                    android:textSize="18sp"
-                    android:imeOptions="actionDone"/>
-            </LinearLayout>
-
-            <Switch
-                android:id="@+id/liteMode"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/lite_mode"
-                android:layout_marginTop="24dp"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-
-        </LinearLayout>
-
-    </ScrollView>
-
-    <Button
-        android:id="@+id/backButton"
-        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="@string/backButtonText"
-        android:layout_margin="16dp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        android:fitsSystemWindows="true">
 
-    <View
-        android:id="@+id/swipeDetectionOverlay"
-        android:background="@android:color/transparent"
+        <com.google.android.material.appbar.MaterialToolbar
+            android:id="@+id/toolbar"
+            android:layout_width="match_parent"
+            android:layout_height="?attr/actionBarSize"
+            android:minHeight="?attr/actionBarSize" />
+
+    </com.google.android.material.appbar.AppBarLayout>
+
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:focusable="false"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        />
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        app:layout_behavior="@string/appbar_scrolling_view_behavior">
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:overScrollMode="never"
+            app:layout_constraintTop_toTopOf="parent">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="24dp">
+
+                <Button
+                    android:id="@+id/findURLButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/findIPButtonText"
+                    android:textSize="18sp" />
+
+                <EditText
+                    android:id="@+id/webviewURL"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:hint="@string/homeAssistantIpEditTextPreviewIp"
+                    android:imeOptions="actionDone"
+                    android:inputType="textUri"
+                    android:textSize="18sp" />
+
+                <Switch
+                    android:id="@+id/switchOnSwipe"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/switchOnSwipeText"
+                    android:textSize="18sp"
+                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+                <androidx.appcompat.widget.SwitchCompat
+                    android:id="@+id/automaticBrightness"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/automaticBrightnessText"
+                    android:textSize="18sp" />
+
+                <LinearLayout
+                    android:id="@+id/brightnessSettingLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/brightness"
+                        android:textSize="18sp" />
+
+                    <SeekBar
+                        android:id="@+id/brightnessSetting"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="255"
+                        android:min="1" />
+
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/screenSaver"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/ScreenSaverText"
+                    android:textSize="18sp"
+                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+                <LinearLayout
+                    android:id="@+id/screenSaverDelayLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/screen_saver_delay"
+                        android:textSize="18sp" />
+
+                    <EditText
+                        android:id="@+id/screenSaverDelay"
+                        android:layout_width="60dp"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/screen_saver_delay_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="number"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/screenSaverTypeLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/screenSaverTypeText"
+                        android:textSize="18sp" />
+
+                    <Spinner
+                        android:id="@+id/screenSaverType"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:spinnerMode="dialog" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/httpServerEnabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/http_server_enabled"
+                    android:textSize="18sp"
+                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginStart="48dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/http_server_address"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/httpServerAddress"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingVertical="0dp"
+                        tools:text="http://127.0.0.1:8080"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/httpServerLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:layout_marginStart="48dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:id="@+id/httpServerText"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/http_server_status_default"
+                        android:textSize="18sp" />
+
+                    <Button
+                        android:id="@+id/httpServerButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:paddingVertical="0dp"
+                        android:text="@string/start"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/extendedJavascriptInterface"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/extended_js_interface"
+                    android:textSize="18sp"
+                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+                <Switch
+                    android:id="@+id/mqttEnabled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/mqtt"
+                    android:textSize="18sp"
+                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+                <LinearLayout
+                    android:id="@+id/mqttBrokerLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/broker_address"
+                        android:textSize="18sp" />
+
+                    <EditText
+                        android:id="@+id/mqttBroker"
+                        android:layout_width="200dp"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/mqttbroker_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="textUri"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/mqttPortLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/broker_port"
+                        android:textSize="18sp" />
+
+                    <EditText
+                        android:id="@+id/mqttPort"
+                        android:layout_width="60dp"
+                        android:layout_height="wrap_content"
+                        android:hint="1883"
+                        android:imeOptions="actionDone"
+                        android:inputType="number"
+                        android:textSize="18sp"
+                        tools:ignore="HardcodedText" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/mqttUsernameLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/username"
+                        android:textSize="18sp" />
+
+                    <EditText
+                        android:id="@+id/mqttUsername"
+                        android:layout_width="200dp"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/mqtt_username_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="text"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/mqttPasswordLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/password"
+                        android:textSize="18sp" />
+
+                    <EditText
+                        android:id="@+id/mqttPassword"
+                        android:layout_width="200dp"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/mqtt_password_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="textVisiblePassword"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <Switch
+                    android:id="@+id/liteMode"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:text="@string/lite_mode"
+                    android:textSize="18sp"
+                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+
+            </LinearLayout>
+
+        </ScrollView>
+
+        <View
+            android:id="@+id/swipeDetectionOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@android:color/transparent"
+            android:focusable="false"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+</androidx.coordinatorlayout.widget.CoordinatorLayout>
