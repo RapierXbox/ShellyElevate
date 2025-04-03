@@ -24,6 +24,17 @@ class FloatingBackButtonService : Service() {
 
     private lateinit var prefs: SharedPreferences
 
+    private var wasVisibleBeforePause = false
+
+    fun pauseFloatingButton() {
+        wasVisibleBeforePause = (floatingView != null)
+        hideFloatingButton()
+    }
+
+    fun resumeFloatingButton() {
+        if (wasVisibleBeforePause) showFloatingButton()
+    }
+
     override fun onCreate() {
         super.onCreate()
         prefs = getSharedPreferences("floating_button_prefs", MODE_PRIVATE)
@@ -34,6 +45,8 @@ class FloatingBackButtonService : Service() {
         when (intent?.action) {
             "SHOW_FLOATING_BUTTON" -> showFloatingButton()
             "HIDE_FLOATING_BUTTON" -> hideFloatingButton()
+            "PAUSE_BUTTON" -> pauseFloatingButton()
+            "RESUME_BUTTON" -> hideFloatingButton()
             else -> showFloatingButton()
         }
         return START_STICKY

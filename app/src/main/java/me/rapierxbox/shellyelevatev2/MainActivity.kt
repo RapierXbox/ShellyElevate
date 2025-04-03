@@ -94,7 +94,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
+        if (binding.myWebView.originalUrl != ServiceHelper.getWebviewUrl())
+            binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -122,5 +123,8 @@ class MainActivity : ComponentActivity() {
         val localBroadcastManager: LocalBroadcastManager = LocalBroadcastManager.getInstance(this)
         localBroadcastManager.registerReceiver(webviewRefreshBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_REFRESH))
         localBroadcastManager.registerReceiver(webviewJavascriptInjectorBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
+
+        //if (!getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).getBoolean("settingEverShown", false))
+            startActivity(Intent(this, SettingsActivity::class.java))
     }
 }
