@@ -1,4 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="homeAssistantIpEditTextPreviewIp">http://192.168.1.123:8123</string>
+    <string name="mqttbroker_hint">tcp://192.168.1.123</string>
     <string name="back_intent" donottranslate="true">shellyelevate.ACTION_BACK</string>
 </resources>

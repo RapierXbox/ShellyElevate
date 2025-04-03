@@ -161,6 +161,7 @@
                     tools:ignore="UseSwitchCompatOrMaterialXml" />
 
                 <LinearLayout
+                    android:id="@+id/httpServerAddressLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="24dp"
@@ -197,6 +198,15 @@
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
                         android:text="@string/http_server_status_default"
+                        android:textSize="18sp" />
+
+                    <TextView
+                        android:id="@+id/httpServerStatus"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:gravity="end"
+                        tools:text="@string/http_server_running"
                         android:textSize="18sp" />
 
                     <Button

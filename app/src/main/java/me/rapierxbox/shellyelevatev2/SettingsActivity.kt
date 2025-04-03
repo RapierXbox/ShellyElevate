@@ -12,7 +12,9 @@ import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
+import androidx.core.net.toUri
 import androidx.core.view.isVisible
+import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE
@@ -31,8 +33,9 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
+import me.rapierxbox.shellyelevatev2.backbutton.BackAccessibilityService
+import me.rapierxbox.shellyelevatev2.backbutton.FloatingBackButtonService
 import me.rapierxbox.shellyelevatev2.databinding.SettingsActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import java.net.NetworkInterface
@@ -44,36 +47,47 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: SettingsActivityBinding // Declare the binding object
 
     private fun loadValues() {
-        binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
-        binding.switchOnSwipe.isChecked = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
-        binding.automaticBrightness.isChecked = mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
-        binding.brightnessSetting.progress = mSharedPreferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS)
-        binding.screenSaver.isChecked = mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
-        binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
-        binding.screenSaverType.setSelection(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0))
 
-        binding.httpServerEnabled.isChecked = mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
+        val preferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE)
+
+        binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
+        binding.switchOnSwipe.isChecked = preferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
+        binding.automaticBrightness.isChecked = preferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
+        binding.brightnessSetting.progress = preferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS)
+        binding.screenSaver.isChecked = preferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
+        binding.screenSaverDelay.setText(preferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
+        binding.screenSaverType.setSelection(preferences.getInt(SP_SCREEN_SAVER_ID, 0))
+
+        binding.httpServerEnabled.isChecked = preferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
         binding.httpServerAddress.text = getString(R.string.server_url, getLocalIpAddress())
 
-        binding.httpServerText.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
-        binding.extendedJavascriptInterface.isChecked = mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
-        binding.liteMode.isChecked = mSharedPreferences.getBoolean(SP_LITE_MODE, false)
-        binding.mqttEnabled.isChecked = mSharedPreferences.getBoolean(SP_MQTT_ENABLED, false)
-        binding.mqttBroker.setText(mSharedPreferences.getString(SP_MQTT_BROKER, ""))
-        binding.mqttPort.setText(mSharedPreferences.getInt(SP_MQTT_PORT, MQTT_DEFAULT_PORT).toString())
-        binding.mqttUsername.setText(mSharedPreferences.getString(SP_MQTT_USERNAME, ""))
-        binding.mqttPassword.setText(mSharedPreferences.getString(SP_MQTT_PASSWORD, ""))
+        binding.httpServerStatus.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
+        binding.extendedJavascriptInterface.isChecked = preferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
+        binding.liteMode.isChecked = preferences.getBoolean(SP_LITE_MODE, false)
+        binding.mqttEnabled.isChecked = preferences.getBoolean(SP_MQTT_ENABLED, false)
+        binding.mqttBroker.setText(preferences.getString(SP_MQTT_BROKER, ""))
+        binding.mqttPort.setText(preferences.getInt(SP_MQTT_PORT, MQTT_DEFAULT_PORT).toString())
+        binding.mqttUsername.setText(preferences.getString(SP_MQTT_USERNAME, ""))
+        binding.mqttPassword.setText(preferences.getString(SP_MQTT_PASSWORD, ""))
 
         binding.screenSaverDelayLayout.isVisible = binding.screenSaver.isChecked
         binding.screenSaverTypeLayout.isVisible = binding.screenSaver.isChecked
+
         binding.brightnessSettingLayout.isVisible = !binding.automaticBrightness.isChecked
-        binding.httpServerLayout.isVisible = binding.screenSaver.isChecked
+
+        binding.httpServerAddressLayout.isVisible = binding.httpServerEnabled.isChecked
+        binding.httpServerLayout.isVisible = binding.httpServerEnabled.isChecked
+
         binding.httpServerButton.isVisible = !mHttpServer.isAlive
+
         binding.mqttBrokerLayout.isVisible = binding.mqttEnabled.isChecked
         binding.mqttPortLayout.isVisible = binding.mqttEnabled.isChecked
         binding.mqttUsernameLayout.isVisible = binding.mqttEnabled.isChecked
         binding.mqttPasswordLayout.isVisible = binding.mqttEnabled.isChecked
 
+        preferences.edit {
+            putBoolean("settingEverShown", true)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -92,6 +106,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.screenSaverType.adapter = mScreenSaverManager.screenSaverSpinnerAdapter
+        
         loadValues()
 
         binding.findURLButton.setOnClickListener {
@@ -132,6 +147,7 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.httpServerEnabled.setOnCheckedChangeListener { _, isChecked ->
             binding.httpServerLayout.isVisible = isChecked
+            binding.httpServerAddressLayout.isVisible = isChecked
         }
 
         binding.httpServerButton.setOnClickListener {
@@ -176,14 +192,19 @@ class SettingsActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.action_settings -> {
-                val intent = Intent(Settings.ACTION_SETTINGS)
-                startActivity(intent)
+
+                if (checkAccessibilityPermission()) {
+                    val intent = Intent(Settings.ACTION_SETTINGS)
+                    startActivity(intent)
+                }
                 true
             }
 
             R.id.action_exit -> {
-                finish()
-                exitProcess(0)
+                if (checkAccessibilityPermission()) {
+                    moveTaskToBack(true)
+                    finishAffinity()
+                }
                 true
             }
 
@@ -191,8 +212,27 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun checkAccessibilityPermission(): Boolean {
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Please, grant overlay permission to show the floating back button", Toast.LENGTH_LONG).show()
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())
+            startActivity(intent)
+            return false
+        }
+
+        startService(Intent(this, FloatingBackButtonService::class.java))
+
+        if (!BackAccessibilityService.isAccessibilityEnabled(this)) {
+            Toast.makeText(this, "Please, grant accessibility permission to use the floating back button", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            return false
+        }
+
+        return true
+    }
+
     private fun saveSettings() {
-        mSharedPreferences.edit {
+        getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).edit {
             putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
             putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
             putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString())
@@ -222,6 +262,14 @@ class SettingsActivity : AppCompatActivity() {
         Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
 
         finish()
+    }
+
+    override fun onResume() {
+        super.onResume()
+
+        val intent = Intent(this, FloatingBackButtonService::class.java)
+        intent.action = "HIDE_FLOATING_BUTTON"
+        startService(intent)
     }
 
     fun getLocalIpAddress() = NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { it.isSiteLocalAddress }?.hostAddress
