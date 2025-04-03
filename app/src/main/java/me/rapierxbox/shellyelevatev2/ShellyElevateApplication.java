@@ -77,13 +77,6 @@ public class ShellyElevateApplication extends Application {
 
         mSensorManager.registerListener(mDeviceSensorManager, mLightSensor, SensorManager.SENSOR_DELAY_NORMAL);
 
-        if (!mSharedPreferences.getBoolean(SP_LITE_MODE, false)) {
-            Log.i("ShellyElevateV2", "Starting MainActivity");
-            Intent activityIntent = new Intent(this, MainActivity.class);
-            activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(activityIntent);
-        }
-
         Log.i("ShellyElevateV2", "Application started");
     }
 

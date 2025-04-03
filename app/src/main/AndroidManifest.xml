@@ -28,7 +28,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ShellyElevateV2"
         android:usesCleartextTraffic="true"
-        tools:targetApi="31">
+        >
         <service
             android:name=".backbutton.FloatingBackButtonService"
             android:enabled="true"
@@ -50,27 +50,23 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:hardwareAccelerated="true"
             android:label="ShellyElevateV2"
-            android:theme="@style/Theme.ShellyElevateV2"
-            android:launchMode="singleInstance"
-            android:hardwareAccelerated="true">
+            android:theme="@style/Theme.ShellyElevateV2">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
         <activity
             android:name=".SettingsActivity"
             android:exported="true"
+            android:hardwareAccelerated="true"
             android:label="ShellyElevateV2"
-            android:theme="@style/Theme.ShellyElevateV2"
-            android:launchMode="singleInstance"
-            android:hardwareAccelerated="true">
-        </activity>
+            android:theme="@style/Theme.ShellyElevateV2" />
 
-        <activity android:name=".screensavers.activities.DigitalClockAndDateScreenSaverActivity"/>
+        <activity android:name=".screensavers.activities.DigitalClockAndDateScreenSaverActivity" />
 
         <receiver
             android:name=".BootReceiver"
@@ -80,4 +76,5 @@
             </intent-filter>
         </receiver>
     </application>
+
 </manifest>

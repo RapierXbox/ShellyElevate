@@ -42,5 +42,4 @@ public class Constants {
     public static final String MQTT_TOPIC_SLEEPING_BINARY_SENSOR = "shellyelevatev2/%s/sleeping";
 
     public static final String MQTT_TOPIC_HOME_ASSISTANT_STATUS = "homeassistant/status";
-
 }
