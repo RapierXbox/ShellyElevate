@@ -51,7 +51,6 @@
             android:hardwareAccelerated="true">
         </activity>
 
-        <activity android:name=".screensavers.activities.DigitalClockScreenSaverActivity"/>
         <activity android:name=".screensavers.activities.DigitalClockAndDateScreenSaverActivity"/>
 
         <receiver

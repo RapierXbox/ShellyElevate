@@ -7,47 +7,48 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
-import android.view.View
-import android.widget.TextView
-import me.rapierxbox.shellyelevatev2.R
+import androidx.core.view.isVisible
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication
+import me.rapierxbox.shellyelevatev2.databinding.DigitalClockAndDateScreenSaverBinding
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.Locale
 
-class DigitalClockAndDateScreenSaverActivity: Activity(){
-    private lateinit var digitalClockTextView: TextView
-    private lateinit var dateTextView: TextView
-    private lateinit var swipeDetectionOverlayView: View
+class DigitalClockAndDateScreenSaverActivity : Activity() {
+    private lateinit var binding: DigitalClockAndDateScreenSaverBinding // Declare the binding object
 
-    private val mClockSimpleDateFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
-    private val mDateSimpleDateFormat = SimpleDateFormat("d. MMMM", Locale.getDefault())
+    private val timeFormatter = SimpleDateFormat.getTimeInstance(SimpleDateFormat.SHORT)
+    private val dateFormatter = SimpleDateFormat.getDateInstance(SimpleDateFormat.MEDIUM)
+
+    private var showDate = false
+
     private val mTimeTickBroadCastReciver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             updateTime()
         }
     }
 
-    private fun findViews() {
-        digitalClockTextView = findViewById(R.id.clockText)
-        dateTextView = findViewById(R.id.dateText)
-        swipeDetectionOverlayView = findViewById(R.id.swipeDetectionOverlay)
-    }
-
     private fun updateTime() {
-        digitalClockTextView.text = mClockSimpleDateFormat.format(Date())
-        dateTextView.text = mDateSimpleDateFormat.format(Date())
+        val now = Date()
+        binding.clockText.text = timeFormatter.format(now)
+
+        if (showDate)
+            binding.dateText.text = dateFormatter.format(now)
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.digital_clock_and_date_screen_saver)
 
-        findViews()
+        showDate = intent.getBooleanExtra("date", false)
+
+        binding = DigitalClockAndDateScreenSaverBinding.inflate(layoutInflater) // Inflate the binding
+        setContentView(binding.root) // Set the content view using binding.root
+
+        binding.dateText.isVisible = showDate
+
         updateTime()
 
-        swipeDetectionOverlayView.setOnTouchListener { _, event ->
+        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
             ShellyElevateApplication.mScreenSaverManager.onTouchEvent()
             ShellyElevateApplication.mSwipeHelper.onTouchEvent(event)
 

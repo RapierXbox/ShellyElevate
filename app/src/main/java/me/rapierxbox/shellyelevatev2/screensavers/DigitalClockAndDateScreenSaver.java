@@ -9,6 +9,7 @@ public class DigitalClockAndDateScreenSaver extends ScreenSaver {
     @Override
     public void onStart(Context context) {
         Intent intent = new Intent(context, DigitalClockAndDateScreenSaverActivity.class);
+        intent.putExtra("date", true);
         intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(intent);
     }
