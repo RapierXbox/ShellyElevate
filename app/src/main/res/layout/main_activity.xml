@@ -28,7 +28,7 @@
         />
 
     <View
-        android:id="@+id/settingButtonOverlay1"
+        android:id="@+id/settingButtonOverlayRight"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/transparent"
@@ -38,7 +38,7 @@
         app:layout_constraintWidth_percent="0.15" />
 
     <View
-        android:id="@+id/settingButtonOverlay2"
+        android:id="@+id/settingButtonOverlayLeft"
         android:layout_width="0dp"
         android:layout_height="0dp"
         android:background="@android:color/transparent"
