@@ -9,9 +9,9 @@
     <string name="http_server_status_default">Status:</string>
     <string name="start">START</string>
     <string name="lite_mode">Lite Mode</string>
-    <string name="screen_saver_delay">Screen Saver Delay</string>
+    <string name="screen_saver_delay">Delay</string>
     <string name="screen_saver_delay_hint">45</string>
-    <string name="screenSaverTypeText">Screen Saver Type</string>
+    <string name="screenSaverTypeText">Type</string>
     <string name="http_server_enabled">HTTP Server enabled:</string>
     <string name="http_server_address">Address:</string>
     <string name="extended_js_interface">Extended JS Interface</string>

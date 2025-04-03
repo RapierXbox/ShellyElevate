@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.core.net.toUri
 import androidx.core.view.isVisible
+import com.google.android.material.slider.Slider
 import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS
@@ -53,7 +54,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
         binding.switchOnSwipe.isChecked = preferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
         binding.automaticBrightness.isChecked = preferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
-        binding.brightnessSetting.progress = preferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS)
+        binding.brightnessSetting.value = preferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS).toFloat()
         binding.screenSaver.isChecked = preferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
         binding.screenSaverDelay.setText(preferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
         binding.screenSaverType.setSelection(preferences.getInt(SP_SCREEN_SAVER_ID, 0))
@@ -106,7 +107,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.screenSaverType.adapter = mScreenSaverManager.screenSaverSpinnerAdapter
-        
+
         loadValues()
 
         binding.findURLButton.setOnClickListener {
@@ -117,15 +118,10 @@ class SettingsActivity : AppCompatActivity() {
             }
         }
 
-        binding.brightnessSetting.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {}
+        binding.brightnessSetting.addOnChangeListener(object : Slider.OnChangeListener {
 
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                seekBar ?: return
-
-                mDeviceHelper.forceScreenBrightness(seekBar.progress)
+            override fun onValueChange(slider: Slider, value: Float, fromUser: Boolean) {
+                mDeviceHelper.forceScreenBrightness(value.toInt())
             }
         })
 
@@ -246,7 +242,7 @@ class SettingsActivity : AppCompatActivity() {
             putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
             putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
             putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
-            putInt(SP_BRIGHTNESS, binding.brightnessSetting.progress)
+            putInt(SP_BRIGHTNESS, binding.brightnessSetting.value.toInt())
             putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
         }
 
