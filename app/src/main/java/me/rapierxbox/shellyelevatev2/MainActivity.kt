@@ -14,13 +14,15 @@ import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import me.rapierxbox.shellyelevatev2.BuildConfig
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
+import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.MainActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder
 
 class MainActivity : ComponentActivity() {
     private lateinit var binding: MainActivityBinding // Declare the binding object
@@ -91,6 +93,12 @@ class MainActivity : ComponentActivity() {
         binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
 
+    override fun onResume() {
+        super.onResume()
+        if (binding.myWebView.originalUrl != ServiceHelper.getWebviewUrl())
+            binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -103,7 +111,7 @@ class MainActivity : ComponentActivity() {
         setupSettingsButtons()
 
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            if (mScreenSaverManager.onTouchEvent()) {
+            if (ScreenSaverManagerHolder.getInstance().onTouchEvent()) {
                 Log.d("ShellyElevateV2", "Touch blocked by ScreenSaverManager")
                 return@setOnTouchListener true
             }
@@ -116,5 +124,8 @@ class MainActivity : ComponentActivity() {
         val localBroadcastManager: LocalBroadcastManager = LocalBroadcastManager.getInstance(this)
         localBroadcastManager.registerReceiver(webviewRefreshBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_REFRESH))
         localBroadcastManager.registerReceiver(webviewJavascriptInjectorBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
+
+        if (!getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).getBoolean("settingEverShown", false) || BuildConfig.DEBUG)
+            startActivity(Intent(this, SettingsActivity::class.java))
     }
 }

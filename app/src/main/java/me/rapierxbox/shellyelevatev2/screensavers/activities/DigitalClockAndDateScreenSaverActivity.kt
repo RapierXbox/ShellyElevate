@@ -10,6 +10,7 @@ import android.os.Bundle
 import androidx.core.view.isVisible
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication
 import me.rapierxbox.shellyelevatev2.databinding.DigitalClockAndDateScreenSaverBinding
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -49,7 +50,7 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
         updateTime()
 
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            ShellyElevateApplication.mScreenSaverManager.onTouchEvent()
+            ScreenSaverManagerHolder.getInstance().onTouchEvent()
             ShellyElevateApplication.mSwipeHelper.onTouchEvent(event)
 
             finish()
