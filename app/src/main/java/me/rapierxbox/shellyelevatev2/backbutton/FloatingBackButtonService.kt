@@ -49,7 +49,7 @@ class FloatingBackButtonService : Service() {
             SHOW_FLOATING_BUTTON -> showFloatingButton()
             HIDE_FLOATING_BUTTON -> hideFloatingButton()
             PAUSE_BUTTON -> pauseFloatingButton()
-            RESUME_BUTTON -> hideFloatingButton()
+            RESUME_BUTTON -> resumeFloatingButton()
             else -> showFloatingButton()
         }
         return START_STICKY
@@ -57,6 +57,9 @@ class FloatingBackButtonService : Service() {
 
     @SuppressLint("ClickableViewAccessibility")
     fun showFloatingButton() {
+        //This overrides pause status
+        wasVisibleBeforePause = true
+
         if (floatingView != null) return
 
         floatingView = LayoutInflater.from(this).inflate(R.layout.floating_button_layout, null)
@@ -136,6 +139,9 @@ class FloatingBackButtonService : Service() {
     }
 
     fun hideFloatingButton() {
+        //This overrides pause status
+        wasVisibleBeforePause = false
+
         if (floatingView != null) {
             windowManager.removeView(floatingView)
             floatingView = null
