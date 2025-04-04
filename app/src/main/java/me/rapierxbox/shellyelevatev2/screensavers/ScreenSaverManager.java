@@ -1,6 +1,8 @@
 package me.rapierxbox.shellyelevatev2.screensavers;
 
-import static me.rapierxbox.shellyelevatev2.Constants.*;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_DELAY;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ENABLED;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
@@ -38,9 +40,9 @@ public class ScreenSaverManager {
         screenSaverRunning = false;
 
         screenSavers = new ScreenSaver[]{
-            new ScreenOffScreenSaver(),
-            new DigitalClockScreenSaver(),
-            new DigitalClockAndDateScreenSaver()
+                new ScreenOffScreenSaver(),
+                new DigitalClockScreenSaver(),
+                new DigitalClockAndDateScreenSaver()
         };
     }
 
@@ -85,8 +87,14 @@ public class ScreenSaverManager {
     public boolean isScreenSaverRunning() {
         return screenSaverRunning;
     }
-    public int getCurrentScreenSaverId() {return currentScreenSaverId;}
-    public boolean isScreenSaverEnabled() {return screenSaverEnabled;}
+
+    public int getCurrentScreenSaverId() {
+        return currentScreenSaverId;
+    }
+
+    public boolean isScreenSaverEnabled() {
+        return screenSaverEnabled;
+    }
 
     public void onDestroy() {
         if (scheduler != null && !scheduler.isShutdown()) {
@@ -105,7 +113,7 @@ public class ScreenSaverManager {
             screenSaverRunning = true;
 
             Intent backButtonIntent = new Intent(mApplicationContext, FloatingBackButtonService.class);
-            backButtonIntent.setAction("PAUSE_BUTTON");
+            backButtonIntent.setAction(FloatingBackButtonService.PAUSE_BUTTON);
             mApplicationContext.startService(backButtonIntent);
 
             screenSavers[currentScreenSaverId].onStart(mApplicationContext);
@@ -125,7 +133,7 @@ public class ScreenSaverManager {
             Log.i("ShellyElevateV2", "Ending screen saver with id: " + currentScreenSaverId);
 
             Intent backButtonIntent = new Intent(mApplicationContext, FloatingBackButtonService.class);
-            backButtonIntent.setAction("RESUME_BUTTON");
+            backButtonIntent.setAction(FloatingBackButtonService.RESUME_BUTTON);
             mApplicationContext.startService(backButtonIntent);
 
             if (mMQTTServer.shouldSend()) {

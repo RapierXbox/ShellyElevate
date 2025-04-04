@@ -5,7 +5,6 @@ import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 
 import android.content.Intent;
 import android.net.Uri;
@@ -23,6 +22,7 @@ import java.util.Map;
 
 import fi.iki.elonen.NanoHTTPD;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder;
 
 public class HttpServer extends NanoHTTPD {
     public HttpServer() {
@@ -252,14 +252,14 @@ public class HttpServer extends NanoHTTPD {
             case "wake":
                 jsonResponse.put("success", false);
                 if (method.equals(Method.POST)) {
-                    mScreenSaverManager.stopScreenSaver();
+                    ScreenSaverManagerHolder.getInstance().stopScreenSaver();
                     jsonResponse.put("success", true);
                 }
                 break;
             case "sleep":
                 jsonResponse.put("success", false);
                 if (method.equals(Method.POST)) {
-                    mScreenSaverManager.startScreenSaver();
+                    ScreenSaverManagerHolder.getInstance().startScreenSaver();
                     jsonResponse.put("success", true);
                 }
                 break;

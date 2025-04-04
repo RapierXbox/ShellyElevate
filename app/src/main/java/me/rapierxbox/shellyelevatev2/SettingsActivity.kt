@@ -8,7 +8,6 @@ import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.inputmethod.EditorInfo
-import android.widget.SeekBar
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
@@ -33,14 +32,13 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.backbutton.BackAccessibilityService
 import me.rapierxbox.shellyelevatev2.backbutton.FloatingBackButtonService
 import me.rapierxbox.shellyelevatev2.databinding.SettingsActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder
 import java.net.NetworkInterface
-import kotlin.system.exitProcess
 
 @SuppressLint("UseSwitchCompatOrMaterialCode")
 class SettingsActivity : AppCompatActivity() {
@@ -106,7 +104,7 @@ class SettingsActivity : AppCompatActivity() {
             title = getString(R.string.settings)
         }
 
-        binding.screenSaverType.adapter = mScreenSaverManager.screenSaverSpinnerAdapter
+        binding.screenSaverType.adapter = ScreenSaverManagerHolder.getInstance().screenSaverSpinnerAdapter
 
         loadValues()
 
@@ -153,7 +151,7 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            if (mScreenSaverManager.onTouchEvent()) {
+            if (ScreenSaverManagerHolder.getInstance().onTouchEvent()) {
                 Log.d("ShellyElevateV2", "Touch blocked by ScreenSaverManager")
                 return@setOnTouchListener true
             }
@@ -262,9 +260,8 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-
         val intent = Intent(this, FloatingBackButtonService::class.java)
-        intent.action = "HIDE_FLOATING_BUTTON"
+        intent.action = FloatingBackButtonService.HIDE_FLOATING_BUTTON
         startService(intent)
     }
 

@@ -7,6 +7,7 @@ import android.content.SharedPreferences
 import android.graphics.PixelFormat
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -42,11 +43,13 @@ class FloatingBackButtonService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        Log.d("FloatingBackButtonService", "onStartCommand() called with: intent = $intent, flags = $flags, startId = $startId, action = ${intent?.action}")
+
         when (intent?.action) {
-            "SHOW_FLOATING_BUTTON" -> showFloatingButton()
-            "HIDE_FLOATING_BUTTON" -> hideFloatingButton()
-            "PAUSE_BUTTON" -> pauseFloatingButton()
-            "RESUME_BUTTON" -> hideFloatingButton()
+            SHOW_FLOATING_BUTTON -> showFloatingButton()
+            HIDE_FLOATING_BUTTON -> hideFloatingButton()
+            PAUSE_BUTTON -> pauseFloatingButton()
+            RESUME_BUTTON -> hideFloatingButton()
             else -> showFloatingButton()
         }
         return START_STICKY
@@ -125,7 +128,7 @@ class FloatingBackButtonService : Service() {
     private fun performClick() {
 
         if (BackAccessibilityService.isAccessibilityEnabled(this)) {
-            sendBroadcast(Intent(getString(R.string.back_intent)))
+            sendBroadcast(Intent(BackAccessibilityService.ACTION_BACK))
         } else {
             Toast.makeText(this, getString(R.string.accessibility_service_not_enabled), Toast.LENGTH_SHORT).show()
         }
@@ -146,4 +149,11 @@ class FloatingBackButtonService : Service() {
 
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    companion object {
+        const val SHOW_FLOATING_BUTTON = "SHOW_FLOATING_BUTTON"
+        const val HIDE_FLOATING_BUTTON = "HIDE_FLOATING_BUTTON"
+        const val PAUSE_BUTTON = "PAUSE_BUTTON"
+        const val RESUME_BUTTON = "RESUME_BUTTON"
+    }
 }

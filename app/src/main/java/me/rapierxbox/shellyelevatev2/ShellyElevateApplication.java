@@ -21,13 +21,12 @@ import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
-import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder;
 
 public class ShellyElevateApplication extends Application {
     public static HttpServer mHttpServer;
 
     public static DeviceHelper mDeviceHelper;
-    public static ScreenSaverManager mScreenSaverManager;
     public static DeviceSensorManager mDeviceSensorManager;
     public static SwipeHelper mSwipeHelper;
     public static ShellyElevateJavascriptInterface mShellyElevateJavascriptInterface;
@@ -56,7 +55,7 @@ public class ShellyElevateApplication extends Application {
         mHttpServer = new HttpServer();
 
         mDeviceHelper = new DeviceHelper();
-        mScreenSaverManager = new ScreenSaverManager();
+        ScreenSaverManagerHolder.initialize();
         mDeviceSensorManager = new DeviceSensorManager();
         mSwipeHelper = new SwipeHelper();
         mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
@@ -82,7 +81,7 @@ public class ShellyElevateApplication extends Application {
     }
 
     public static void updateSPValues() {
-        mScreenSaverManager.updateValues();
+        ScreenSaverManagerHolder.getInstance().updateValues();
         mDeviceSensorManager.updateValues();
         mSwipeHelper.updateValues();
         mShellyElevateJavascriptInterface.updateValues();
@@ -97,7 +96,7 @@ public class ShellyElevateApplication extends Application {
     public void onTerminate() {
         mHttpServer.onDestroy();
         mSensorManager.unregisterListener(mDeviceSensorManager);
-        mScreenSaverManager.onDestroy();
+        ScreenSaverManagerHolder.getInstance().onDestroy();
         mMQTTServer.onDestroy();
 
         mDeviceHelper.setScreenOn(true);

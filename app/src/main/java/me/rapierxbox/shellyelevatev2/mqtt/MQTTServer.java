@@ -1,10 +1,27 @@
 package me.rapierxbox.shellyelevatev2.mqtt;
 
-import static me.rapierxbox.shellyelevatev2.Constants.*;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_CONFIG_DEVICE;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_HOME_ASSISTANT_STATUS;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_HUM_SENSOR;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_LUX_SENSOR;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_REBOOT_BUTTON;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_REFRESH_WEBVIEW_BUTTON;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_RELAY_COMMAND;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_RELAY_STATE;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_SLEEPING_BINARY_SENSOR;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_SLEEP_BUTTON;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_STATUS;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_SWIPE_EVENT;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_TEMP_SENSOR;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_WAKE_BUTTON;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_BROKER;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_DEVICE_ID;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_ENABLED;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_PASSWORD;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_PORT;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_USERNAME;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.util.Log;
@@ -22,13 +39,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import kotlin.random.Random;
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder;
 
 public class MQTTServer {
     private MqttClient mMqttClient;
-    private MemoryPersistence mMemoryPersistence;
-    private ShellyElevateMQTTCallback mShellyElevateMQTTCallback;
-    private MqttConnectionOptions mMqttConnectionsOptions;
+    private final MemoryPersistence mMemoryPersistence;
+    private final ShellyElevateMQTTCallback mShellyElevateMQTTCallback;
+    private final MqttConnectionOptions mMqttConnectionsOptions;
     private final ScheduledExecutorService scheduler;
 
     private boolean enabled;
@@ -86,6 +103,7 @@ public class MQTTServer {
             }
         }
     }
+
     public void connect() {
         if (validForConnection) {
             try {
@@ -117,15 +135,21 @@ public class MQTTServer {
                 publishTempAndHum();
                 publishRelay(mDeviceHelper.getRelay());
                 publishLux(mDeviceSensorManager.getLastMeasuredLux());
-                publishSleeping(mScreenSaverManager.isScreenSaverRunning());
+                publishSleeping(ScreenSaverManagerHolder.getInstance().isScreenSaverRunning());
 
             } catch (MqttException | JSONException e) {
                 Log.e("MQTT", "Error connecting:", e);
             }
-    }   }
+        }
+    }
 
-    public boolean isEnabled() {return enabled;}
-    public boolean shouldSend() {return connected && enabled;}
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public boolean shouldSend() {
+        return connected && enabled;
+    }
 
     public void publishTempAndHum() {
         if (this.shouldSend()) {
@@ -133,6 +157,7 @@ public class MQTTServer {
             this.publishHum((float) mDeviceHelper.getHumidity());
         }
     }
+
     public void publishTemp(float temp) {
         try {
             mMqttClient.publish(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp).getBytes(), 1, false);
@@ -140,6 +165,7 @@ public class MQTTServer {
             Log.e("MQTT", "Error publishing temperature", e);
         }
     }
+
     public void publishHum(float hum) {
         try {
             mMqttClient.publish(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum).getBytes(), 1, false);
@@ -147,6 +173,7 @@ public class MQTTServer {
             Log.e("MQTT", "Error publishing humidity", e);
         }
     }
+
     public void publishLux(float lux) {
         try {
             mMqttClient.publish(parseTopic(MQTT_TOPIC_LUX_SENSOR), String.valueOf(lux).getBytes(), 1, false);
@@ -154,6 +181,7 @@ public class MQTTServer {
             Log.e("MQTT", "Error publishing lux", e);
         }
     }
+
     public void publishRelay(boolean state) {
         try {
             mMqttClient.publish(parseTopic(MQTT_TOPIC_RELAY_STATE), (state ? "ON" : "OFF").getBytes(), 1, false);
@@ -161,6 +189,7 @@ public class MQTTServer {
             Log.e("MQTT", "Error publishing relay state", e);
         }
     }
+
     public void publishSleeping(boolean state) {
         try {
             mMqttClient.publish(parseTopic(MQTT_TOPIC_SLEEPING_BINARY_SENSOR), (state ? "ON" : "OFF").getBytes(), 1, false);
@@ -168,6 +197,7 @@ public class MQTTServer {
             Log.e("MQTT", "Error publishing sleeping state", e);
         }
     }
+
     public void publishSwipeEvent() {
         try {
             mMqttClient.publish(parseTopic(MQTT_TOPIC_SWIPE_EVENT), "{\"event_type\": \"swipe\"}".getBytes(), 1, false);
@@ -179,6 +209,7 @@ public class MQTTServer {
     private void deleteConfig() throws MqttException {
         mMqttClient.publish(parseTopic(MQTT_TOPIC_CONFIG_DEVICE), "".getBytes(), 1, false);
     }
+
     private void publishConfig() throws JSONException, MqttException {
         JSONObject configPayload = new JSONObject();
 
@@ -283,11 +314,14 @@ public class MQTTServer {
 
         mMqttClient.publish(parseTopic(MQTT_TOPIC_CONFIG_DEVICE), configPayload.toString().getBytes(), 1, true);
     }
+
     private String parseTopic(String topic) {
         return topic.replace("%s", clientId);
     }
 
-    public String getClientId() {return clientId;}
+    public String getClientId() {
+        return clientId;
+    }
 
     public void onDestroy() {
         disconnect();
