@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:background="@drawable/round_button_bg"
+    android:orientation="vertical"
+    android:padding="8dp">
+
+    <ImageView
+        android:id="@+id/floating_back_button"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:contentDescription="@string/back"
+        android:src="@drawable/ic_back_arrow" />
+</LinearLayout>

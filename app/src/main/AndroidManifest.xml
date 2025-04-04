@@ -6,53 +6,68 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
-    <uses-permission android:name="android.permission.BODY_SENSORS"/>
-    <uses-permission android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"
+    <uses-permission android:name="android.permission.BODY_SENSORS" />
+    <uses-permission
+        android:name="android.permission.HIGH_SAMPLING_RATE_SENSORS"
         tools:ignore="HighSamplingRate" />
-
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
 
     <application
         android:name=".ShellyElevateApplication"
         android:allowBackup="true"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.ShellyElevateV2"
-        android:usesCleartextTraffic="true"
-        tools:targetApi="31">
+        android:usesCleartextTraffic="true">
+        <receiver
+            android:name=".screensavers.UserInteractionReceiver"
+            android:enabled="true"
+            android:exported="true" />
+
+        <service
+            android:name=".backbutton.FloatingBackButtonService"
+            android:enabled="true"
+            android:exported="false" />
+        <service
+            android:name=".backbutton.BackAccessibilityService"
+            android:exported="true"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:hardwareAccelerated="true"
             android:label="ShellyElevateV2"
-            android:theme="@style/Theme.ShellyElevateV2"
-            android:launchMode="singleInstance"
-            android:hardwareAccelerated="true">
+            android:theme="@style/Theme.ShellyElevateV2">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
         <activity
             android:name=".SettingsActivity"
             android:exported="true"
+            android:hardwareAccelerated="true"
             android:label="ShellyElevateV2"
-            android:theme="@style/Theme.ShellyElevateV2"
-            android:launchMode="singleInstance"
-            android:hardwareAccelerated="true">
-        </activity>
-
-        <activity android:name=".screensavers.activities.DigitalClockScreenSaverActivity"/>
-        <activity android:name=".screensavers.activities.DigitalClockAndDateScreenSaverActivity"/>
+            android:theme="@style/Theme.ShellyElevateV2" />
+        <activity android:name=".screensavers.activities.DigitalClockAndDateScreenSaverActivity" />
 
         <receiver
             android:name=".BootReceiver"
@@ -61,5 +76,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
             </intent-filter>
         </receiver>
+
     </application>
+
 </manifest>
