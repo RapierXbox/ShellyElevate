@@ -4,7 +4,6 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicatio
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 
 import android.content.Intent;
 import android.util.Log;
@@ -24,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication;
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder;
 
 public class ShellyElevateMQTTCallback implements MqttCallback {
     @Override
@@ -48,10 +48,10 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
                 LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
                 break;
             case MQTT_TOPIC_SLEEP_BUTTON:
-                mScreenSaverManager.startScreenSaver();
+                ScreenSaverManagerHolder.getInstance().startScreenSaver();
                 break;
             case MQTT_TOPIC_WAKE_BUTTON:
-                mScreenSaverManager.stopScreenSaver();
+                ScreenSaverManagerHolder.getInstance().stopScreenSaver();
                 break;
             case MQTT_TOPIC_REBOOT_BUTTON:
                 long deltaTime = System.currentTimeMillis() - ShellyElevateApplication.getApplicationStartTime();

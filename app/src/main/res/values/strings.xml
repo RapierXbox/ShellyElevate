@@ -2,7 +2,6 @@
     <string name="app_name">ShellyElevateV2</string>
 
     <!-- Sync Preferences -->
-    <string name="homeAssistantIpEditTextPreviewIp">http://192.168.1.123:8123</string>
     <string name="findIPButtonText">Search for HA URL</string>
     <string name="switchOnSwipeText">Switch on swipe</string>
     <string name="automaticBrightnessText">Automatic Brightness</string>
@@ -10,21 +9,20 @@
     <string name="http_server_status_default">Status:</string>
     <string name="start">START</string>
     <string name="lite_mode">Lite Mode</string>
-    <string name="screen_saver_delay">Screen Saver Delay</string>
+    <string name="screen_saver_delay">Delay</string>
     <string name="screen_saver_delay_hint">45</string>
-    <string name="screenSaverTypeText">Screen Saver Type</string>
+    <string name="screenSaverTypeText">Type</string>
     <string name="http_server_enabled">HTTP Server enabled:</string>
     <string name="http_server_address">Address:</string>
     <string name="extended_js_interface">Extended JS Interface</string>
     <string name="brightness">Brightness</string>
     <string name="mqtt">MQTT</string>
     <string name="broker_address">Broker address</string>
-    <string name="http_server_running">Status: Running</string>
-    <string name="http_server_not_running">Status: Not running</string>
+    <string name="http_server_running">Running</string>
+    <string name="http_server_not_running">Not running</string>
     <string name="settings_saved">Settings saved</string>
     <string name="delay_must_be_bigger_then_5s">Delay must be bigger then 5s</string>
     <string name="settings">Settings</string>
-    <string name="mqttbroker_hint">tcp://192.168.1.123</string>
     <string name="broker_port">Broker port</string>
     <string name="username">Username</string>
     <string name="mqtt_username_hint">username</string>
@@ -33,4 +31,7 @@
     <string name="server_url">http://%1$s:8080</string>
     <string name="android_settings">Android settings</string>
     <string name="exit">Exit</string>
+    <string name="back">Back</string>
+    <string name="accessibility_description">This service will show a \"Back\" button when ShellyElevate is not visible.</string>
+    <string name="accessibility_service_not_enabled">Enable accessibility service to continue</string>
 </resources>
