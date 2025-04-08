@@ -19,17 +19,14 @@ import java.io.IOException;
 
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
-import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
-import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder;
 
 public class ShellyElevateApplication extends Application {
     public static HttpServer mHttpServer;
-    public static SettingsParser mSettingsParser;
-    public static MediaHelper mMediaHelper;
+
     public static DeviceHelper mDeviceHelper;
-    public static ScreenSaverManager mScreenSaverManager;
     public static DeviceSensorManager mDeviceSensorManager;
     public static SwipeHelper mSwipeHelper;
     public static ShellyElevateJavascriptInterface mShellyElevateJavascriptInterface;
@@ -56,10 +53,9 @@ public class ShellyElevateApplication extends Application {
         mLightSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
 
         mHttpServer = new HttpServer();
-        mSettingsParser = new SettingsParser();
-        mMediaHelper = new MediaHelper();
+
         mDeviceHelper = new DeviceHelper();
-        mScreenSaverManager = new ScreenSaverManager();
+        ScreenSaverManagerHolder.initialize();
         mDeviceSensorManager = new DeviceSensorManager();
         mSwipeHelper = new SwipeHelper();
         mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
@@ -77,13 +73,6 @@ public class ShellyElevateApplication extends Application {
 
         mSensorManager.registerListener(mDeviceSensorManager, mLightSensor, SensorManager.SENSOR_DELAY_NORMAL);
 
-        if (!mSharedPreferences.getBoolean(SP_LITE_MODE, false)) {
-            Log.i("ShellyElevateV2", "Starting MainActivity");
-            Intent activityIntent = new Intent(this, MainActivity.class);
-            activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(activityIntent);
-        }
-
         Log.i("ShellyElevateV2", "Application started");
     }
 
@@ -92,7 +81,7 @@ public class ShellyElevateApplication extends Application {
     }
 
     public static void updateSPValues() {
-        mScreenSaverManager.updateValues();
+        ScreenSaverManagerHolder.getInstance().updateValues();
         mDeviceSensorManager.updateValues();
         mSwipeHelper.updateValues();
         mShellyElevateJavascriptInterface.updateValues();
@@ -107,7 +96,7 @@ public class ShellyElevateApplication extends Application {
     public void onTerminate() {
         mHttpServer.onDestroy();
         mSensorManager.unregisterListener(mDeviceSensorManager);
-        mScreenSaverManager.onDestroy();
+        ScreenSaverManagerHolder.getInstance().onDestroy();
         mMQTTServer.onDestroy();
 
         mDeviceHelper.setScreenOn(true);

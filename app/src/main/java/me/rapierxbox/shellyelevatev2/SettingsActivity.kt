@@ -1,214 +1,157 @@
 package me.rapierxbox.shellyelevatev2
 
 import android.annotation.SuppressLint
-import android.app.Activity
 import android.content.Intent
 import android.os.Bundle
+import android.provider.Settings
 import android.util.Log
-import android.view.View
+import android.view.Menu
+import android.view.MenuItem
 import android.view.inputmethod.EditorInfo
-import android.widget.Button
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.SeekBar
-import android.widget.Spinner
-import android.widget.Switch
-import android.widget.TextView
 import android.widget.Toast
-import androidx.localbroadcastmanager.content.LocalBroadcastManager
-import me.rapierxbox.shellyelevatev2.Constants.*
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
+import androidx.core.net.toUri
+import androidx.core.view.isVisible
+import com.google.android.material.slider.Slider
+import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
+import me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS
+import me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS
+import me.rapierxbox.shellyelevatev2.Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE
+import me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED
+import me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE
+import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_BROKER
+import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_ENABLED
+import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_PASSWORD
+import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_PORT
+import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_USERNAME
+import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_DELAY
+import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ENABLED
+import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID
+import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
+import me.rapierxbox.shellyelevatev2.backbutton.BackAccessibilityService
+import me.rapierxbox.shellyelevatev2.backbutton.FloatingBackButtonService
+import me.rapierxbox.shellyelevatev2.databinding.SettingsActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder
+import java.net.NetworkInterface
 
 @SuppressLint("UseSwitchCompatOrMaterialCode")
-class SettingsActivity: Activity() {
-    private lateinit var findURLButton: Button
-    private lateinit var backButton: Button
-    private lateinit var httpServerButton: Button
-    private lateinit var switchOnSwipeSwitch: Switch
-    private lateinit var automaticBrightnessSwitch: Switch
-    private lateinit var screenSaverSwitch: Switch
-    private lateinit var httpServerSwitch: Switch
-    private lateinit var extendedJSInterfaceSwitch: Switch
-    private lateinit var liteModeSwitch: Switch
-    private lateinit var mqttEnabledSwitch: Switch
-    private lateinit var urlEditText: EditText
-    private lateinit var screenSaverDelayEditText: EditText
-    private lateinit var mqttBrokerEditText: EditText
-    private lateinit var mqttPortEditText: EditText
-    private lateinit var mqttUsernameEditText: EditText
-    private lateinit var mqttPasswordEditText: EditText
-    private lateinit var httpServerText: TextView
-    private lateinit var screenSaverTypeSpinner: Spinner
-    private lateinit var swipeDetectionOverlayView: View
-    private lateinit var screenSaverTypeLayout: LinearLayout
-    private lateinit var screenSaverDelayLayout: LinearLayout
-    private lateinit var httpServerLayout: LinearLayout
-    private lateinit var brightnessSettingLayout: LinearLayout
-    private lateinit var mqttBrokerLayout: LinearLayout
-    private lateinit var mqttPortLayout: LinearLayout
-    private lateinit var mqttUsernameLayout: LinearLayout
-    private lateinit var mqttPasswordLayout: LinearLayout
-    private lateinit var brightnessSetting: SeekBar
+class SettingsActivity : AppCompatActivity() {
 
-    private fun findViews() {
-        urlEditText = findViewById(R.id.webviewURL)
-        findURLButton = findViewById(R.id.findURLButton)
-        switchOnSwipeSwitch = findViewById(R.id.switchOnSwipe)
-        automaticBrightnessSwitch = findViewById(R.id.automaticBrightness)
-        screenSaverSwitch = findViewById(R.id.screenSaver)
-        screenSaverDelayLayout = findViewById(R.id.screenSaverDelayLayout)
-        screenSaverDelayEditText = findViewById(R.id.screenSaverDelay)
-        screenSaverTypeLayout = findViewById(R.id.screenSaverTypeLayout)
-        screenSaverTypeSpinner = findViewById(R.id.screenSaverType)
-        httpServerSwitch = findViewById(R.id.httpServerEnabled)
-        extendedJSInterfaceSwitch = findViewById(R.id.extendedJavascriptInterface)
-        httpServerLayout = findViewById(R.id.httpServerLayout)
-        httpServerText = findViewById(R.id.httpServerText)
-        httpServerButton = findViewById(R.id.httpServerButton)
-        liteModeSwitch = findViewById(R.id.liteMode)
-        backButton = findViewById(R.id.backButton)
-        swipeDetectionOverlayView = findViewById(R.id.swipeDetectionOverlay)
-        brightnessSettingLayout = findViewById(R.id.brightnessSettingLayout)
-        brightnessSetting = findViewById(R.id.brightnessSetting)
-
-        mqttEnabledSwitch = findViewById(R.id.mqttEnabled)
-        mqttBrokerLayout = findViewById(R.id.mqttBrokerLayout)
-        mqttBrokerEditText = findViewById(R.id.mqttBroker)
-        mqttPortLayout = findViewById(R.id.mqttPortLayout)
-        mqttPortEditText = findViewById(R.id.mqttPort)
-        mqttUsernameLayout = findViewById(R.id.mqttUsernameLayout)
-        mqttUsernameEditText = findViewById(R.id.mqttUsername)
-        mqttPasswordLayout = findViewById(R.id.mqttPasswordLayout)
-        mqttPasswordEditText = findViewById(R.id.mqttPassword)
-    }
+    private lateinit var binding: SettingsActivityBinding // Declare the binding object
 
     private fun loadValues() {
-        urlEditText.setText(ServiceHelper.getWebviewUrl())
-        switchOnSwipeSwitch.isChecked = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
-        automaticBrightnessSwitch.isChecked = mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
-        brightnessSetting.progress = mSharedPreferences.getInt(SP_BRIGHTNESS, 255)
-        screenSaverSwitch.isChecked = mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
-        screenSaverDelayEditText.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, 45).toString())
-        screenSaverTypeSpinner.setSelection(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0))
-        httpServerSwitch.isChecked = mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
-        httpServerText.text = if (mHttpServer.isAlive) "HTTP Server: Running" else "HTTP Server: Not running"
-        extendedJSInterfaceSwitch.isChecked = mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
-        liteModeSwitch.isChecked = mSharedPreferences.getBoolean(SP_LITE_MODE, false)
-        mqttEnabledSwitch.isChecked = mSharedPreferences.getBoolean(SP_MQTT_ENABLED, false)
-        mqttBrokerEditText.setText(mSharedPreferences.getString(SP_MQTT_BROKER, ""))
-        mqttPortEditText.setText(mSharedPreferences.getInt(SP_MQTT_PORT, 1883).toString())
-        mqttUsernameEditText.setText(mSharedPreferences.getString(SP_MQTT_USERNAME, ""))
-        mqttPasswordEditText.setText(mSharedPreferences.getString(SP_MQTT_PASSWORD, ""))
 
+        val preferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE)
 
-        screenSaverDelayLayout.visibility = if (screenSaverSwitch.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        screenSaverTypeLayout.visibility = if (screenSaverSwitch.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        brightnessSettingLayout.visibility = if (automaticBrightnessSwitch.isChecked) LinearLayout.GONE else LinearLayout.VISIBLE
-        httpServerLayout.visibility = if (screenSaverSwitch.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        httpServerButton.visibility = if (mHttpServer.isAlive) Button.GONE else Button.VISIBLE
-        mqttBrokerLayout.visibility = if (mqttEnabledSwitch.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        mqttPortLayout.visibility = if (mqttEnabledSwitch.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        mqttUsernameLayout.visibility = if (mqttEnabledSwitch.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-        mqttPasswordLayout.visibility = if (mqttEnabledSwitch.isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+        binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
+        binding.switchOnSwipe.isChecked = preferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
+        binding.automaticBrightness.isChecked = preferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
+        binding.brightnessSetting.value = preferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS).toFloat()
+        binding.screenSaver.isChecked = preferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
+        binding.screenSaverDelay.setText(preferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
+        binding.screenSaverType.setSelection(preferences.getInt(SP_SCREEN_SAVER_ID, 0))
+
+        binding.httpServerEnabled.isChecked = preferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
+        binding.httpServerAddress.text = getString(R.string.server_url, getLocalIpAddress())
+
+        binding.httpServerStatus.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
+        binding.extendedJavascriptInterface.isChecked = preferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
+        binding.liteMode.isChecked = preferences.getBoolean(SP_LITE_MODE, false)
+        binding.mqttEnabled.isChecked = preferences.getBoolean(SP_MQTT_ENABLED, false)
+        binding.mqttBroker.setText(preferences.getString(SP_MQTT_BROKER, ""))
+        binding.mqttPort.setText(preferences.getInt(SP_MQTT_PORT, MQTT_DEFAULT_PORT).toString())
+        binding.mqttUsername.setText(preferences.getString(SP_MQTT_USERNAME, ""))
+        binding.mqttPassword.setText(preferences.getString(SP_MQTT_PASSWORD, ""))
+
+        binding.screenSaverDelayLayout.isVisible = binding.screenSaver.isChecked
+        binding.screenSaverTypeLayout.isVisible = binding.screenSaver.isChecked
+
+        binding.brightnessSettingLayout.isVisible = !binding.automaticBrightness.isChecked
+
+        binding.httpServerAddressLayout.isVisible = binding.httpServerEnabled.isChecked
+        binding.httpServerLayout.isVisible = binding.httpServerEnabled.isChecked
+
+        binding.httpServerButton.isVisible = !mHttpServer.isAlive
+
+        binding.mqttBrokerLayout.isVisible = binding.mqttEnabled.isChecked
+        binding.mqttPortLayout.isVisible = binding.mqttEnabled.isChecked
+        binding.mqttUsernameLayout.isVisible = binding.mqttEnabled.isChecked
+        binding.mqttPasswordLayout.isVisible = binding.mqttEnabled.isChecked
+
+        preferences.edit {
+            putBoolean("settingEverShown", true)
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.settings_activity)
 
-        findViews()
-        screenSaverTypeSpinner.adapter = mScreenSaverManager.screenSaverSpinnerAdapter
+        binding = SettingsActivityBinding.inflate(layoutInflater) // Inflate the binding
+        setContentView(binding.root) // Set the content view using binding.root
+
+        setSupportActionBar(binding.toolbar)
+
+        supportActionBar?.let {
+            it.setHomeButtonEnabled(true)
+            it.setDisplayHomeAsUpEnabled(true)
+            title = getString(R.string.settings)
+        }
+
+        binding.screenSaverType.adapter = ScreenSaverManagerHolder.getInstance().screenSaverSpinnerAdapter
+
         loadValues()
 
-        findURLButton.setOnClickListener {
+        binding.findURLButton.setOnClickListener {
             ServiceHelper.getHAURL(applicationContext) { url: String ->
                 runOnUiThread {
-                    urlEditText.setText(url)
+                    binding.webviewURL.setText(url)
                 }
             }
         }
 
-        brightnessSetting.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {}
+        binding.brightnessSetting.addOnChangeListener(object : Slider.OnChangeListener {
 
-            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-
-            override fun onStopTrackingTouch(seekBar: SeekBar?) {
-                if (seekBar != null) {
-                    mDeviceHelper.forceScreenBrightness(seekBar.progress)
-                }
+            override fun onValueChange(slider: Slider, value: Float, fromUser: Boolean) {
+                mDeviceHelper.forceScreenBrightness(value.toInt())
             }
         })
 
-        screenSaverSwitch.setOnCheckedChangeListener { _, isChecked ->
-            screenSaverDelayLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            screenSaverTypeLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+        binding.screenSaver.setOnCheckedChangeListener { _, isChecked ->
+            binding.screenSaverDelayLayout.isVisible = isChecked
+            binding.screenSaverTypeLayout.isVisible = isChecked
         }
 
-        automaticBrightnessSwitch.setOnCheckedChangeListener { _, isChecked ->
-            brightnessSettingLayout.visibility = if (isChecked) LinearLayout.GONE else LinearLayout.VISIBLE
+        binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
+            binding.brightnessSettingLayout.isVisible = !isChecked
         }
 
-        mqttEnabledSwitch.setOnCheckedChangeListener { _, isChecked ->
-            mqttBrokerLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            mqttPortLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            mqttUsernameLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
-            mqttPasswordLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+        binding.mqttEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.mqttBrokerLayout.isVisible = isChecked
+            binding.mqttPortLayout.isVisible = isChecked
+            binding.mqttUsernameLayout.isVisible = isChecked
+            binding.mqttPasswordLayout.isVisible = isChecked
         }
 
-        httpServerSwitch.setOnCheckedChangeListener { _, isChecked ->
-            httpServerLayout.visibility = if (isChecked) LinearLayout.VISIBLE else LinearLayout.GONE
+        binding.httpServerEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.httpServerLayout.isVisible = isChecked
+            binding.httpServerAddressLayout.isVisible = isChecked
         }
 
-        httpServerButton.setOnClickListener {
+        binding.httpServerButton.setOnClickListener {
             mHttpServer.start()
-            httpServerText.text = "HTTP Server: Running"
-            httpServerButton.visibility = Button.GONE
+            binding.httpServerText.text = getString(R.string.http_server_running)
+            binding.httpServerButton.isVisible = false
         }
 
-        backButton.setOnClickListener {
-            mSharedPreferences.edit()
-                .putString(SP_WEBVIEW_URL, urlEditText.text.toString())
-                .putString(SP_MQTT_BROKER, mqttBrokerEditText.text.toString())
-                .putString(SP_MQTT_USERNAME, mqttUsernameEditText.text.toString())
-                .putString(SP_MQTT_PASSWORD, mqttPasswordEditText.text.toString())
-                .putBoolean(SP_SWITCH_ON_SWIPE, switchOnSwipeSwitch.isChecked)
-                .putBoolean(SP_AUTOMATIC_BRIGHTNESS, automaticBrightnessSwitch.isChecked)
-                .putBoolean(SP_SCREEN_SAVER_ENABLED, screenSaverSwitch.isChecked)
-                .putBoolean(SP_HTTP_SERVER_ENABLED, httpServerSwitch.isChecked)
-                .putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, extendedJSInterfaceSwitch.isChecked)
-                .putBoolean(SP_LITE_MODE, liteModeSwitch.isChecked)
-                .putBoolean(SP_MQTT_ENABLED, mqttEnabledSwitch.isChecked)
-                .putInt(SP_SCREEN_SAVER_DELAY, Integer.parseInt(screenSaverDelayEditText.text.toString()))
-                .putInt(SP_SCREEN_SAVER_ID, screenSaverTypeSpinner.selectedItemPosition)
-                .putInt(SP_BRIGHTNESS, brightnessSetting.progress)
-                .putInt(SP_MQTT_PORT, Integer.parseInt(mqttPortEditText.text.toString()))
-                .apply()
-
-            if (!httpServerSwitch.isChecked && mHttpServer.isAlive) {
-                mHttpServer.stop()
-            } else if (httpServerSwitch.isChecked && !mHttpServer.isAlive) {
-                mHttpServer.start()
-            }
-
-            ShellyElevateApplication.updateSPValues()
-            Toast.makeText(mApplicationContext, "Settings saved", Toast.LENGTH_SHORT).show()
-
-            val intent = Intent(INTENT_WEBVIEW_REFRESH)
-            LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
-
-            finish()
-        }
-
-        swipeDetectionOverlayView.setOnTouchListener { _, event ->
-            if (mScreenSaverManager.onTouchEvent()) {
+        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
+            if (ScreenSaverManagerHolder.getInstance().onTouchEvent()) {
                 Log.d("ShellyElevateV2", "Touch blocked by ScreenSaverManager")
                 return@setOnTouchListener true
             }
@@ -217,15 +160,116 @@ class SettingsActivity: Activity() {
             return@setOnTouchListener false
         }
 
-        screenSaverDelayEditText.setOnEditorActionListener { _, actionId, _ ->
+        binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if (Integer.parseInt(screenSaverDelayEditText.text.toString()) < 5) {
-                    screenSaverDelayEditText.setText("5")
-                    Toast.makeText(mApplicationContext, "Delay must be bigger then 5s", Toast.LENGTH_SHORT).show()
+
+                if ((binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
+                    binding.screenSaverDelay.setText("5")
+                    Toast.makeText(this, R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
                 }
             }
 
             return@setOnEditorActionListener false
         }
+    }
+
+    override fun onSupportNavigateUp(): Boolean {
+        saveSettings()
+        return true
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
+        menuInflater.inflate(R.menu.settings_menu, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when (item.itemId) {
+            R.id.action_settings -> {
+
+                if (checkAccessibilityPermission()) {
+                    val intent = Intent(Settings.ACTION_SETTINGS)
+                    startActivity(intent)
+                }
+                true
+            }
+
+            R.id.action_exit -> {
+                if (checkAccessibilityPermission()) {
+                    moveTaskToBack(true)
+                    finishAffinity()
+                }
+                true
+            }
+
+            else -> super.onOptionsItemSelected(item)
+        }
+    }
+
+    private fun checkAccessibilityPermission(): Boolean {
+        if (!Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, "Please, grant overlay permission to show the floating back button", Toast.LENGTH_LONG).show()
+            val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())
+            startActivity(intent)
+            return false
+        }
+
+        startService(Intent(this, FloatingBackButtonService::class.java))
+
+        if (!BackAccessibilityService.isAccessibilityEnabled(this)) {
+            Toast.makeText(this, "Please, grant accessibility permission to use the floating back button", Toast.LENGTH_LONG).show()
+            startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            return false
+        }
+
+        return true
+    }
+
+    private fun saveSettings() {
+        getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).edit {
+            putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
+            putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
+            putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString())
+            putString(SP_MQTT_PASSWORD, binding.mqttPassword.text.toString())
+            putBoolean(SP_SWITCH_ON_SWIPE, binding.switchOnSwipe.isChecked)
+            putBoolean(SP_AUTOMATIC_BRIGHTNESS, binding.automaticBrightness.isChecked)
+            putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked)
+            putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
+            putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
+            putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
+            putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
+            putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
+            putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
+            putInt(SP_BRIGHTNESS, binding.brightnessSetting.value.toInt())
+            putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
+        }
+
+        val serverEnabled = binding.httpServerEnabled.isChecked
+
+        if (!serverEnabled && mHttpServer.isAlive) {
+            mHttpServer.stop()
+        } else if (serverEnabled && !mHttpServer.isAlive) {
+            mHttpServer.start()
+        }
+
+        ShellyElevateApplication.updateSPValues()
+        Toast.makeText(this, getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
+
+        finish()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        val intent = Intent(this, FloatingBackButtonService::class.java)
+        intent.action = FloatingBackButtonService.HIDE_FLOATING_BUTTON
+        startService(intent)
+    }
+
+    fun getLocalIpAddress() = NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { it.isSiteLocalAddress }?.hostAddress
+
+    companion object {
+        const val SCREEN_SAVER_DEFAULT_DELAY = 45
+        const val MQTT_DEFAULT_PORT = 1833
+        const val DEFAULT_BRIGHTNESS = 255
     }
 }
