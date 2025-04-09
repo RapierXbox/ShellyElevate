@@ -31,7 +31,7 @@ public class DeviceHelper {
             "/sys/devices/platform/backlight/backlight/backlight/brightness"
             };
     private String screenBrightnessFile;
-    private String[] relayFiles;
+    private final String[] relayFiles;
     private boolean screenOn = true;
     private int screenBrightness;
     private boolean automaticBrightness;
