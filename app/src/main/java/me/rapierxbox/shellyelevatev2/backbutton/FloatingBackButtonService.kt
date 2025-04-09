@@ -38,7 +38,7 @@ class FloatingBackButtonService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        prefs = getSharedPreferences("floating_button_prefs", MODE_PRIVATE)
+        prefs = getSharedPreferences(FLOATING_BUTTON_PREFS, MODE_PRIVATE)
         showFloatingButton()
     }
 
@@ -76,8 +76,8 @@ class FloatingBackButtonService : Service() {
         )
 
         layoutParams.gravity = Gravity.TOP or Gravity.START
-        layoutParams.x = prefs.getInt("pos_x", 0)
-        layoutParams.y = prefs.getInt("pos_y", 300)
+        layoutParams.x = prefs.getInt(POS_X, 0)
+        layoutParams.y = prefs.getInt(POS_Y, 300)
 
         val button = floatingView!!.findViewById<ImageView>(R.id.floating_back_button)
 
@@ -116,8 +116,8 @@ class FloatingBackButtonService : Service() {
                         performClick()
                     } else {
                         prefs.edit {
-                            putInt("pos_x", layoutParams.x)
-                            putInt("pos_y", layoutParams.y)
+                            putInt(POS_X, layoutParams.x)
+                            putInt(POS_Y, layoutParams.y)
                         }
                     }
                     true
@@ -129,13 +129,11 @@ class FloatingBackButtonService : Service() {
     }
 
     private fun performClick() {
-
         if (BackAccessibilityService.isAccessibilityEnabled(this)) {
             sendBroadcast(Intent(BackAccessibilityService.ACTION_BACK))
         } else {
             Toast.makeText(this, getString(R.string.accessibility_service_not_enabled), Toast.LENGTH_SHORT).show()
         }
-
     }
 
     fun hideFloatingButton() {
@@ -161,5 +159,10 @@ class FloatingBackButtonService : Service() {
         const val HIDE_FLOATING_BUTTON = "HIDE_FLOATING_BUTTON"
         const val PAUSE_BUTTON = "PAUSE_BUTTON"
         const val RESUME_BUTTON = "RESUME_BUTTON"
+
+        const val POS_X = "pos_x"
+        const val POS_Y = "pos_y"
+
+        const val FLOATING_BUTTON_PREFS = "floating_button_prefs"
     }
 }
