@@ -3,7 +3,6 @@ package me.rapierxbox.shellyelevatev2;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE;
 
 import android.app.Application;
 import android.content.Context;
@@ -32,9 +31,6 @@ public class ShellyElevateApplication extends Application {
     public static ShellyElevateJavascriptInterface mShellyElevateJavascriptInterface;
     public static MQTTServer mMQTTServer;
 
-    public static SensorManager mSensorManager;
-    public static Sensor mLightSensor;
-
     public static Context mApplicationContext;
     public static SharedPreferences mSharedPreferences;
 
@@ -49,19 +45,14 @@ public class ShellyElevateApplication extends Application {
         mApplicationContext = getApplicationContext();
         mSharedPreferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
 
-        mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        mLightSensor = mSensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
-
         mHttpServer = new HttpServer();
 
         mDeviceHelper = new DeviceHelper();
         ScreenSaverManagerHolder.initialize();
-        mDeviceSensorManager = new DeviceSensorManager();
+
         mSwipeHelper = new SwipeHelper();
         mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
         mMQTTServer = new MQTTServer();
-
-        updateSPValues();
 
         if (mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)) {
             try {
@@ -71,7 +62,14 @@ public class ShellyElevateApplication extends Application {
             }
         }
 
-        mSensorManager.registerListener(mDeviceSensorManager, mLightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        // Sensors Init
+        mDeviceSensorManager = new DeviceSensorManager();
+        SensorManager sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
+        Sensor lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
+        sensorManager.registerListener(mDeviceSensorManager, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+
+        //When everything is running, update values
+        updateSPValues();
 
         Log.i("ShellyElevateV2", "Application started");
     }
@@ -95,7 +93,7 @@ public class ShellyElevateApplication extends Application {
     @Override
     public void onTerminate() {
         mHttpServer.onDestroy();
-        mSensorManager.unregisterListener(mDeviceSensorManager);
+        ((SensorManager) getSystemService(Context.SENSOR_SERVICE)).unregisterListener(mDeviceSensorManager);
         ScreenSaverManagerHolder.getInstance().onDestroy();
         mMQTTServer.onDestroy();
 
