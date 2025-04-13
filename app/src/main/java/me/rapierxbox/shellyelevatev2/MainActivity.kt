@@ -23,6 +23,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.MainActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManagerHolder
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class MainActivity : ComponentActivity() {
     private lateinit var binding: MainActivityBinding // Declare the binding object
@@ -95,7 +96,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (binding.myWebView.originalUrl != ServiceHelper.getWebviewUrl())
+        if (binding.myWebView.originalUrl?.toHttpUrlOrNull() != ServiceHelper.getWebviewUrl().toHttpUrlOrNull())
             binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
 
