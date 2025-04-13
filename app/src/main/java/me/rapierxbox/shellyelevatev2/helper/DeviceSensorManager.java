@@ -43,14 +43,15 @@ public class DeviceSensorManager implements SensorEventListener {
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-
+        // Ignore
     }
 
     public static int getScreenBrightnessFromLux(float lux) {
+        int minBrightness = mSharedPreferences.getInt(SP_MIN_BRIGHTNESS, 48);
         if (lux >= 500) return 255;
-        if (lux <= 30) return 48;
+        if (lux <= 30) return minBrightness;
 
-        double slope = (255.0 - 48.0) / (500.0 - 30.0);
-        return (int) (48 + slope * (lux - 30));
+        double slope = (255.0 - minBrightness) / (500.0 - 30.0);
+        return (int) (minBrightness + slope * (lux - 30));
     }
 }
