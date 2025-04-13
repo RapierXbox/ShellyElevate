@@ -56,6 +56,11 @@ dependencies {
     implementation(libs.preference)
     implementation(libs.nanohttpd)
     implementation(libs.org.eclipse.paho.mqttv5.client)
+
+    implementation(platform(libs.okhttpbom))
+    implementation(libs.okhttp)
+    implementation(libs.appcompat)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
