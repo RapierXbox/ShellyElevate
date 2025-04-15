@@ -4,6 +4,7 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 
+import android.util.Log;
 
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
@@ -13,6 +14,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication;
 
 
 public class DeviceSensorManager implements SensorEventListener {
+    private static final String TAG = "DeviceSensorManager" ;
     private float lastMeasuredLux = 0.0f;
     private boolean automaticBrightness = true;
 
@@ -26,8 +28,10 @@ public class DeviceSensorManager implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent event) {
-        if (event.sensor.getType() == Sensor.TYPE_LIGHT && automaticBrightness) {
+        if (event.sensor.getType() == Sensor.TYPE_LIGHT) {
             lastMeasuredLux = event.values[0];
+            Log.d(TAG, "Light sensor value: " + lastMeasuredLux);
+
             if (automaticBrightness) {
                 ShellyElevateApplication.mDeviceHelper.setScreenBrightness(getScreenBrightnessFromLux(lastMeasuredLux));
             }
@@ -39,14 +43,15 @@ public class DeviceSensorManager implements SensorEventListener {
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-
+        // Ignore
     }
 
     public static int getScreenBrightnessFromLux(float lux) {
+        int minBrightness = mSharedPreferences.getInt(SP_MIN_BRIGHTNESS, 48);
         if (lux >= 500) return 255;
-        if (lux <= 30) return 48;
+        if (lux <= 30) return minBrightness;
 
-        double slope = (255.0 - 48.0) / (500.0 - 30.0);
-        return (int) (48 + slope * (lux - 30));
+        double slope = (255.0 - minBrightness) / (500.0 - 30.0);
+        return (int) (minBrightness + slope * (lux - 30));
     }
 }

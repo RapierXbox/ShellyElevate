@@ -10,6 +10,7 @@ lifecycleRuntimeKtx = "2.8.7"
 orgEclipsePahoMqttv5Client = "1.2.5"
 preference = "1.2.1"
 nanohttpd = "2.3.1"
+okhttp = "5.0.0-alpha.14"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -21,6 +22,9 @@ lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtim
 org-eclipse-paho-mqttv5-client = { module = "org.eclipse.paho:org.eclipse.paho.mqttv5.client", version.ref = "orgEclipsePahoMqttv5Client" }
 preference = { group = "androidx.preference", name = "preference", version.ref = "preference" }
 nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanohttpd" }
+okhttpbom = { group = "com.squareup.okhttp3", name = "okhttp-bom", version.ref = "okhttp" }
+okhttp = { group = "com.squareup.okhttp3", name = "okhttp" }
+
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

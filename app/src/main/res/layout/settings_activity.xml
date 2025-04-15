@@ -74,6 +74,30 @@
                     android:textSize="18sp" />
 
                 <LinearLayout
+                    android:id="@+id/minBrightnessLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical"
+                        android:text="@string/min_brightness"
+                        android:textSize="18sp" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/min_brightness"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:valueFrom="1"
+                        android:valueTo="255" />
+
+                </LinearLayout>
+
+                <LinearLayout
                     android:id="@+id/brightnessSettingLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

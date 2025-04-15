@@ -31,10 +31,12 @@ public class DeviceHelper {
             "/sys/devices/platform/backlight/backlight/backlight/brightness"
             };
     private String screenBrightnessFile;
-    private String[] relayFiles;
+    private final String[] relayFiles;
     private boolean screenOn = true;
     private int screenBrightness;
     private boolean automaticBrightness;
+
+    private final String TAG = "DeviceHelper";
 
     public DeviceHelper() {
         for (String brightnessFile : screenBrightnessFiles) {
@@ -73,10 +75,12 @@ public class DeviceHelper {
     }
 
     public void setScreenBrightness(int brightness) {
-        if (automaticBrightness && screenOn) {
-            forceScreenBrightness(brightness);
-        } else if (!automaticBrightness && screenOn) {
-            forceScreenBrightness(brightness);
+        if (!screenOn)
+            return;
+
+        forceScreenBrightness(brightness);
+
+        if (!automaticBrightness) {
             mSharedPreferences.edit().putInt(SP_BRIGHTNESS, brightness).apply();
             screenBrightness = brightness;
         }
@@ -84,6 +88,9 @@ public class DeviceHelper {
 
     public void forceScreenBrightness(int brightness) {
         brightness = Math.max(0, Math.min(brightness, 255));
+
+        Log.d(TAG, "Set brightness to: " + brightness);
+
         writeFileContent(screenBrightnessFile, String.valueOf(brightness));
     }
     public int getScreenBrightness() {

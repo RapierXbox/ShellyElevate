@@ -7,6 +7,7 @@ public class Constants {
     public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
     public static final String SP_SWITCH_ON_SWIPE = "switchOnSwipe";
     public static final String SP_AUTOMATIC_BRIGHTNESS = "automaticBrightness";
+    public static final String SP_MIN_BRIGHTNESS = "minBrightness";
     public static final String SP_BRIGHTNESS = "brightness";
     public static final String SP_SCREEN_SAVER_ENABLED = "screenSaver";
     public static final String SP_SCREEN_SAVER_DELAY = "screenSaverDelay";

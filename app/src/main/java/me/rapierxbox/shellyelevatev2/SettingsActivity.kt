@@ -20,6 +20,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE
 import me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED
 import me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE
+import me.rapierxbox.shellyelevatev2.Constants.SP_MIN_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_BROKER
 import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_ENABLED
 import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_PASSWORD
@@ -52,6 +53,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
         binding.switchOnSwipe.isChecked = preferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
         binding.automaticBrightness.isChecked = preferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
+        binding.minBrightness.value = preferences.getInt(SP_MIN_BRIGHTNESS, 48).toFloat()
         binding.brightnessSetting.value = preferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS).toFloat()
         binding.screenSaver.isChecked = preferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
         binding.screenSaverDelay.setText(preferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
@@ -73,6 +75,7 @@ class SettingsActivity : AppCompatActivity() {
         binding.screenSaverTypeLayout.isVisible = binding.screenSaver.isChecked
 
         binding.brightnessSettingLayout.isVisible = !binding.automaticBrightness.isChecked
+        binding.minBrightnessLayout.isVisible = binding.automaticBrightness.isChecked
 
         binding.httpServerAddressLayout.isVisible = binding.httpServerEnabled.isChecked
         binding.httpServerLayout.isVisible = binding.httpServerEnabled.isChecked
@@ -130,6 +133,7 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
             binding.brightnessSettingLayout.isVisible = !isChecked
+            binding.minBrightnessLayout.isVisible = isChecked
         }
 
         binding.mqttEnabled.setOnCheckedChangeListener { _, isChecked ->
@@ -227,21 +231,35 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun saveSettings() {
         getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).edit {
+            //Functional mode
+            putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
+
+            //WebView
             putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
+            putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
+
+            //MQTT
+            putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
             putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
             putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString())
             putString(SP_MQTT_PASSWORD, binding.mqttPassword.text.toString())
+            putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
+
+            //Switch
             putBoolean(SP_SWITCH_ON_SWIPE, binding.switchOnSwipe.isChecked)
+
+            //Brightness management
             putBoolean(SP_AUTOMATIC_BRIGHTNESS, binding.automaticBrightness.isChecked)
+            putInt(SP_BRIGHTNESS, binding.brightnessSetting.value.toInt())
+            putInt(SP_MIN_BRIGHTNESS, binding.minBrightness.value.toInt())
+
+            //Screen saver
             putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked)
-            putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
-            putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
-            putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
-            putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
             putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
             putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
-            putInt(SP_BRIGHTNESS, binding.brightnessSetting.value.toInt())
-            putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
+
+            //Http Server
+            putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
         }
 
         val serverEnabled = binding.httpServerEnabled.isChecked
