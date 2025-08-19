@@ -5,6 +5,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.Arrays;
@@ -47,5 +48,12 @@ public enum DeviceModel {
     @Deprecated
     public static DeviceModel getDevice(SharedPreferences sharedPreferences) {
         return getDevice(sharedPreferences.getString(SP_DEVICE, ""));
+    }
+
+    @NonNull
+    @Override
+    public String toString() {
+        //We are using this with the adapter in SettingsActivity
+        return modelName;
     }
 }
