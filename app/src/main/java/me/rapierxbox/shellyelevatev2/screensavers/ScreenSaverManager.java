@@ -26,6 +26,14 @@ public class ScreenSaverManager {
 
     private final ScreenSaver[] screenSavers;
 
+    public static ScreenSaver[] getAvailableScreenSavers() {
+        return new ScreenSaver[]{
+                new ScreenOffScreenSaver(),
+                new DigitalClockScreenSaver(),
+                new DigitalClockAndDateScreenSaver()
+        };
+    }
+
     public ScreenSaverManager() {
 
         scheduler = Executors.newScheduledThreadPool(1);
@@ -34,11 +42,7 @@ public class ScreenSaverManager {
         lastTouchEventTime = System.currentTimeMillis();
         screenSaverRunning = false;
 
-        screenSavers = new ScreenSaver[]{
-                new ScreenOffScreenSaver(),
-                new DigitalClockScreenSaver(),
-                new DigitalClockAndDateScreenSaver()
-        };
+        screenSavers = getAvailableScreenSavers();
     }
 
     public boolean onTouchEvent(MotionEvent event) {
@@ -47,17 +51,6 @@ public class ScreenSaverManager {
             stopScreenSaver();
         }
         return true;
-    }
-
-    public ArrayAdapter<String> getScreenSaverSpinnerAdapter() {
-        ArrayAdapter<String> adapter = new ArrayAdapter<>(mApplicationContext, android.R.layout.simple_spinner_item);
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
-
-        for (ScreenSaver screenSaver : screenSavers) {
-            adapter.add(screenSaver.getName());
-        }
-
-        return adapter;
     }
 
     public boolean isScreenSaverRunning() {
