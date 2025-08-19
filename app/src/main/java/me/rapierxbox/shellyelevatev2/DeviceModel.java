@@ -9,12 +9,17 @@ import androidx.annotation.Nullable;
 import java.util.Arrays;
 
 public enum DeviceModel {
+    //V1
     STARGATE("Stargate", "SAWD-0A1XX10EU1", false, -2.7d, 7.0d), // Old One
     ATLANTIS("Atlantis", "SAWD-1A1XX10EU1", false, -1.1d, 3.0d), // New One
-    PEGASUS("Pegasus", "SAWD-2A1XX10EU1", true, -2.6d, 8.0d);
+    PEGASUS("Pegasus", "SAWD-2A1XX10EU1", true, -2.6d, 8.0d),
 
     private final String codeName;
     final String boardName;
+    //V2
+    BLAKE("Blake", "SAWD-3A1XE10EU2", true, -2.6d, 10.0d),
+    MAVERICK("Maverick", "SAWD-4A1XE10US0", true, 0d, 0.0d),
+    JENNA("Jenna", "SAWD-5A1XX10EU0", true, 0d, 0.0d);
     public final boolean hasProximitySensor;
     public final double temperatureOffset;
     public final double humidityOffset;
