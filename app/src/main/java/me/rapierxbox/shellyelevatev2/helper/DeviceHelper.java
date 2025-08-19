@@ -1,11 +1,8 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
-import static me.rapierxbox.shellyelevatev2.Constants.DEVICE_ATLANTIS;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE;
-import static me.rapierxbox.shellyelevatev2.Constants.humidityOffset;
-import static me.rapierxbox.shellyelevatev2.Constants.temperatureOffset;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
@@ -22,6 +19,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+
+import me.rapierxbox.shellyelevatev2.DeviceModel;
 
 public class DeviceHelper {
     private static final String[] possibleRelayFiles = {
@@ -118,13 +117,16 @@ public class DeviceHelper {
     public double getTemperature() {
         String[] tempSplit = readFileContent(tempAndHumFile).split(":");
         double temp = (Double.parseDouble(tempSplit[1]) * 175.0 / 65535.0) - 45.0;
-        temp += temperatureOffset.get(mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS));
+
+        temp +=  DeviceModel.getDevice(mSharedPreferences).temperatureOffset;
         return Math.round(temp * 10.0) / 10.0;
     }
     public double getHumidity() {
         String[] humiditySplit = readFileContent(tempAndHumFile).split(":");
         double humidity = Double.parseDouble(humiditySplit[0]) * 100.0 / 65535.0;
-        humidity += humidityOffset.get(mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS));
+
+        humidity +=  DeviceModel.getDevice(mSharedPreferences).humidityOffset;
+
         return Math.round(humidity);
     }
 

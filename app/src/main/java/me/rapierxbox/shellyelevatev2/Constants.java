@@ -1,7 +1,5 @@
 package me.rapierxbox.shellyelevatev2;
 
-import java.util.HashMap;
-
 public class Constants {
     public static final String SHARED_PREFERENCES_NAME = "ShellyElevateV2";
 
@@ -54,30 +52,4 @@ public class Constants {
 
     public static final String MQTT_TOPIC_HOME_ASSISTANT_STATUS = "homeassistant/status";
 
-    public static final String DEVICE_STARGATE = "SAWD-0A1XX10EU1"; // old one
-    public static final String DEVICE_ATLANTIS = "SAWD-1A1XX10EU1"; // new one
-    public static final String DEVICE_PEGASUS = "SAWD-2A1XX10EU1"; // wide display
-
-    public static final HashMap<String, Boolean> hasProximitySensor = new HashMap<>() {
-        {
-            put(DEVICE_STARGATE, false);
-            put(DEVICE_ATLANTIS, false);
-            put(DEVICE_PEGASUS, true);
-        }
-    };
-    public static final HashMap<String, Double> temperatureOffset = new HashMap<>() {
-        {
-            put(DEVICE_STARGATE, -2.7d);
-            put(DEVICE_ATLANTIS, -1.1d);
-            put(DEVICE_PEGASUS, -2.6d);
-        }
-    };
-
-    public static final HashMap<String, Double> humidityOffset = new HashMap<>() {
-        {
-            put(DEVICE_STARGATE, 7.0d);
-            put(DEVICE_ATLANTIS, 3.0d);
-            put(DEVICE_PEGASUS, 8.0d);
-        }
-    };
 }

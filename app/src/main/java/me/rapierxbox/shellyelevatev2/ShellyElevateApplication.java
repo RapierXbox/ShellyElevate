@@ -1,10 +1,8 @@
 package me.rapierxbox.shellyelevatev2;
 
-import static me.rapierxbox.shellyelevatev2.Constants.DEVICE_ATLANTIS;
 import static me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
-import static me.rapierxbox.shellyelevatev2.Constants.hasProximitySensor;
 
 import android.app.Application;
 import android.content.Context;
@@ -57,7 +55,10 @@ public class ShellyElevateApplication extends Application {
         SensorManager sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         Sensor lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
         sensorManager.registerListener(mDeviceSensorManager, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
-        if (Boolean.TRUE.equals(hasProximitySensor.get(mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS)))) {
+
+        DeviceModel device = DeviceModel.getDevice(mSharedPreferences);
+
+        if (device.hasProximitySensor) {
             Sensor proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
             Log.d("ShellyElevateApplication", "Default proximity sensor: " + proximitySensor);
             sensorManager.registerListener(mDeviceSensorManager, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
