@@ -12,7 +12,7 @@ import java.util.Arrays;
 public enum DeviceModel {
     //V1
     STARGATE("Stargate", "SAWD-0A1XX10EU1", false, -2.7d, 7.0d), // Old One
-    ATLANTIS("Atlantis", "SAWD-1A1XX10EU1", false, -1.1d, 3.0d), // New One
+    ATLANTIS("Atlantis", "SAWD-1A1XX10EU1", true, -1.1d, 3.0d), // New One
     PEGASUS("Pegasus", "SAWD-2A1XX10EU1", true, -2.6d, 8.0d),
 
     //V2
