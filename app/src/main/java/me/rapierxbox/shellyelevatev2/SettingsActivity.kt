@@ -224,7 +224,7 @@ class SettingsActivity : AppCompatActivity() {
 
             val selectedDevice = binding.deviceTypeSpinner.selectedItem as DeviceModel
             // device
-            putString(SP_DEVICE, selectedDevice.boardName)
+            putString(SP_DEVICE, selectedDevice.modelName)
 
             //Functional mode
             putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
