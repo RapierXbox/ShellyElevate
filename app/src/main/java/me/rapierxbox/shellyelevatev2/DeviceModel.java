@@ -16,9 +16,10 @@ public enum DeviceModel {
     PEGASUS("Pegasus", "SAWD-2A1XX10EU1", true, -2.6d, 8.0d),
 
     //V2
-    BLAKE("Blake", "SAWD-3A1XE10EU2", true, -2.6d, 10.0d),
-    MAVERICK("Maverick", "SAWD-4A1XE10US0", true, 0d, 0.0d),
-    JENNA("Jenna", "SAWD-5A1XX10EU0", true, 0d, 0.0d);
+    //BLAKE("Blake", "SAWD-3A1XE10EU2", true, -2.6d, 10.0d),
+    //MAVERICK("Maverick", "SAWD-4A1XE10US0", true, 0d, 0.0d),
+    //JENNA("Jenna", "SAWD-5A1XX10EU0", true, 0d, 0.0d),
+    ;
 
     private final String model;
     final String modelName;
