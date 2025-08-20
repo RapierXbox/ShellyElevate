@@ -39,6 +39,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_USERNAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_DELAY
 import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ENABLED
 import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID
+import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_MIN_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
 import me.rapierxbox.shellyelevatev2.Constants.SP_WAKE_ON_PROXIMITY
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
@@ -48,6 +49,8 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManage
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
+import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
+import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
 import java.io.IOException
@@ -146,6 +149,7 @@ class SettingsFragment : Fragment() {
         binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
         binding.screenSaverType.setSelection(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0))
         binding.wakeOnProximity.isChecked = mSharedPreferences.getBoolean(SP_WAKE_ON_PROXIMITY, false)
+        binding.screensaverMinBrightness.value = mSharedPreferences.getInt(SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT).toFloat()
 
         //Http Server
         binding.httpServerEnabled.isChecked = mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
@@ -185,12 +189,22 @@ class SettingsFragment : Fragment() {
         }
 
         binding.brightnessSetting.addOnChangeListener { slider, value, fromUser ->
-            mDeviceHelper.forceScreenBrightness(value.toInt())
+            mDeviceHelper.setScreenBrightness(value.toInt())
         }
 
         binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
             binding.brightnessSettingLayout.isVisible = !isChecked
             binding.minBrightnessLayout.isVisible = isChecked
+        }
+
+        binding.minBrightness.addOnChangeListener { slider, value, fromUser ->
+            //Give user a feedback about the configured min brightness
+            mDeviceHelper.setScreenBrightness(value.toInt())
+        }
+
+        binding.screensaverMinBrightness.addOnChangeListener { slider, value, fromUser ->
+            //Give user a feedback about the configured min brightness
+            mDeviceHelper.setScreenBrightness(value.toInt())
         }
 
         binding.screenSaver.setOnCheckedChangeListener { _, isChecked ->
@@ -279,6 +293,7 @@ class SettingsFragment : Fragment() {
             putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
             putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
             putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked && selectedDevice.hasProximitySensor)
+            putInt(SP_SCREEN_SAVER_MIN_BRIGHTNESS, binding.screensaverMinBrightness.value.toInt())
 
             //Http Server
             putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
@@ -318,6 +333,5 @@ class SettingsFragment : Fragment() {
     companion object {
         const val SCREEN_SAVER_DEFAULT_DELAY = 45
         const val MQTT_DEFAULT_PORT = 1833
-        const val DEFAULT_BRIGHTNESS = 255
     }
 }

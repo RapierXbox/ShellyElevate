@@ -2,23 +2,32 @@ package me.rapierxbox.shellyelevatev2.screensavers;
 
 import static android.view.MotionEvent.ACTION_UP;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_END_SCREENSAVER;
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_KEY;
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED;
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STARTED;
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STOPPED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_DELAY;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ENABLED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_WAKE_ON_PROXIMITY;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
+import android.content.BroadcastReceiver;
+import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.util.Log;
 import android.view.MotionEvent;
-import android.widget.ArrayAdapter;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-public class ScreenSaverManager {
+public class ScreenSaverManager extends BroadcastReceiver {
     private long lastTouchEventTime;
     private boolean screenSaverRunning;
 
@@ -27,14 +36,10 @@ public class ScreenSaverManager {
     private final ScreenSaver[] screenSavers;
 
     public static ScreenSaver[] getAvailableScreenSavers() {
-        return new ScreenSaver[]{
-                new ScreenOffScreenSaver(),
-                new DigitalClockScreenSaver(),
-                new DigitalClockAndDateScreenSaver()
-        };
+        return new ScreenSaver[]{new ScreenOffScreenSaver(), new DigitalClockScreenSaver(), new DigitalClockAndDateScreenSaver()};
     }
 
-    public ScreenSaverManager() {
+    public ScreenSaverManager(Context ctx) {
 
         scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleWithFixedDelay(this::checkLastTouchEventTime, 0, 1, TimeUnit.SECONDS);
@@ -43,6 +48,8 @@ public class ScreenSaverManager {
         screenSaverRunning = false;
 
         screenSavers = getAvailableScreenSavers();
+
+        LocalBroadcastManager.getInstance(ctx).registerReceiver(this, new IntentFilter(INTENT_PROXIMITY_UPDATED));
     }
 
     public boolean onTouchEvent(MotionEvent event) {
@@ -65,10 +72,12 @@ public class ScreenSaverManager {
         return mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true);
     }
 
-    public void onDestroy() {
+    public void onDestroy(Context ctx) {
         if (scheduler != null && !scheduler.isShutdown()) {
             scheduler.shutdown();
         }
+
+        LocalBroadcastManager.getInstance(ctx).unregisterReceiver(this);
     }
 
     private void checkLastTouchEventTime() {
@@ -87,6 +96,9 @@ public class ScreenSaverManager {
             if (mMQTTServer.shouldSend()) {
                 mMQTTServer.publishSleeping(true);
             }
+
+            //Let everyone know we are starting the screensaver
+            LocalBroadcastManager.getInstance(mApplicationContext).sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STARTED));
         }
     }
 
@@ -101,6 +113,18 @@ public class ScreenSaverManager {
 
             if (mMQTTServer.shouldSend()) {
                 mMQTTServer.publishSleeping(false);
+            }
+
+            //Let everyone know we are stopping the screensaver
+            LocalBroadcastManager.getInstance(mApplicationContext).sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STOPPED));
+        }
+    }
+
+    @Override
+    public void onReceive(Context context, Intent intent) {
+        if (mSharedPreferences.getBoolean(SP_WAKE_ON_PROXIMITY, false)) {
+            if (screenSaverRunning && intent.getFloatExtra(INTENT_PROXIMITY_KEY, 100.0f) <= 7.5f) {
+                stopScreenSaver();
             }
         }
     }

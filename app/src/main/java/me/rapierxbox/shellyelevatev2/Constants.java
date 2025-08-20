@@ -30,6 +30,7 @@ public class Constants {
     public static final String SP_SCREEN_SAVER_DELAY = "screenSaverDelay";
     public static final String SP_SCREEN_SAVER_ID = "screenSaverId";
     public static final String SP_WAKE_ON_PROXIMITY = "wakeOnProximity";
+    public static final String SP_SCREEN_SAVER_MIN_BRIGHTNESS = "screenSaverMinBrightness";
 
     //MQTT SP Keys
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
@@ -47,6 +48,9 @@ public class Constants {
     //IO Intents
     public static final String INTENT_LIGHT_UPDATED = "me.rapierxbox.shellyelevatev2.LIGHT_UPDATED";
     public static final String INTENT_LIGHT_KEY = "lightValue";
+
+    public static final String INTENT_PROXIMITY_UPDATED = "me.rapierxbox.shellyelevatev2.PROXIMITY_UPDATED";
+    public static final String INTENT_PROXIMITY_KEY = "proximityValue";
 
     //Screen Intents
     public static final String INTENT_TURN_SCREEN_ON = "me.rapierxbox.shellyelevatev2.INTENT_TURN_SCREEN_ON";

@@ -93,29 +93,31 @@ class MainActivity : ComponentActivity() {
 
         webSettings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
-        binding.myWebView.webViewClient = object : WebViewClient() {
-            @SuppressLint("WebViewClientOnReceivedSslError")
-            override fun onReceivedSslError(
-                view: WebView?,
-                handler: SslErrorHandler?,
-                error: SslError?
-            ) {
-                if (mSharedPreferences.getBoolean(SP_IGNORE_SSL_ERRORS, false)) {
-                    handler?.proceed()
-                } else {
-                    super.onReceivedSslError(view, handler, error)
+        binding.myWebView.apply {
+
+            webViewClient = object : WebViewClient() {
+                @SuppressLint("WebViewClientOnReceivedSslError")
+                override fun onReceivedSslError(
+                    view: WebView?,
+                    handler: SslErrorHandler?,
+                    error: SslError?
+                ) {
+                    if (mSharedPreferences.getBoolean(SP_IGNORE_SSL_ERRORS, false)) {
+                        handler?.proceed()
+                    } else {
+                        super.onReceivedSslError(view, handler, error)
+                    }
                 }
             }
+            webChromeClient = WebChromeClient()
+            addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
+            loadUrl(ServiceHelper.getWebviewUrl())
         }
-        binding.myWebView.webChromeClient = WebChromeClient()
-
-        binding.myWebView.addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
-
-        binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
 
     override fun onResume() {
         super.onResume()
+        //This will reload the screen after the screenSaver.
         if (binding.myWebView.originalUrl?.toHttpUrlOrNull() != ServiceHelper.getWebviewUrl().toHttpUrlOrNull())
             binding.myWebView.loadUrl(ServiceHelper.getWebviewUrl())
     }
@@ -139,11 +141,20 @@ class MainActivity : ComponentActivity() {
             return@setOnTouchListener true
         }
 
-        val localBroadcastManager: LocalBroadcastManager = LocalBroadcastManager.getInstance(this)
-        localBroadcastManager.registerReceiver(settingsChangedBroadcastReceiver, IntentFilter(INTENT_SETTINGS_CHANGED))
-        localBroadcastManager.registerReceiver(webviewJavascriptInjectorBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
+        LocalBroadcastManager.getInstance(this).apply {
+            registerReceiver(settingsChangedBroadcastReceiver, IntentFilter(INTENT_SETTINGS_CHANGED))
+            registerReceiver(webviewJavascriptInjectorBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
+        }
 
         if (!mSharedPreferences.getBoolean(SP_SETTINGS_EVER_SHOWN, false))
             startActivity(Intent(this, SettingsActivity::class.java))
+    }
+
+    override fun onDestroy() {
+        LocalBroadcastManager.getInstance(this).apply {
+            unregisterReceiver(settingsChangedBroadcastReceiver)
+            unregisterReceiver(webviewJavascriptInjectorBroadcastReceiver)
+        }
+        super.onDestroy()
     }
 }

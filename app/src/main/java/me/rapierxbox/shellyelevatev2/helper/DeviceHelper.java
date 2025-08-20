@@ -1,10 +1,6 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
-import static me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
@@ -38,26 +34,29 @@ public class DeviceHelper {
     private String screenBrightnessFile;
     private final String[] relayFiles;
     private boolean screenOn = true;
+    private int lastScreenBrightness;
+
+    private static final String TAG = "DeviceHelper";
 
     public DeviceHelper() {
         for (String brightnessFile : screenBrightnessFiles) {
-            if (new File(brightnessFile).exists()){
+            if (new File(brightnessFile).exists()) {
                 screenBrightnessFile = brightnessFile;
             }
         }
         if (screenBrightnessFile == null) {
-            Log.e("FATAL ERROR", "no brightness file found");
+            Log.wtf(TAG, "no brightness file found");
             screenBrightnessFile = "";
         }
 
         List<String> relayFileList = new ArrayList<>();
         for (String relayFile : possibleRelayFiles) {
-            if (new File(relayFile).exists()){
+            if (new File(relayFile).exists()) {
                 relayFileList.add(relayFile);
             }
         }
         if (relayFileList.isEmpty()) {
-            Log.e("FATAL ERROR", "no relay files found");
+            Log.wtf(TAG, "no relay files found");
             relayFileList.add("");
         }
         relayFiles = relayFileList.toArray(new String[0]);
@@ -65,8 +64,12 @@ public class DeviceHelper {
 
     public void setScreenOn(boolean on) {
         screenOn = on;
-        int brightness = mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true) ? DeviceSensorManager.getScreenBrightnessFromLux(mDeviceSensorManager.getLastMeasuredLux()) : mSharedPreferences.getInt(SP_BRIGHTNESS, 255);
-        forceScreenBrightness(on ? brightness : 0);
+
+        if (screenOn) {
+            writeScreenBrightness(lastScreenBrightness);
+        } else {
+            writeScreenBrightness(0);
+        }
     }
 
     public boolean getScreenOn() {
@@ -74,31 +77,30 @@ public class DeviceHelper {
     }
 
     public void setScreenBrightness(int brightness) {
-        if (!screenOn)
-            return;
+        lastScreenBrightness = brightness;
 
-        forceScreenBrightness(brightness);
+        if (!screenOn) return;
 
-        if (!mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)) {
-            mSharedPreferences.edit().putInt(SP_BRIGHTNESS, brightness).apply();
-        }
+        writeScreenBrightness(brightness);
     }
 
-    public void forceScreenBrightness(int brightness) {
+    private void writeScreenBrightness(int brightness) {
         brightness = Math.max(0, Math.min(brightness, 255));
 
-        Log.d("DeviceHelper", "Set brightness to: " + brightness);
+        Log.d(TAG, "Set brightness to: " + brightness);
         if (!Settings.System.canWrite(mApplicationContext)) {
-            Log.i("DeviceHelper", "Please disable androids automatic brightness or give the app the change settings permission.");
+            Log.i(TAG, "Please disable androids automatic brightness or give the app the change settings permission.");
         } else {
             Settings.System.putInt(mApplicationContext.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
         }
 
         writeFileContent(screenBrightnessFile, String.valueOf(brightness));
     }
+
     public int getScreenBrightness() {
         return Integer.parseInt(readFileContent(screenBrightnessFile));
     }
+
     public boolean getRelay() {
         boolean relayState = false;
         for (String relayFile : relayFiles) {
@@ -106,6 +108,7 @@ public class DeviceHelper {
         }
         return relayState;
     }
+
     public void setRelay(boolean state) {
         for (String relayFile : relayFiles) {
             writeFileContent(relayFile, state ? "1" : "0");
@@ -114,18 +117,20 @@ public class DeviceHelper {
             mMQTTServer.publishRelay(state);
         }
     }
+
     public double getTemperature() {
         String[] tempSplit = readFileContent(tempAndHumFile).split(":");
         double temp = (Double.parseDouble(tempSplit[1]) * 175.0 / 65535.0) - 45.0;
 
-        temp +=  DeviceModel.getDevice(mSharedPreferences).temperatureOffset;
+        temp += DeviceModel.getDevice(mSharedPreferences).temperatureOffset;
         return Math.round(temp * 10.0) / 10.0;
     }
+
     public double getHumidity() {
         String[] humiditySplit = readFileContent(tempAndHumFile).split(":");
         double humidity = Double.parseDouble(humiditySplit[0]) * 100.0 / 65535.0;
 
-        humidity +=  DeviceModel.getDevice(mSharedPreferences).humidityOffset;
+        humidity += DeviceModel.getDevice(mSharedPreferences).humidityOffset;
 
         return Math.round(humidity);
     }
@@ -138,7 +143,7 @@ public class DeviceHelper {
                 content.append(line).append("\n");
             }
         } catch (IOException e) {
-            Log.e("DeviceHelper", "Error when reading file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
+            Log.e(TAG, "Error when reading file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
         }
         return content.toString();
     }
@@ -147,7 +152,7 @@ public class DeviceHelper {
         try (FileWriter writer = new FileWriter(filePath)) {
             writer.write(content);
         } catch (IOException e) {
-            Log.e("DeviceHelper", "Error when writing file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
+            Log.e(TAG, "Error when writing file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
         }
     }
 }

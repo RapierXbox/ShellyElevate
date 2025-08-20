@@ -190,6 +190,31 @@
                     android:spinnerMode="dialog" />
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/min_brightness_screen_saver_layout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="24dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:text="@string/min_brightness"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/screensaver_min_brightness"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:valueFrom="1"
+                    android:valueTo="255" />
+
+            </LinearLayout>
+
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/wakeOnProximity"
                 android:layout_width="match_parent"
@@ -384,8 +409,7 @@
                     android:inputType="textVisiblePassword"
                     android:textSize="18sp" />
             </LinearLayout>
-
-            <Switch
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/liteMode"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
