@@ -188,14 +188,25 @@ class SettingsFragment : Fragment() {
             mDeviceHelper.forceScreenBrightness(value.toInt())
         }
 
+        binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
+            binding.brightnessSettingLayout.isVisible = !isChecked
+            binding.minBrightnessLayout.isVisible = isChecked
+        }
+
         binding.screenSaver.setOnCheckedChangeListener { _, isChecked ->
             binding.screenSaverDelayLayout.isVisible = isChecked
             binding.screenSaverTypeLayout.isVisible = isChecked
         }
 
-        binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
-            binding.brightnessSettingLayout.isVisible = !isChecked
-            binding.minBrightnessLayout.isVisible = isChecked
+        binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                if ((binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
+                    binding.screenSaverDelay.setText("5")
+                    Toast.makeText(requireContext(), R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            return@setOnEditorActionListener false
         }
 
         binding.mqttEnabled.setOnCheckedChangeListener { _, isChecked ->
@@ -221,17 +232,6 @@ class SettingsFragment : Fragment() {
             mScreenSaverManager.onTouchEvent(event)
 
             return@setOnTouchListener false
-        }
-
-        binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if ((binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
-                    binding.screenSaverDelay.setText("5")
-                    Toast.makeText(requireContext(), R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
-                }
-            }
-
-            return@setOnEditorActionListener false
         }
 
         binding.deviceTypeSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
