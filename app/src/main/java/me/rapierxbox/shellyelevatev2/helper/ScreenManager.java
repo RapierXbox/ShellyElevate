@@ -32,6 +32,7 @@ import androidx.annotation.MainThread;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenOffScreenSaver;
 
 public class ScreenManager extends BroadcastReceiver {
 
@@ -210,10 +211,10 @@ public class ScreenManager extends BroadcastReceiver {
     private synchronized void updateBrightness() {
         int desiredBrightness = computeDesiredBrightness();
 
-        // If screen is off or screensaver is active, force brightness to 0 immediately
-        if (!screenOn || inScreenSaver) {
+        // Force brightness to 0 only when the screen is explicitly off or the active saver is "Screen Off"
+        if (!screenOn || (inScreenSaver && isScreenOffSaverActive())) {
             targetBrightness = 0;
-            applyBrightness(0, "screen off or screensaver");
+            applyBrightness(0, "screen off or screen-off screensaver");
             fadeHandler.removeCallbacks(fadeRunnable);
             brightnessAnimator.cancel();
             return;
@@ -234,7 +235,7 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     private int computeDesiredBrightness() {
-        if (!screenOn || inScreenSaver) {
+        if (!screenOn || (inScreenSaver && isScreenOffSaverActive())) {
             return 0;
         }
 
@@ -308,12 +309,14 @@ public class ScreenManager extends BroadcastReceiver {
         }
         if (newState) {
             updateBrightness();
-            // Force a second write shortly after entering screensaver to avoid hardware ignoring the first set
-            fadeHandler.postDelayed(() -> {
-                if (inScreenSaver) {
-                    applyBrightness(0, "screensaver second write");
-                }
-            }, 300L);
+            if (isScreenOffSaverActive()) {
+                // Force a second write shortly after entering screen-off saver to avoid hardware ignoring the first set
+                fadeHandler.postDelayed(() -> {
+                    if (inScreenSaver && isScreenOffSaverActive()) {
+                        applyBrightness(0, "screen-off screensaver second write");
+                    }
+                }, 300L);
+            }
         } else {
             // On wake from screensaver, raise brightness immediately (no 3s hysteresis)
             // Ensure screen is marked on before computing brightness so we don't stick at 0
@@ -334,6 +337,12 @@ public class ScreenManager extends BroadcastReceiver {
         if (v < min) return min;
         if (v > max) return max;
         return v;
+    }
+
+    private boolean isScreenOffSaverActive() {
+        if (mScreenSaverManager == null || !inScreenSaver) return false;
+        var saver = mScreenSaverManager.getCurrentScreenSaver();
+        return saver instanceof ScreenOffScreenSaver;
     }
 
     private void applyBrightness(int rawValue, String reason) {

@@ -412,10 +412,12 @@ class MainActivity : ComponentActivity() {
             addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
             
             // Add touch listener for touch-to-wake support
-            setOnTouchListener { _, _ ->
+            setOnTouchListener { _, event ->
                 val sm = ShellyElevateApplication.mScreenManager
                 val consumeForWake = sm?.shouldConsumeTouchForWake() == true
                 if (BuildConfig.DEBUG) Log.d("MainActivity", "Touch event detected on WebView, mScreenManager=$sm, consumeForWake=$consumeForWake")
+                mSwipeHelper?.onTouchEvent(event)
+                mScreenSaverManager.onTouchEvent(event)
                 sm?.onTouchEvent()
                 consumeForWake // true means we handled it for wake and don't pass to WebView
             }
@@ -559,10 +561,7 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("ClickableViewAccessibility")
     private fun setupSwipeOverlay() {
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            // Do NOT call WebView.onTouchEvent manually
-            mSwipeHelper?.onTouchEvent(event)
-            mScreenSaverManager.onTouchEvent(event)
-            false // let event propagate naturally
+            false // touch handling lives on WebView listener to avoid duplicate gesture processing
         }
     }
 

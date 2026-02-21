@@ -95,8 +95,7 @@ public class ShellyElevateApplication extends Application {
             // Sensors Init
             mDeviceSensorManager = new DeviceSensorManager(this);
 
-            if (mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true))
-                mSwipeHelper = new SwipeHelper();
+            mSwipeHelper = new SwipeHelper();
 
             mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
 
