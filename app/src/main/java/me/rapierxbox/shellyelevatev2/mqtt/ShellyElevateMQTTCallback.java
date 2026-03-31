@@ -5,6 +5,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.content.Intent;
 import android.util.Log;
@@ -42,6 +43,18 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
     @Override
     public void messageArrived(String topic, MqttMessage message) {
         switch (topic.replace(mMQTTServer.getClientId(), "%s")) {
+            case MQTT_TOPIC_BRIGHTNESS_COMMAND:
+                try {
+                    int brightness = Integer.parseInt(new String(message.getPayload(), StandardCharsets.UTF_8).trim());
+                    brightness = Math.max(1, Math.min(255, brightness));
+                    // Turn off auto-brightness so the value we set actually sticks.
+                    mSharedPreferences.edit().putBoolean(SP_AUTOMATIC_BRIGHTNESS, false).apply();
+                    mDeviceHelper.setScreenBrightness(brightness);
+                    mMQTTServer.publishBrightness(brightness);
+                } catch (NumberFormatException e) {
+                    Log.e("MQTT", "Invalid brightness command: " + new String(message.getPayload(), StandardCharsets.UTF_8));
+                }
+                break;
             case MQTT_TOPIC_RELAY_COMMAND:
                 mDeviceHelper.setRelay(new String(message.getPayload(), StandardCharsets.UTF_8).contains("ON"));
                 break;

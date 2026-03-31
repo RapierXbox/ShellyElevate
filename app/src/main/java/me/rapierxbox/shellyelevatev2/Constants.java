@@ -64,6 +64,8 @@ public class Constants {
 
     //MQTT Topics
     public static final String MQTT_TOPIC_CONFIG_DEVICE = "homeassistant/device/%s/config";
+    public static final String MQTT_TOPIC_BRIGHTNESS_STATE = "shellyelevatev2/%s/brightness";
+    public static final String MQTT_TOPIC_BRIGHTNESS_COMMAND = "shellyelevatev2/%s/brightness_command";
     public static final String MQTT_TOPIC_STATUS = "shellyelevatev2/%s/status";
     public static final String MQTT_TOPIC_TEMP_SENSOR = "shellyelevatev2/%s/temp";
     public static final String MQTT_TOPIC_HUM_SENSOR = "shellyelevatev2/%s/hum";

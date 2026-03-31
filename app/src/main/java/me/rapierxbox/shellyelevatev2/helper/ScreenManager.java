@@ -13,6 +13,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.SP_BRIGHTNESS;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MIN_BRIGHTNESS;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_MIN_BRIGHTNESS;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 
 import android.annotation.SuppressLint;
 import android.content.BroadcastReceiver;
@@ -104,11 +105,21 @@ public class ScreenManager extends BroadcastReceiver {
             if (currentBrightness == -1) {
                 currentBrightness = targetBrightness;
                 mDeviceHelper.setScreenBrightness(currentBrightness);
+                publishBrightnessToMqtt(currentBrightness);
             } else if (currentBrightness != targetBrightness) {
                 animateBrightnessTransition(currentBrightness, targetBrightness, FADE_DURATION_MS);
+                // Publish the target value once the change is committed so HA
+                // reflects the new brightness without waiting for the next MQTT poll.
+                publishBrightnessToMqtt(targetBrightness);
             } else {
                 Log.d(TAG, "No brightness change needed.");
             }
+        }
+    }
+
+    private void publishBrightnessToMqtt(int brightness) {
+        if (mMQTTServer.shouldSend()) {
+            mMQTTServer.publishBrightness(brightness);
         }
     }
 

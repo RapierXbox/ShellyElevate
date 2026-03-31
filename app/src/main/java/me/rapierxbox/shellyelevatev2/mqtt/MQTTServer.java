@@ -1,6 +1,8 @@
 package me.rapierxbox.shellyelevatev2.mqtt;
 
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_BRIGHTNESS_COMMAND;
+import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_BRIGHTNESS_STATE;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_CONFIG_DEVICE;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_HOME_ASSISTANT_STATUS;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_HUM_SENSOR;
@@ -175,6 +177,11 @@ public class MQTTServer {
             publishProximity(mDeviceSensorManager.getLastMeasuredDistance());
         }
         publishSleeping(mScreenSaverManager.isScreenSaverRunning());
+        try {
+            publishBrightness(mDeviceHelper.getScreenBrightness());
+        } catch (NumberFormatException e) {
+            Log.w("MQTT", "Could not read current brightness for initial publish");
+        }
     }
 
     /**
@@ -269,6 +276,14 @@ public class MQTTServer {
         }
     }
 
+    public void publishBrightness(int brightness) {
+        try {
+            mMqttClient.publish(parseTopic(MQTT_TOPIC_BRIGHTNESS_STATE), String.valueOf(brightness).getBytes(), 1, false);
+        } catch (MqttException e) {
+            Log.e("MQTT", "Error publishing brightness", e);
+        }
+    }
+
     public void publishSwipeEvent() {
         try {
             mMqttClient.publish(parseTopic(MQTT_TOPIC_SWIPE_EVENT), "{\"event_type\": \"swipe\"}".getBytes(), 1, false);
@@ -343,6 +358,17 @@ public class MQTTServer {
         relaySwitchPayload.put("device_class", "outlet");
         relaySwitchPayload.put("unique_id", clientId + "_relay");
         components.put(clientId + "_relay", relaySwitchPayload);
+
+        JSONObject brightnessNumberPayload = new JSONObject();
+        brightnessNumberPayload.put("p", "number");
+        brightnessNumberPayload.put("name", "Brightness");
+        brightnessNumberPayload.put("state_topic", parseTopic(MQTT_TOPIC_BRIGHTNESS_STATE));
+        brightnessNumberPayload.put("command_topic", parseTopic(MQTT_TOPIC_BRIGHTNESS_COMMAND));
+        brightnessNumberPayload.put("min", 1);
+        brightnessNumberPayload.put("max", 255);
+        brightnessNumberPayload.put("step", 1);
+        brightnessNumberPayload.put("unique_id", clientId + "_brightness");
+        components.put(clientId + "_brightness", brightnessNumberPayload);
 
         JSONObject sleepButtonPayload = new JSONObject();
         sleepButtonPayload.put("p", "button");
