@@ -3,22 +3,35 @@ package me.rapierxbox.shellyelevatev2;
 public class Constants {
     public static final String SHARED_PREFERENCES_NAME = "ShellyElevateV2";
 
+    //Generic SP Keys
+    public static final String SP_DEVICE = "device";
+    public static final String SP_LITE_MODE = "liteMode";
     public static final String SP_SETTINGS_EVER_SHOWN = "settingEverShown";
-    public static final String SP_WEBVIEW_URL = "webviewUrl";
-    public static final String SP_IGNORE_SSL_ERRORS = "ignoreSslErrors";
-    public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
+
+    //IO SP Keys
     public static final String SP_SWITCH_ON_SWIPE = "switchOnSwipe";
+
+    //Webserver SP Keys
+    public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
+    public static final String SP_EXTENDED_JAVASCRIPT_INTERFACE = "extendedJavascriptInterface";
+
+    //HA SP Keys
+    public static final String SP_WEBVIEW_URL = "webviewUrl";
+    public static final String SP_DEPRECATED_HA_IP = "homeAssistantIp";
+    public static final String SP_IGNORE_SSL_ERRORS = "ignoreSslErrors";
+
+    //Screen SP Keys
     public static final String SP_AUTOMATIC_BRIGHTNESS = "automaticBrightness";
     public static final String SP_MIN_BRIGHTNESS = "minBrightness";
     public static final String SP_BRIGHTNESS = "brightness";
+
+    //Screen Saver SP Keys
     public static final String SP_SCREEN_SAVER_ENABLED = "screenSaver";
     public static final String SP_SCREEN_SAVER_DELAY = "screenSaverDelay";
     public static final String SP_SCREEN_SAVER_ID = "screenSaverId";
     public static final String SP_WAKE_ON_PROXIMITY = "wakeOnProximity";
-    public static final String SP_LITE_MODE = "liteMode";
-    public static final String SP_EXTENDED_JAVASCRIPT_INTERFACE = "extendedJavascriptInterface";
-    public static final String SP_DEVICE = "device";
 
+    //MQTT SP Keys
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
     public static final String SP_MQTT_BROKER = "mqttBroker";
     public static final String SP_MQTT_PORT = "mqttPort";
@@ -26,17 +39,27 @@ public class Constants {
     public static final String SP_MQTT_PASSWORD = "mqttPassword";
     public static final String SP_MQTT_DEVICE_ID = "mqttDeviceId";
 
-    public static final String SP_DEPRECATED_HA_IP = "homeAssistantIp";
-
-    public static final String ACTION_USER_INTERACTION = "shellyelevate.ACTION_USER_INTERACTION";
-
-    public static final String INTENT_SETTINGS_CHANGED = "me.rapierxbox.shellyelevatev2.SETTINGS_CHANGED";
-    public static final String INTENT_WEBVIEW_INJECT_JAVASCRIPT = "me.rapierxbox.shellyelevatev2.WEBVIEW_INJECT_JAVASCRIPT";
+    //ScreenSaver intents
+    public static final String INTENT_SCREEN_SAVER_STARTED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STARTED";
+    public static final String INTENT_SCREEN_SAVER_STOPPED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STOPPED";
     public static final String INTENT_END_SCREENSAVER = "me.rapierxbox.shellyelevatev2.END_SCREENSAVER";
 
+    //IO Intents
+    public static final String INTENT_LIGHT_UPDATED = "me.rapierxbox.shellyelevatev2.LIGHT_UPDATED";
+    public static final String INTENT_LIGHT_KEY = "lightValue";
+
+    //Screen Intents
+    public static final String INTENT_TURN_SCREEN_ON = "me.rapierxbox.shellyelevatev2.INTENT_TURN_SCREEN_ON";
+    public static final String INTENT_TURN_SCREEN_OFF = "me.rapierxbox.shellyelevatev2.INTENT_TURN_SCREEN_OFF";
+
+    //User Actions Intents
+    public static final String ACTION_USER_INTERACTION = "shellyelevate.ACTION_USER_INTERACTION";
+    public static final String INTENT_SETTINGS_CHANGED = "me.rapierxbox.shellyelevatev2.SETTINGS_CHANGED";
+    public static final String INTENT_WEBVIEW_INJECT_JAVASCRIPT = "me.rapierxbox.shellyelevatev2.WEBVIEW_INJECT_JAVASCRIPT";
+
+    //MQTT Topics
     public static final String MQTT_TOPIC_CONFIG_DEVICE = "homeassistant/device/%s/config";
     public static final String MQTT_TOPIC_STATUS = "shellyelevatev2/%s/status";
-
     public static final String MQTT_TOPIC_TEMP_SENSOR = "shellyelevatev2/%s/temp";
     public static final String MQTT_TOPIC_HUM_SENSOR = "shellyelevatev2/%s/hum";
     public static final String MQTT_TOPIC_LUX_SENSOR = "shellyelevatev2/%s/lux";
@@ -49,7 +72,6 @@ public class Constants {
     public static final String MQTT_TOPIC_REBOOT_BUTTON = "shellyelevatev2/%s/reboot";
     public static final String MQTT_TOPIC_SWIPE_EVENT = "shellyelevatev2/%s/swipe_event";
     public static final String MQTT_TOPIC_SLEEPING_BINARY_SENSOR = "shellyelevatev2/%s/sleeping";
-
     public static final String MQTT_TOPIC_HOME_ASSISTANT_STATUS = "homeassistant/status";
 
 }

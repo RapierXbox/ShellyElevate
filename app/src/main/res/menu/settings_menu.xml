@@ -9,6 +9,12 @@
         app:showAsAction="ifRoom" />
 
     <item
+        android:id="@+id/action_restart"
+        android:icon="@drawable/ic_restart"
+        android:title="@string/reboot"
+        app:showAsAction="ifRoom" />
+
+    <item
         android:id="@+id/action_exit"
         android:icon="@drawable/ic_exit"
         android:title="@string/exit"
