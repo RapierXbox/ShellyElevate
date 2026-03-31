@@ -70,6 +70,16 @@
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/trustUserCaCerts"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="24dp"
+                android:text="@string/trust_user_ca_certs"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switchOnSwipe"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

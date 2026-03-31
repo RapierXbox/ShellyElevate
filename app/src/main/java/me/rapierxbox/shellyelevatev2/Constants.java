@@ -19,6 +19,7 @@ public class Constants {
     public static final String SP_WEBVIEW_URL = "webviewUrl";
     public static final String SP_DEPRECATED_HA_IP = "homeAssistantIp";
     public static final String SP_IGNORE_SSL_ERRORS = "ignoreSslErrors";
+    public static final String SP_TRUST_USER_CA_CERTS = "trustUserCaCerts";
 
     //Screen SP Keys
     public static final String SP_AUTOMATIC_BRIGHTNESS = "automaticBrightness";

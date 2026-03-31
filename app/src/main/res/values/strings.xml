@@ -41,4 +41,5 @@
     <string name="B_exit">Exit</string>
     <string name="wake_on_proximity">Wake on Proximity</string>
     <string name="ignore_ssl_errors">Ignore SSL Errors</string>
+    <string name="trust_user_ca_certs">Trust user/private CA certificates</string>
 </resources>

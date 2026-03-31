@@ -29,6 +29,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE
 import me.rapierxbox.shellyelevatev2.Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE
 import me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
+import me.rapierxbox.shellyelevatev2.Constants.SP_TRUST_USER_CA_CERTS
 import me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE
 import me.rapierxbox.shellyelevatev2.Constants.SP_MIN_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_BROKER
@@ -127,6 +128,7 @@ class SettingsFragment : Fragment() {
         //WebView
         binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
         binding.ignoreSslErrors.isChecked = mSharedPreferences.getBoolean(SP_IGNORE_SSL_ERRORS, false)
+        binding.trustUserCaCerts.isChecked = mSharedPreferences.getBoolean(SP_TRUST_USER_CA_CERTS, false)
         binding.extendedJavascriptInterface.isChecked = mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
 
         //MQTT
@@ -275,6 +277,7 @@ class SettingsFragment : Fragment() {
             putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
             putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
             putBoolean(SP_IGNORE_SSL_ERRORS, binding.ignoreSslErrors.isChecked)
+            putBoolean(SP_TRUST_USER_CA_CERTS, binding.trustUserCaCerts.isChecked)
 
             //MQTT
             putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)

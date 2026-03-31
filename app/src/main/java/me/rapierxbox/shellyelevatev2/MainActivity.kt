@@ -19,6 +19,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
+import me.rapierxbox.shellyelevatev2.Constants.SP_TRUST_USER_CA_CERTS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SETTINGS_EVER_SHOWN
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
@@ -102,10 +103,20 @@ class MainActivity : ComponentActivity() {
                     handler: SslErrorHandler?,
                     error: SslError?
                 ) {
-                    if (mSharedPreferences.getBoolean(SP_IGNORE_SSL_ERRORS, false)) {
-                        handler?.proceed()
-                    } else {
-                        super.onReceivedSslError(view, handler, error)
+                    when {
+                        mSharedPreferences.getBoolean(SP_IGNORE_SSL_ERRORS, false) -> {
+                            // User opted in to bypass all SSL errors (insecure fallback).
+                            handler?.proceed()
+                        }
+                        mSharedPreferences.getBoolean(SP_TRUST_USER_CA_CERTS, false)
+                                && error?.primaryError == SslError.SSL_UNTRUSTED -> {
+                            // Allow certificates signed by a private or user-installed CA
+                            // (e.g. self-hosted HA with a local CA) while still blocking
+                            // expired certs, hostname mismatches, and other real errors.
+                            // Fixes issue #32.
+                            handler?.proceed()
+                        }
+                        else -> super.onReceivedSslError(view, handler, error)
                     }
                 }
             }
