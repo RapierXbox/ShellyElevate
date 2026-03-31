@@ -134,9 +134,15 @@ class MainActivity : ComponentActivity() {
         setupSettingsButtons()
 
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
+            // Capture screensaver state BEFORE processing the touch so that the first
+            // tap (which wakes the screen) is not also forwarded to the WebView as a
+            // UI interaction. Fixes issue #37 (hopefully).
+            val screenSaverWasRunning = mScreenSaverManager.isScreenSaverRunning()
             mSwipeHelper.onTouchEvent(event)
             mScreenSaverManager.onTouchEvent(event)
-            binding.myWebView.onTouchEvent(event)
+            if (!screenSaverWasRunning) {
+                binding.myWebView.onTouchEvent(event)
+            }
 
             return@setOnTouchListener true
         }
