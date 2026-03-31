@@ -16,6 +16,7 @@ import java.io.IOException;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
+import me.rapierxbox.shellyelevatev2.helper.ScreenManager;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
@@ -30,6 +31,7 @@ public class ShellyElevateApplication extends Application {
     public static MQTTServer mMQTTServer;
     public static MediaHelper mMediaHelper;
     public static ScreenSaverManager mScreenSaverManager;
+    public static ScreenManager mScreenManager;
 
     public static Context mApplicationContext;
     public static SharedPreferences mSharedPreferences;
@@ -48,23 +50,11 @@ public class ShellyElevateApplication extends Application {
         Log.i("ShellyElevateApplication", "Device: " + mSharedPreferences.getString(SP_DEVICE, "unconfigured"));
 
         mDeviceHelper = new DeviceHelper();
-        mScreenSaverManager = new ScreenSaverManager();
+        mScreenSaverManager = new ScreenSaverManager(this);
+        mScreenManager = new ScreenManager(this);
 
         // Sensors Init
-        mDeviceSensorManager = new DeviceSensorManager();
-        SensorManager sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
-        Sensor lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
-        sensorManager.registerListener(mDeviceSensorManager, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
-
-        DeviceModel device = DeviceModel.getDevice(mSharedPreferences);
-
-        if (device.hasProximitySensor) {
-            Sensor proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
-            Log.d("ShellyElevateApplication", "Default proximity sensor: " + proximitySensor);
-            sensorManager.registerListener(mDeviceSensorManager, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
-            Log.i("ShellyElevateApplication", "Registered proximity sensor for DeviceSensorHelper");
-        }
-
+        mDeviceSensorManager = new DeviceSensorManager(this);
 
         mSwipeHelper = new SwipeHelper();
         mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
@@ -92,12 +82,12 @@ public class ShellyElevateApplication extends Application {
     @Override
     public void onTerminate() {
         mHttpServer.onDestroy();
-        ((SensorManager) getSystemService(Context.SENSOR_SERVICE)).unregisterListener(mDeviceSensorManager);
-        mScreenSaverManager.onDestroy();
+        mDeviceSensorManager.onDestroy();
+        mScreenSaverManager.onDestroy(this);
+        mScreenManager.setScreenOn(true);
+
         mMQTTServer.onDestroy();
         mMediaHelper.onDestroy();
-
-        mDeviceHelper.setScreenOn(true);
 
         Log.i("ShellyElevateV2", "BYEEEEEEEEEEEEEEEEEEEE :)");
 
