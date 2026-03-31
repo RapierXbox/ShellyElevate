@@ -16,7 +16,6 @@ import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_STATUS;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_SWIPE_EVENT;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_TEMP_SENSOR;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_WAKE_BUTTON;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_BROKER;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_DEVICE_ID;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_ENABLED;
@@ -79,6 +78,9 @@ public class MQTTServer {
 
         scheduler = Executors.newScheduledThreadPool(1);
         scheduler.scheduleWithFixedDelay(this::publishTempAndHum, 0, 5, TimeUnit.SECONDS);
+        // Retry the initial connection every 10 s after a 15 s delay to handle devices
+        // where the network stack isn't ready at app startup (issue #40).
+        scheduler.scheduleWithFixedDelay(this::retryConnection, 15, 10, TimeUnit.SECONDS);
 
         connected = false;
 
@@ -109,7 +111,6 @@ public class MQTTServer {
                 deleteConfig();
                 mMqttClient.publish(parseTopic(MQTT_TOPIC_STATUS), "offline".getBytes(), 1, true);
                 mMqttClient.disconnect();
-
                 connected = false;
             } catch (MqttException e) {
                 Log.e("MQTT", "Error disconnecting MQTT client", e);
@@ -118,45 +119,90 @@ public class MQTTServer {
     }
 
     public void connect() {
-        if (validForConnection) {
-            try {
-                mMqttConnectionsOptions.setUserName(mSharedPreferences.getString(SP_MQTT_USERNAME, ""));
-                mMqttConnectionsOptions.setPassword(mSharedPreferences.getString(SP_MQTT_PASSWORD, "").getBytes());
-                mMqttConnectionsOptions.setAutomaticReconnect(true);
+        if (!validForConnection) return;
 
-                if (connected) {
-                    disconnect();
-                }
+        // Establish the TCP + MQTT connection first.
+        try {
+            mMqttConnectionsOptions.setUserName(mSharedPreferences.getString(SP_MQTT_USERNAME, ""));
+            mMqttConnectionsOptions.setPassword(mSharedPreferences.getString(SP_MQTT_PASSWORD, "").getBytes());
+            mMqttConnectionsOptions.setAutomaticReconnect(true);
 
-                mMqttClient = new MqttClient(mSharedPreferences.getString(SP_MQTT_BROKER, "") + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883), clientId, mMemoryPersistence);
-                mMqttClient.setCallback(mShellyElevateMQTTCallback);
-                mMqttClient.connect(mMqttConnectionsOptions);
-
-                publishConfig();
-
-                mMqttClient.publish(parseTopic(MQTT_TOPIC_STATUS), "online".getBytes(), 1, true);
-
-                mMqttClient.subscribe("shellyelevatev2/#", 0);
-                mMqttClient.subscribe("shellyelevatev2/#", 1);
-                mMqttClient.subscribe("shellyelevatev2/#", 2);
-
-                mMqttClient.subscribe(MQTT_TOPIC_HOME_ASSISTANT_STATUS, 0);
-                mMqttClient.subscribe(MQTT_TOPIC_HOME_ASSISTANT_STATUS, 1);
-                mMqttClient.subscribe(MQTT_TOPIC_HOME_ASSISTANT_STATUS, 2);
-
-                connected = true;
-
-                publishTempAndHum();
-                publishRelay(mDeviceHelper.getRelay());
-                publishLux(mDeviceSensorManager.getLastMeasuredLux());
-                if (DeviceModel.getDevice(mSharedPreferences).hasProximitySensor) {
-                    publishProximity(mDeviceSensorManager.getLastMeasuredDistance());
-                }
-                publishSleeping(mScreenSaverManager.isScreenSaverRunning());
-
-            } catch (MqttException | JSONException e) {
-                Log.e("MQTT", "Error connecting:", e);
+            if (connected) {
+                disconnect();
             }
+
+            mMqttClient = new MqttClient(
+                    mSharedPreferences.getString(SP_MQTT_BROKER, "") + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883),
+                    clientId, mMemoryPersistence);
+            mMqttClient.setCallback(mShellyElevateMQTTCallback);
+            mMqttClient.connect(mMqttConnectionsOptions);
+            connected = true;
+        } catch (MqttException e) {
+            Log.e("MQTT", "Error connecting:", e);
+            connected = false;
+            return;
+        }
+
+        // Post-connect: subscribe to topics and publish current state.
+        // Kept separate so a publish/subscribe failure doesn't mask a real
+        // connection error and doesn't reset the connected flag.
+        try {
+            subscribeAndPublishState();
+        } catch (MqttException | JSONException e) {
+            Log.e("MQTT", "Error publishing initial state after connect:", e);
+        }
+    }
+
+    /**
+     * Subscribes to all required topics and publishes the full device state.
+     * Called after both initial connects and automatic reconnects (issue #35).
+     * Public so ShellyElevateMQTTCallback can call it after a Paho reconnect.
+     */
+    public void subscribeAndPublishState() throws MqttException, JSONException {
+        publishConfig();
+        mMqttClient.publish(parseTopic(MQTT_TOPIC_STATUS), "online".getBytes(), 1, true);
+
+        // Subscribe once at QoS 1. The previous code subscribed the same topic
+        // three times (QoS 0, 1, 2) which caused every message to be delivered
+        // up to three times (issue #35).
+        mMqttClient.subscribe("shellyelevatev2/#", 1);
+        mMqttClient.subscribe(MQTT_TOPIC_HOME_ASSISTANT_STATUS, 1);
+
+        publishTempAndHum();
+        publishRelay(mDeviceHelper.getRelay());
+        publishLux(mDeviceSensorManager.getLastMeasuredLux());
+        if (DeviceModel.getDevice(mSharedPreferences).hasProximitySensor) {
+            publishProximity(mDeviceSensorManager.getLastMeasuredDistance());
+        }
+        publishSleeping(mScreenSaverManager.isScreenSaverRunning());
+    }
+
+    /**
+     * Called by ShellyElevateMQTTCallback when Paho completes an automatic
+     * reconnect. Re-subscribes to topics and refreshes state in HA (issue #35).
+     */
+    public void onReconnected() {
+        try {
+            subscribeAndPublishState();
+        } catch (MqttException | JSONException e) {
+            Log.e("MQTT", "Error re-subscribing after reconnect:", e);
+        }
+    }
+
+    /** Lets the MQTT callback keep the connected flag in sync. */
+    public void setConnected(boolean connected) {
+        this.connected = connected;
+    }
+
+    /**
+     * Retries the MQTT connection if not currently connected. Called on a
+     * fixed schedule so devices that boot before the network is up will
+     * eventually connect without manual intervention (issue #40).
+     */
+    private void retryConnection() {
+        if (!connected && validForConnection) {
+            Log.i("MQTT", "Network not ready at startup, retrying connection...");
+            connect();
         }
     }
 
@@ -345,7 +391,6 @@ public class MQTTServer {
         components.put(clientId + "_sleeping", sleepingBinarySensorPayload);
 
         configPayload.put("cmps", components);
-
         configPayload.put("state_topic", MQTT_TOPIC_STATUS);
 
         mMqttClient.publish(parseTopic(MQTT_TOPIC_CONFIG_DEVICE), configPayload.toString().getBytes(), 1, true);

@@ -28,6 +28,9 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
     @Override
     public void disconnected(MqttDisconnectResponse disconnectResponse) {
         Log.i("MQTT", "Disconnected");
+        // Keep the connected flag accurate so shouldSend() returns false until
+        // Paho reconnects and connectComplete fires (issue #35).
+        mMQTTServer.setConnected(false);
         Toast.makeText(mApplicationContext, "MQTT disconnected", Toast.LENGTH_SHORT).show();
     }
 
@@ -76,6 +79,14 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
     @Override
     public void connectComplete(boolean reconnect, String serverURI) {
         Log.i("MQTT", "Connected to: " + serverURI);
+        if (reconnect) {
+            // A clean-session reconnect drops all broker-side subscriptions, so we
+            // must re-subscribe and republish the HA discovery config + device state.
+            // The connected flag must be set first so shouldSend() returns true
+            // for the publish calls inside onReconnected() (issue #35).
+            mMQTTServer.setConnected(true);
+            mMQTTServer.onReconnected();
+        }
     }
 
     @Override
