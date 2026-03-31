@@ -1,6 +1,5 @@
 package me.rapierxbox.shellyelevatev2.mqtt;
 
-import static me.rapierxbox.shellyelevatev2.Constants.DEVICE_STARGATE;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_CONFIG_DEVICE;
 import static me.rapierxbox.shellyelevatev2.Constants.MQTT_TOPIC_HOME_ASSISTANT_STATUS;
@@ -24,7 +23,6 @@ import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_ENABLED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_PASSWORD;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_PORT;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_USERNAME;
-import static me.rapierxbox.shellyelevatev2.Constants.hasProximitySensor;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
@@ -51,6 +49,8 @@ import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+
+import me.rapierxbox.shellyelevatev2.DeviceModel;
 
 public class MQTTServer {
     private MqttClient mMqttClient;
@@ -149,7 +149,7 @@ public class MQTTServer {
                 publishTempAndHum();
                 publishRelay(mDeviceHelper.getRelay());
                 publishLux(mDeviceSensorManager.getLastMeasuredLux());
-                if (Boolean.TRUE.equals(hasProximitySensor.get(mSharedPreferences.getString(SP_DEVICE, DEVICE_STARGATE)))) {
+                if (DeviceModel.getDevice(mSharedPreferences).hasProximitySensor) {
                     publishProximity(mDeviceSensorManager.getLastMeasuredDistance());
                 }
                 publishSleeping(mScreenSaverManager.isScreenSaverRunning());
@@ -278,7 +278,7 @@ public class MQTTServer {
         luxSensorPayload.put("unique_id", clientId + "_lux");
         components.put(clientId + "_lux", luxSensorPayload);
 
-        if (Boolean.TRUE.equals(hasProximitySensor.get(mSharedPreferences.getString(SP_DEVICE, DEVICE_STARGATE)))) {
+        if (DeviceModel.getDevice(mSharedPreferences).hasProximitySensor) {
             JSONObject proximitySensorPayload = new JSONObject();
             proximitySensorPayload.put("p", "sensor");
             proximitySensorPayload.put("name", "Proximity");

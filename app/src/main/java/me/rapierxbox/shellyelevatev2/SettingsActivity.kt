@@ -15,9 +15,6 @@ import androidx.core.content.edit
 import androidx.core.view.isVisible
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import com.google.android.material.slider.Slider
-import me.rapierxbox.shellyelevatev2.Constants.DEVICE_ATLANTIS
-import me.rapierxbox.shellyelevatev2.Constants.DEVICE_PEGASUS
-import me.rapierxbox.shellyelevatev2.Constants.DEVICE_STARGATE
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED
 import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS
@@ -39,7 +36,6 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID
 import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
 import me.rapierxbox.shellyelevatev2.Constants.SP_WAKE_ON_PROXIMITY
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
-import me.rapierxbox.shellyelevatev2.Constants.hasProximitySensor
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -56,8 +52,11 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var binding: SettingsActivityBinding // Declare the binding object
 
     private fun loadValues() {
+
+        val device = DeviceModel.getDevice(mSharedPreferences)
+
         for (i in 0 until binding.deviceTypeSpinner.adapter.count) {
-            if (binding.deviceTypeSpinner.adapter.getItem(i) == mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS)) {
+            if (binding.deviceTypeSpinner.adapter.getItem(i) == device) {
                 binding.deviceTypeSpinner.setSelection(i)
             }
         }
@@ -87,8 +86,7 @@ class SettingsActivity : AppCompatActivity() {
 
         binding.screenSaverDelayLayout.isVisible = binding.screenSaver.isChecked
         binding.screenSaverTypeLayout.isVisible = binding.screenSaver.isChecked
-        binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked
-                && hasProximitySensor[mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS)] == true
+        binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked && device.hasProximitySensor
 
         binding.brightnessSettingLayout.isVisible = !binding.automaticBrightness.isChecked
         binding.minBrightnessLayout.isVisible = binding.automaticBrightness.isChecked
@@ -122,20 +120,13 @@ class SettingsActivity : AppCompatActivity() {
         }
 
         binding.screenSaverType.adapter = mScreenSaverManager.screenSaverSpinnerAdapter
-        binding.deviceTypeSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item,
-            listOf(
-                DEVICE_STARGATE,
-                DEVICE_ATLANTIS,
-                DEVICE_PEGASUS
-            )).apply{
-            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        }
+        binding.deviceTypeSpinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, DeviceModel.entries).apply{ setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item) }
 
         loadValues()
 
         binding.deviceTypeSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>, view: View?, position: Int, id: Long) {
-                binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked && hasProximitySensor[mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS)] == true
+                binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked && (parent.adapter.getItem(position) as DeviceModel).hasProximitySensor
             }
 
             override fun onNothingSelected(AdapterView: AdapterView<*>?) {
@@ -230,8 +221,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun saveSettings() {
         getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).edit {
+
+            val selectedDevice = binding.deviceTypeSpinner.selectedItem as DeviceModel
             // device
-            putString(SP_DEVICE, binding.deviceTypeSpinner.selectedItem.toString())
+            putString(SP_DEVICE, selectedDevice.modelName)
 
             //Functional mode
             putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
@@ -260,8 +253,7 @@ class SettingsActivity : AppCompatActivity() {
             putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked)
             putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
             putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
-            putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked
-                    && hasProximitySensor[mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS)] == true)
+            putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked && selectedDevice.hasProximitySensor)
 
             //Http Server
             putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)

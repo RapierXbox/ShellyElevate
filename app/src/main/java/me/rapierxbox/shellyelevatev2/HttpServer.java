@@ -1,11 +1,9 @@
 package me.rapierxbox.shellyelevatev2;
 
-import static me.rapierxbox.shellyelevatev2.Constants.DEVICE_STARGATE;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
-import static me.rapierxbox.shellyelevatev2.Constants.hasProximitySensor;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
@@ -231,6 +229,8 @@ public class HttpServer extends NanoHTTPD {
         String uri = session.getUri();
         JSONObject jsonResponse = new JSONObject();
 
+        DeviceModel device = DeviceModel.getDevice(mSharedPreferences);
+
         switch (uri.replace("/device/", "")) {
             case "relay":
                 if (method.equals(Method.GET)) {
@@ -280,7 +280,8 @@ public class HttpServer extends NanoHTTPD {
                 break;
             case "getProximity":
                 if (method.equals(Method.GET)) {
-                    if (Boolean.TRUE.equals(hasProximitySensor.get(mSharedPreferences.getString(SP_DEVICE, DEVICE_STARGATE)))) {
+
+                    if (device.hasProximitySensor) {
                         jsonResponse.put("success", true);
                         jsonResponse.put("distance", mDeviceSensorManager.getLastMeasuredDistance());
                     } else {

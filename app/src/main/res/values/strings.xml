@@ -21,7 +21,7 @@
     <string name="http_server_running">Running</string>
     <string name="http_server_not_running">Not running</string>
     <string name="settings_saved">Settings saved</string>
-    <string name="delay_must_be_bigger_then_5s">Delay must be bigger then 5s</string>
+    <string name="delay_must_be_bigger_then_5s">Delay must be longer than 5s</string>
     <string name="settings">Settings</string>
     <string name="broker_port">Broker port</string>
     <string name="username">Username</string>

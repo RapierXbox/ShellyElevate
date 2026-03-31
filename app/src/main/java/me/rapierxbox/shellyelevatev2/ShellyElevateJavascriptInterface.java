@@ -11,7 +11,7 @@ import android.webkit.JavascriptInterface;
 
 public class ShellyElevateJavascriptInterface {
     @JavascriptInterface
-    public String getDevice() {return mSharedPreferences.getString(SP_DEVICE, DEVICE_ATLANTIS);}
+    public String getDevice() {return DeviceModel.getDevice(mSharedPreferences).modelName;}
     @JavascriptInterface
     public boolean getRelay() {return mDeviceHelper.getRelay();}
     @JavascriptInterface
