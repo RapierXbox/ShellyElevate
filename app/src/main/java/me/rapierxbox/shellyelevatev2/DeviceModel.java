@@ -5,6 +5,7 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 
 import java.util.Arrays;
+import java.util.Locale;
 
 public enum DeviceModel {
     //V1
@@ -42,7 +43,29 @@ public enum DeviceModel {
     }
 
     public static DeviceModel getReportedDevice(){
-        return Arrays.stream(DeviceModel.values()).filter(deviceType -> deviceType.model.equals(Build.MODEL)).findFirst().orElse(DeviceModel.STARGATE);
+        final String reportedModel = normalize(Build.MODEL);
+        final String reportedDevice = normalize(Build.DEVICE);
+        final String reportedProduct = normalize(Build.PRODUCT);
+
+        return Arrays.stream(DeviceModel.values())
+                .filter(deviceType -> matches(deviceType, reportedModel, reportedDevice, reportedProduct))
+                .findFirst()
+                .orElse(DeviceModel.STARGATE);
+    }
+
+    private static boolean matches(DeviceModel deviceType, String reportedModel, String reportedDevice, String reportedProduct) {
+        String enumModel = normalize(deviceType.model);
+        String enumModelName = normalize(deviceType.modelName);
+
+        return enumModel.equals(reportedModel)
+                || enumModelName.equals(reportedModel)
+                || (!reportedDevice.isEmpty() && enumModelName.equals(reportedDevice))
+                || (!reportedProduct.isEmpty() && enumModelName.equals(reportedProduct));
+    }
+
+    private static String normalize(String value) {
+        if (value == null) return "";
+        return value.trim().toLowerCase(Locale.ROOT);
     }
 
     @NonNull
