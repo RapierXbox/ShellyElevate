@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.util.Log
 import android.view.LayoutInflater
@@ -45,6 +47,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_POWER_BUTTON_AUTO_REBOOT
 import me.rapierxbox.shellyelevatev2.Constants.SP_WAKE_ON_PROXIMITY
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -64,9 +67,17 @@ class SettingsFragment : Fragment() {
     private var _binding: SettingsFragmentBinding? = null
     private val binding get() = _binding!!
     private var savedBrightness = DEFAULT_BRIGHTNESS // Store previous brightness to restore on exit
+    private val sensorStatusHandler = Handler(Looper.getMainLooper())
+    private val sensorStatusRunnable = object : Runnable {
+        override fun run() {
+            updateSensorStatus()
+            sensorStatusHandler.postDelayed(this, 1000)
+        }
+    }
 
     override fun onDestroyView() {
         super.onDestroyView()
+        sensorStatusHandler.removeCallbacks(sensorStatusRunnable)
         // Restore previous brightness when leaving settings
         mDeviceHelper?.setScreenBrightness(savedBrightness)
         _binding = null
@@ -122,6 +133,20 @@ class SettingsFragment : Fragment() {
         binding.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
         loadValues()
         setupListeners()
+        sensorStatusHandler.post(sensorStatusRunnable)
+    }
+
+    private fun updateSensorStatus() {
+        val sensorManager = mDeviceSensorManager
+        val proximityAvailable = sensorManager?.isProximitySensorAvailable() == true
+        val proximityAvailableText = if (proximityAvailable) getString(R.string.sensor_available_yes) else getString(R.string.sensor_available_no)
+        binding.proximitySensorAvailability.text = getString(R.string.proximity_sensor_available, proximityAvailableText)
+
+        val proximityValue = sensorManager?.lastMeasuredDistance ?: 0f
+        binding.proximitySensorValue.text = getString(R.string.proximity_sensor_value, proximityValue)
+
+        val lightValue = sensorManager?.lastMeasuredLux ?: 0f
+        binding.lightSensorValue.text = getString(R.string.light_sensor_value, lightValue)
     }
 
     private fun loadValues() {

@@ -212,6 +212,41 @@
                 android:textSize="18sp"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
+
+            <LinearLayout
+                android:id="@+id/sensorStatusLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/proximitySensorAvailability"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/proximity_sensor_available_default"
+                    android:textSize="18sp"
+                    tools:text="Proximity sensor available to app: Yes" />
+
+                <TextView
+                    android:id="@+id/proximitySensorValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/proximity_sensor_value_default"
+                    android:textSize="18sp"
+                    tools:text="Proximity sensor current value: 0.00" />
+
+                <TextView
+                    android:id="@+id/lightSensorValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/light_sensor_value_default"
+                    android:textSize="18sp"
+                    tools:text="Light sensor current value: 4.21 lx" />
+            </LinearLayout>
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/httpServerEnabled"
                 android:layout_width="match_parent"

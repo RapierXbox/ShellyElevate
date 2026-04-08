@@ -46,6 +46,8 @@ public class DeviceSensorManager implements SensorEventListener {
     private long lastInvalidProximityLogAtMs = 0L;
 
     private final Context context;
+    private final boolean lightSensorAvailable;
+    private final boolean proximitySensorAvailable;
 
     public DeviceSensorManager(Context ctx) {
         context = ctx;
@@ -60,18 +62,24 @@ public class DeviceSensorManager implements SensorEventListener {
 
         // light sensor
         Sensor lightSensor = sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT);
-        sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        lightSensorAvailable = lightSensor != null;
+        if (lightSensorAvailable) {
+            sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        }
 
         // proximity sensor
         Log.d(TAG, "Has proximity sensor: " + device.hasProximitySensor);
+        boolean proxAvailable = false;
         if (device.hasProximitySensor) {
             Sensor proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
             if (proximitySensor != null) {
                 maxProximitySensorValue = proximitySensor.getMaximumRange();
                 Log.d(TAG, "Default proximity sensor: " + proximitySensor + " - Max: " + maxProximitySensorValue);
                 sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
+                proxAvailable = true;
             }
         }
+        proximitySensorAvailable = proxAvailable;
     }
 
     public float getLastMeasuredLux() {
@@ -83,6 +91,14 @@ public class DeviceSensorManager implements SensorEventListener {
 
     private float maxProximitySensorValue = 1.0f;
     public float getMaxProximitySensorValue() { return maxProximitySensorValue;}
+
+    public boolean isLightSensorAvailable() {
+        return lightSensorAvailable;
+    }
+
+    public boolean isProximitySensorAvailable() {
+        return proximitySensorAvailable;
+    }
 
     @Override
     public void onSensorChanged(SensorEvent event) {
