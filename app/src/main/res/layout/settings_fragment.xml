@@ -212,6 +212,33 @@
                 android:textSize="18sp"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
+            <LinearLayout
+                android:id="@+id/proximityKeepAwakeLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/proximity_keep_awake_seconds"
+                    android:textSize="18sp" />
+
+                <EditText
+                    android:id="@+id/proximityKeepAwakeSeconds"
+                    android:layout_width="70dp"
+                    android:layout_height="wrap_content"
+                    android:ems="3"
+                    android:gravity="end"
+                    android:hint="@string/proximity_keep_awake_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="number"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
 
             <LinearLayout
                 android:id="@+id/sensorStatusLayout"
@@ -237,6 +264,15 @@
                     android:text="@string/proximity_sensor_value_default"
                     android:textSize="18sp"
                     tools:text="Proximity sensor current value: 0.00" />
+
+                <TextView
+                    android:id="@+id/proximitySensorState"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/proximity_sensor_state_default"
+                    android:textSize="18sp"
+                    tools:text="Proximity sensor state: FAR" />
 
                 <TextView
                     android:id="@+id/lightSensorValue"

@@ -44,6 +44,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID
 import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_MIN_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
 import me.rapierxbox.shellyelevatev2.Constants.SP_POWER_BUTTON_AUTO_REBOOT
+import me.rapierxbox.shellyelevatev2.Constants.SP_PROXIMITY_KEEP_AWAKE_SECONDS
 import me.rapierxbox.shellyelevatev2.Constants.SP_WAKE_ON_PROXIMITY
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
@@ -67,6 +68,7 @@ class SettingsFragment : Fragment() {
     private var _binding: SettingsFragmentBinding? = null
     private val binding get() = _binding!!
     private var savedBrightness = DEFAULT_BRIGHTNESS // Store previous brightness to restore on exit
+    private var hasProximitySensor = false
     private val sensorStatusHandler = Handler(Looper.getMainLooper())
     private val sensorStatusRunnable = object : Runnable {
         override fun run() {
@@ -144,6 +146,15 @@ class SettingsFragment : Fragment() {
 
         val proximityValue = sensorManager?.lastMeasuredDistance ?: 0f
         binding.proximitySensorValue.text = getString(R.string.proximity_sensor_value, proximityValue)
+        val maxProximity = sensorManager?.maxProximitySensorValue ?: 1f
+        val threshold = if (maxProximity <= 1.5f) 0.5f else maxOf(0.5f, maxProximity * 0.1f)
+        val isNear = proximityAvailable && proximityValue < (maxProximity - threshold)
+        val proximityState = when {
+            !proximityAvailable -> getString(R.string.proximity_state_unavailable)
+            isNear -> getString(R.string.proximity_state_near)
+            else -> getString(R.string.proximity_state_far)
+        }
+        binding.proximitySensorState.text = getString(R.string.proximity_sensor_state, proximityState)
 
         val lightValue = sensorManager?.lastMeasuredLux ?: 0f
         binding.lightSensorValue.text = getString(R.string.light_sensor_value, lightValue)
@@ -151,6 +162,7 @@ class SettingsFragment : Fragment() {
 
     private fun loadValues() {
         val device = DeviceModel.getReportedDevice()
+        hasProximitySensor = device.hasProximitySensor
 
         //Functional mode
         binding.liteMode.isChecked = mSharedPreferences.getBoolean(SP_LITE_MODE, false)
@@ -189,6 +201,7 @@ class SettingsFragment : Fragment() {
         binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
         binding.screenSaverType.setSelection(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0))
         binding.wakeOnProximity.isChecked = mSharedPreferences.getBoolean(SP_WAKE_ON_PROXIMITY, true)
+        binding.proximityKeepAwakeSeconds.setText(mSharedPreferences.getInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS).toString())
         binding.screensaverMinBrightness.value = mSharedPreferences.getInt(SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT).toFloat()
 
         //Http Server
@@ -200,7 +213,8 @@ class SettingsFragment : Fragment() {
         //ScreenSaver
         binding.screenSaverDelayLayout.isVisible = binding.screenSaver.isChecked
         binding.screenSaverTypeLayout.isVisible = binding.screenSaver.isChecked
-        binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked && device.hasProximitySensor
+        binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked && hasProximitySensor
+        binding.proximityKeepAwakeLayout.isVisible = binding.screenSaver.isChecked && hasProximitySensor
         binding.minBrightnessScreenSaverLayout.isVisible = binding.screenSaver.isChecked
 
         //Brightness management
@@ -252,7 +266,8 @@ class SettingsFragment : Fragment() {
         binding.screenSaver.setOnCheckedChangeListener { _, isChecked ->
             binding.screenSaverDelayLayout.isVisible = isChecked
             binding.screenSaverTypeLayout.isVisible = isChecked
-            binding.wakeOnProximity.isVisible = isChecked
+            binding.wakeOnProximity.isVisible = isChecked && hasProximitySensor
+            binding.proximityKeepAwakeLayout.isVisible = isChecked && hasProximitySensor
             binding.minBrightnessScreenSaverLayout.isVisible = isChecked
         }
 
@@ -265,6 +280,17 @@ class SettingsFragment : Fragment() {
             }
 
             return@setOnEditorActionListener false
+        }
+
+        binding.proximityKeepAwakeSeconds.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                val keepAwakeSeconds = binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull() ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS
+                if (keepAwakeSeconds < 0) {
+                    binding.proximityKeepAwakeSeconds.setText(PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS.toString())
+                    Toast.makeText(requireContext(), R.string.proximity_keep_awake_minimum, Toast.LENGTH_SHORT).show()
+                }
+            }
+            false
         }
 
         binding.mqttEnabled.setOnCheckedChangeListener { _, isChecked ->
@@ -333,6 +359,8 @@ class SettingsFragment : Fragment() {
             putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
             putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
             putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked && device.hasProximitySensor)
+            putInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, (binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull()
+                ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS).coerceAtLeast(0))
             putInt(SP_SCREEN_SAVER_MIN_BRIGHTNESS, binding.screensaverMinBrightness.value.toInt())
 
             //Http Server
@@ -367,6 +395,7 @@ class SettingsFragment : Fragment() {
 
     companion object {
         const val SCREEN_SAVER_DEFAULT_DELAY = 45
+        const val PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS = 30
         const val MQTT_DEFAULT_PORT = 1883
     }
 }
