@@ -45,11 +45,12 @@ jobs:
       - name: Extract version from gradle
         id: version
         run: |
-          VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP 'v\d+\.\d+\.\d+|\d+\.\d+') | head -1
+          VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP 'v\d+\.\d+\.\d+\.\d+|\d+\.\d+\.\d+') | head -1
           if [ -z "$VERSION" ]; then
             # Generate version if extraction fails
             DATE=$(date +%y%j)
-            VERSION="3.${DATE}"
+            TIME=$(date +%H%M)
+            VERSION="3.${DATE}.${TIME}"
           fi
           echo "name=v${VERSION}" >> "$GITHUB_OUTPUT"
 

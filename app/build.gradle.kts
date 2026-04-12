@@ -1,4 +1,4 @@
-import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
 
@@ -7,20 +7,21 @@ plugins {
     alias(libs.plugins.jetbrains.kotlin.android)
 }
 
-// Dynamic versioning: Major.YearDayOfYear (e.g., 3.26111)
+// Dynamic versioning: Major.YearDayOfYear.HourMinute (e.g., 3.26111.1430)
 fun generateVersionCode(): Int {
-    val now = LocalDate.now()
+    val now = LocalDateTime.now()
     val year = now.year % 100  // Last 2 digits of year
-    val dayOfYear = now.get(ChronoField.DAY_OF_YEAR)
+    val dayOfYear = now.dayOfYear
     // Format: 3YYDDD (e.g., 326111 for year 2026, day 111)
     return 3_00_000 + (year * 1000) + dayOfYear
 }
 
 fun generateVersionName(): String {
-    val now = LocalDate.now()
+    val now = LocalDateTime.now()
     val year = now.year % 100  // Last 2 digits of year
-    val dayOfYear = now.get(ChronoField.DAY_OF_YEAR)
-    return "3.${year}${dayOfYear.toString().padStart(3, '0')}"
+    val dayOfYear = now.dayOfYear
+    val hourMin = now.format(DateTimeFormatter.ofPattern("HHmm"))
+    return "3.${year}${dayOfYear.toString().padStart(3, '0')}.${hourMin}"
 }
 
 android {
