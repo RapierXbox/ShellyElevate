@@ -26,9 +26,10 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import me.rapierxbox.shellyelevatev2.DeviceModel;
+
 public class DeviceSensorManager implements SensorEventListener {
     private static final String TAG = "DeviceSensorManager";
-    private static final String PROXIMITY_EVENT_DEVICE = "/dev/input/event4";
     private static final String PROXIMITY_KEY_NEAR = "KEY_F5";
     private static final String PROXIMITY_KEY_FAR = "KEY_F6";
 
@@ -44,10 +45,11 @@ public class DeviceSensorManager implements SensorEventListener {
 
     private final Context context;
     private final boolean lightSensorAvailable;
-    private final boolean proximitySensorAvailable;
-    private boolean usingGpioKeysProximity = false;
+    private volatile boolean proximitySensorAvailable;
+    private volatile boolean usingGpioKeysProximity = false;
 
     private float maxProximitySensorValue = 1.0f;
+    private final String proximityEventDevice;
     private ExecutorService proximityFallbackExecutor;
     private volatile Process proximityFallbackProcess;
 
@@ -66,11 +68,14 @@ public class DeviceSensorManager implements SensorEventListener {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
 
+        // Resolve the gpio_keys event device path for this hardware model (null = use SensorManager)
+        proximityEventDevice = DeviceModel.getReportedDevice().getGpioProximityEventPath();
+
         // Try gpio_keys proximity first; fall back to SensorManager if unavailable
         usingGpioKeysProximity = startProximityKeyFallback();
         if (usingGpioKeysProximity) {
             maxProximitySensorValue = 1f;
-            Log.i(TAG, "Using gpio_keys proximity from " + PROXIMITY_EVENT_DEVICE);
+            Log.i(TAG, "Using gpio_keys proximity from " + proximityEventDevice);
             proximitySensorAvailable = true;
         } else {
             // Fallback to SensorManager proximity sensor
@@ -145,7 +150,10 @@ public class DeviceSensorManager implements SensorEventListener {
     }
 
     private boolean startProximityKeyFallback() {
-        File eventDevice = new File(PROXIMITY_EVENT_DEVICE);
+        if (proximityEventDevice == null) {
+            return false;
+        }
+        File eventDevice = new File(proximityEventDevice);
         if (!eventDevice.exists() || !eventDevice.canRead()) {
             return false;
         }
@@ -163,7 +171,7 @@ public class DeviceSensorManager implements SensorEventListener {
     private void runProximityKeyReader() {
         Process process = null;
         try {
-            process = new ProcessBuilder("getevent", "-l", PROXIMITY_EVENT_DEVICE)
+            process = new ProcessBuilder("getevent", "-l", proximityEventDevice)
                     .redirectErrorStream(true)
                     .start();
             proximityFallbackProcess = process;
@@ -176,6 +184,8 @@ public class DeviceSensorManager implements SensorEventListener {
             }
         } catch (IOException e) {
             Log.w(TAG, "Proximity key reader failed", e);
+            usingGpioKeysProximity = false;
+            proximitySensorAvailable = false;
         } finally {
             if (process != null) {
                 process.destroy();

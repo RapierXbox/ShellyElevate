@@ -175,7 +175,9 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        float maxProximitySensorValue = mDeviceSensorManager.getMaxProximitySensorValue();
+        float maxProximitySensorValue = mDeviceSensorManager != null
+                ? mDeviceSensorManager.getMaxProximitySensorValue()
+                : 5.0f;
         float proximity = intent.getFloatExtra(INTENT_PROXIMITY_KEY, maxProximitySensorValue);
         if (BuildConfig.DEBUG) Log.i(TAG, "Proximity event: " + proximity + " - Value: " + proximity);
 

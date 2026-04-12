@@ -68,6 +68,17 @@ public enum DeviceModel {
         return value.trim().toLowerCase(Locale.ROOT);
     }
 
+    /**
+     * Returns the /dev/input/event* device path used for gpio-based proximity events, or null
+     * if this model exposes proximity via the standard Android SensorManager.
+     */
+    public String getGpioProximityEventPath() {
+        switch (this) {
+            case JENNA: return "/dev/input/event4";
+            default: return null;
+        }
+    }
+
     @NonNull
     @Override
     public String toString() {
