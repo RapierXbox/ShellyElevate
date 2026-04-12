@@ -5,18 +5,24 @@ import static me.rapierxbox.shellyelevatev2.Constants.INTENT_TURN_SCREEN_ON;
 
 import android.content.Context;
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 public class ScreenOffScreenSaver extends ScreenSaver {
     @Override
     public void onStart(Context context) {
-        LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent(INTENT_TURN_SCREEN_OFF));
+        // Defer broadcast to avoid blocking saver start
+        new Handler(Looper.getMainLooper()).post(() ->
+            LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent(INTENT_TURN_SCREEN_OFF)));
     }
 
     @Override
     public void onEnd(Context context) {
-        LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent(INTENT_TURN_SCREEN_ON));
+        // Defer broadcast to avoid blocking saver stop
+        new Handler(Looper.getMainLooper()).post(() ->
+            LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent(INTENT_TURN_SCREEN_ON)));
     }
 
     @Override

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Offline</title>
+    <style>
+        body {
+            background-color: #121212;
+            color: #ffffff;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 2em;
+            margin-bottom: 0.5em;
+        }
+
+        p {
+            font-size: 1.2em;
+            margin-bottom: 2em;
+            color: #bbbbbb;
+        }
+
+        button {
+            background-color: #1f1f1f;
+            color: #ffffff;
+            border: 2px solid #ffffff;
+            padding: 10px 20px;
+            font-size: 1em;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        button:hover {
+            background-color: #333333;
+            border-color: #00bcd4;
+            color: #00bcd4;
+        }
+    </style>
+</head>
+<body>
+<h1>Connection Error</h1>
+<p>The page is not reachable. Check your network connection and try again.</p>
+<button id="retryBtn">Retry</button>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        console.log('Offline view loading');
+
+        const retryButton = document.getElementById('retryBtn');
+
+        function retry() {
+            window.location.href = 'shellyelevate:reload';
+        }
+
+        // Retry button click
+        retryButton.addEventListener('click', retry);
+
+        // Automatically retry when network is back
+        window.addEventListener('online', () => {
+            console.log('Network back, retrying...');
+            retry();
+        });
+
+        // Optional: show offline message when network lost
+        window.addEventListener('offline', () => {
+            console.log('Network offline');
+        });
+
+        // Fallback polling in case online event missed
+        setInterval(() => {
+            if (navigator.onLine) retry();
+        }, 15000);
+
+    });
+</script>
+</body>
+</html>

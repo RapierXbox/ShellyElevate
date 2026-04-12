@@ -4,6 +4,7 @@
     <!-- Sync Preferences -->
     <string name="findIPButtonText">Search for HA URL</string>
     <string name="switchOnSwipeText">Switch on swipe</string>
+    <string name="power_button_auto_reboot">Power Button Auto-Reboot (long press)</string>
     <string name="automaticBrightnessText">Automatic Brightness</string>
     <string name="ScreenSaverText">Screen Saver</string>
     <string name="http_server_status_default">Status:</string>
@@ -21,7 +22,7 @@
     <string name="http_server_running">Running</string>
     <string name="http_server_not_running">Not running</string>
     <string name="settings_saved">Settings saved</string>
-    <string name="delay_must_be_bigger_then_5s">Delay must be longer than 5s</string>
+    <string name="delay_must_be_bigger_then_5s">Delay must be bigger then 5s</string>
     <string name="settings">Settings</string>
     <string name="broker_port">Broker port</string>
     <string name="username">Username</string>
@@ -40,6 +41,25 @@
     <string name="reboot">Reboot</string>
     <string name="B_exit">Exit</string>
     <string name="wake_on_proximity">Wake on Proximity</string>
+    <string name="proximity_keep_awake_seconds">Keep awake after proximity (seconds)</string>
+    <string name="proximity_keep_awake_hint">30</string>
+    <string name="proximity_keep_awake_minimum">Keep awake time must be 0 seconds or more</string>
     <string name="ignore_ssl_errors">Ignore SSL Errors</string>
-    <string name="trust_user_ca_certs">Trust user/private CA certificates</string>
+    <string name="media_enabled">Media Enabled</string>
+    <string name="client_id">Client ID</string>
+    <string name="mqtt_client_id_hint">your custom client id</string>
+    <string name="mqtt_port_hint">1883</string>
+    <string name="proximity_sensor_available">Proximity sensor available to app: %1$s</string>
+    <string name="sensor_available_yes">Yes</string>
+    <string name="sensor_available_no">No</string>
+    <string name="proximity_sensor_available_default">Proximity sensor available to app:</string>
+    <string name="proximity_sensor_value">Proximity sensor current value: %1$.2f</string>
+    <string name="proximity_sensor_value_default">Proximity sensor current value:</string>
+    <string name="proximity_sensor_state">Proximity sensor state: %1$s</string>
+    <string name="proximity_sensor_state_default">Proximity sensor state:</string>
+    <string name="proximity_state_near">NEAR</string>
+    <string name="proximity_state_far">FAR</string>
+    <string name="proximity_state_unavailable">UNAVAILABLE</string>
+    <string name="light_sensor_value">Light sensor current value: %1$.2f lx</string>
+    <string name="light_sensor_value_default">Light sensor current value:</string>
 </resources>

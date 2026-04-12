@@ -16,3 +16,7 @@ local.properties
 app/build/*
 .kotlin/*
 .idea/*
+*.sqlite
+/.vs
+build.log
+/.tmp

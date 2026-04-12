@@ -1,0 +1,24 @@
+{
+  "name": "ShellyElevate Android",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "postCreateCommand": "bash .devcontainer/setup.sh",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-gradle",
+        "vscjava.vscode-java-pack",
+        "vscjava.vscode-maven",
+        "mathiasfrohlich.kotlin"
+      ]
+    }
+  },
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": {
+      "label": "HTTP Server",
+      "onAutoForward": "notify"
+    }
+  }
+}

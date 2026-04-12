@@ -2,8 +2,8 @@ package me.rapierxbox.shellyelevatev2;
 
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_MEDIA_ENABLED;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
@@ -15,6 +15,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.util.Log;
 import android.widget.Toast;
@@ -26,12 +28,14 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 
 import fi.iki.elonen.NanoHTTPD;
-
 public class HttpServer extends NanoHTTPD {
-    SettingsParser mSettingsParser = new SettingsParser();
+    final SettingsParser mSettingsParser = new SettingsParser();
 
     public HttpServer() {
         super(8080);
@@ -88,10 +92,31 @@ public class HttpServer extends NanoHTTPD {
                 }
                 return newFixedLengthResponse(Response.Status.OK, "application/json", jsonResponse.toString());
             } else if (uri.equals("/")) {
-                return newFixedLengthResponse(Response.Status.OK, "application/json",
-                        "{\"message\": \"ShellyElevateV2 by RapierXbox\"}");
+                JSONObject json = new JSONObject();
+
+                try {
+                    json.put("name", mApplicationContext.getPackageName());
+
+                    String version = "unknown";
+                    try {
+                        PackageInfo pInfo = mApplicationContext.getPackageManager()
+                                .getPackageInfo(mApplicationContext.getPackageName(), 0);
+                        version = pInfo.versionName;
+                    } catch (PackageManager.NameNotFoundException ignored) {}
+
+                    json.put("version", version);
+                    var device = DeviceModel.getReportedDevice();
+                    json.put("modelName", device.name());
+                    json.put("proximity", device.hasProximitySensor ? "true" : "false");
+                    json.put("numOfButtons", device.buttons);
+                    json.put("numOfInputs", device.inputs);
+                } catch (JSONException e) {
+                    Log.e("MQTT", "Error publishing hello", e);
+                }
+
+                return newFixedLengthResponse(Response.Status.OK, "application/json", json.toString());
             }
-        } catch (JSONException | ResponseException | IOException e) {
+        } catch (JSONException | ResponseException | IOException | InterruptedException e) {
             Log.e("HttpServer", "Error handling request", e);
         }
 
@@ -102,6 +127,7 @@ public class HttpServer extends NanoHTTPD {
         Method method = session.getMethod();
         String uri = session.getUri();
         JSONObject jsonResponse = new JSONObject();
+        jsonResponse.put("success", false);
 
         switch (uri.replace("/webview/", "")) {
             case "refresh":
@@ -110,6 +136,7 @@ public class HttpServer extends NanoHTTPD {
                     LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
                     jsonResponse.put("success", true);
                 }
+                break;
             case "inject":
                 if (method.equals(Method.POST)) {
                     Map<String, String> files = new HashMap<>();
@@ -126,12 +153,23 @@ public class HttpServer extends NanoHTTPD {
 
                     jsonResponse.put("success", true);
                 }
+                break;
+            default:
+                jsonResponse.put("error", "Invalid request URI");
+                break;
         }
 
-        return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
+        return newFixedLengthResponse(jsonResponse.optBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
 
     private Response handleMediaRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
+        if (!mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false) || ShellyElevateApplication.mMediaHelper == null) {
+            JSONObject jsonResponse = new JSONObject();
+            jsonResponse.put("success", false);
+            jsonResponse.put("error", "Media disabled");
+            return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json", jsonResponse.toString());
+        }
+
         Method method = session.getMethod();
         String uri = session.getUri();
         JSONObject jsonResponse = new JSONObject();
@@ -224,28 +262,49 @@ public class HttpServer extends NanoHTTPD {
         return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
 
-    private Response handleDeviceRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
+    private Response handleDeviceRequest(IHTTPSession session) throws JSONException, IOException, InterruptedException {
         Method method = session.getMethod();
         String uri = session.getUri();
         JSONObject jsonResponse = new JSONObject();
 
-        DeviceModel device = DeviceModel.getDevice(mSharedPreferences);
+        DeviceModel device = DeviceModel.getReportedDevice();
 
         switch (uri.replace("/device/", "")) {
             case "relay":
-                if (method.equals(Method.GET)) {
-                    jsonResponse.put("success", true);
-                    jsonResponse.put("state", mDeviceHelper.getRelay());
-                } else if (method.equals(Method.POST)) {
-                    Map<String, String> files = new HashMap<>();
+                Map<String, String> files = new HashMap<>();
+                Map<String, List<String>> params = new HashMap<>();
+                try {
+                    /* cannot be called multiple times;
+                       session.parseBody() reads the POST request's body and calls HTTPSession's decodeParms() method,
+                       which sets the queryParameterString and parms field values to the POST's body */
                     session.parseBody(files);
+
+                    //params.putAll(session.getParms()); getParams() is deprecated!
+                    params.putAll(session.getParameters());
+                } catch (IOException | ResponseException e) {
+                    Log.e("HttpServer", "Invalid parameters", e);
+                }
+                if (method.equals(Method.GET)) {
+                    int num = GetNumParameter(params, 0);
+                    if (num == -999) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
+                    jsonResponse.put("success", true);
+                    jsonResponse.put("state", mDeviceHelper.getRelay(num));
+                } else if (method.equals(Method.POST)) {
+                    // get the POST body { "state", "true" }
                     String postData = files.get("postData");
                     assert postData != null;
                     JSONObject jsonObject = new JSONObject(postData);
 
-                    mDeviceHelper.setRelay(jsonObject.getBoolean("state"));
+                    int num = GetNumParameter(params, -1);
+                    if (num == -999) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
+                    // num as json body
+                    if (num == -1 && jsonObject.getInt("num")>=0)
+                        num = jsonObject.getInt("num");
+
+                    mDeviceHelper.setRelay(num, jsonObject.getBoolean("state"));
+
                     jsonResponse.put("success", true);
-                    jsonResponse.put("state", mDeviceHelper.getRelay());
+                    jsonResponse.put("state", mDeviceHelper.getRelay(num));
                 } else {
                     jsonResponse.put("success", false);
                     jsonResponse.put("error", "Invalid request method");
@@ -324,6 +383,48 @@ public class HttpServer extends NanoHTTPD {
                     }
                 }
                 break;
+            case "free":
+                jsonResponse.put("success", false);
+                if (method.equals(Method.GET)) {
+                    try {
+                        // Execute 'free -m' to get memory info in mebibyte MiB
+                        Process process = Runtime.getRuntime().exec("free -m");
+                        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
+
+                        String line;
+                        while ((line = reader.readLine()) != null) {
+                            /* free -m: (column "available" doesn't exist at Android)
+                                       total        used        free      shared     buffers
+                                Mem:     959         917          41           1          29
+                            */
+                            if (line.startsWith("Mem:")) {
+                                // Split by whitespace; \\s+ handles multiple spaces
+                                String[] tokens = line.split("\\s+");
+
+                                long totalMemory = Long.parseLong(tokens[1]);
+                                long availableMemory = Long.parseLong(tokens[3]);
+
+                                jsonResponse.put("success", true);
+                                jsonResponse.put("Mem total memory", totalMemory + "MiB");
+                                jsonResponse.put("Mem free memory", availableMemory + "MiB");
+                            }
+                            if (line.startsWith("Swap:")) {
+                                String[] tokens = line.split("\\s+");
+
+                                long totalMemory = Long.parseLong(tokens[1]);
+                                long availableMemory = Long.parseLong(tokens[3]);
+
+                                jsonResponse.put("success", true);
+                                jsonResponse.put("Swap total memory", totalMemory + "MiB");
+                                jsonResponse.put("Swap free memory", availableMemory + "MiB");
+                            }
+                        }
+                        process.waitFor();
+                    } catch (IOException e) {
+                        Log.e("HttpServer", "Error free command request", e);
+                    }
+                }
+                break;
             default:
                 jsonResponse.put("success", false);
                 jsonResponse.put("error", "Invalid request URI");
@@ -331,6 +432,20 @@ public class HttpServer extends NanoHTTPD {
         }
 
         return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
+    }
+    private static int GetNumParameter(Map<String, List<String>> params, int defaultValue) {
+        // Get the value of num
+        List<String> numParam = params.get("num");
+        if (!(numParam == null) && !numParam.isEmpty()) {
+            try {
+                // first element of the list is the value
+                return Integer.parseInt(numParam.get(0));
+            } catch (NumberFormatException e) {
+                // handle invalid number
+                return -999;
+            }
+        }
+        return defaultValue; // Default
     }
 
     public void onDestroy() {

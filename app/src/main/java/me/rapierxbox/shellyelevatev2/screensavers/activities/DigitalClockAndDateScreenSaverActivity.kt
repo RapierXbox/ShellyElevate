@@ -59,7 +59,7 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
 
         binding!!.swipeDetectionOverlay.setOnTouchListener { _, event ->
             Log.d("DigitalClockAndDateScreenSaverActivity", "Received touch event: $event")
-            ShellyElevateApplication.mSwipeHelper.onTouchEvent(event)
+            ShellyElevateApplication.mSwipeHelper?.onTouchEvent(event)
             mScreenSaverManager.onTouchEvent(event)
 
             true

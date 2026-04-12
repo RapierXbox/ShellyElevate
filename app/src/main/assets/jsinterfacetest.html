@@ -14,7 +14,7 @@
 </head>
 <body>
 <h2>Test ShellyElevate Interface</h2>
-<button onclick="testGetRelay()">Get Relay</button>
+<button onclick="testGetRelay(0)">Get Relay</button>
 <button onclick="testGetLux()">Get Lux</button>
 <button onclick="testGetTemperature()">Get Temperature</button>
 <button onclick="testGetHumidity()">Get Humidity</button>
@@ -23,8 +23,8 @@
 <button onclick="testGetScreenSaverEnabled()">Get Screen Saver Enabled</button>
 <button onclick="testGetScreenSaverId()">Get Screen Saver ID</button>
 <button onclick="testGetExtendedJavascriptInterfaceEnabled()">Get Extended JS Enabled</button>
-<button onclick="testSetRelay(true)">Set Relay On</button>
-<button onclick="testSetRelay(false)">Set Relay Off</button>
+<button onclick="testSetRelay(0, true)">Set Relay On</button>
+<button onclick="testSetRelay(0, false)">Set Relay Off</button>
 <button onclick="testSleep()">Sleep</button>
 <button onclick="testWake()">Wake</button>
 <button onclick="testSetScreenBrightness(50)">Set Screen Brightness</button>
@@ -32,74 +32,106 @@
 <button onclick="testSetScreenSaverEnabled(false)">Disable Screen Saver</button>
 <button onclick="testSetScreenSaverId(1)">Set Screen Saver ID</button>
 
-<p id="output"></p>
+<pre id="output"></pre>
 
 <script>
-    function testGetRelay() {
-        document.getElementById("output").innerText = "Relay: " + ShellyElevate.getRelay("");
+    function testGetRelay(button) {
+        document.getElementById("output").innerText += "\nRelay: " + ShellyElevate.getRelay(button);
     }
 
     function testGetLux() {
-        document.getElementById("output").innerText = "Lux: " + ShellyElevate.getLux();
+        document.getElementById("output").innerText += "\nLux: " + ShellyElevate.getLux();
     }
 
     function testGetTemperature() {
-        document.getElementById("output").innerText = "Temperature: " + ShellyElevate.getTemperature();
+        document.getElementById("output").innerText += "\nTemperature: " + ShellyElevate.getTemperature();
     }
 
     function testGetHumidity() {
-        document.getElementById("output").innerText = "Humidity: " + ShellyElevate.getHumidity();
+        document.getElementById("output").innerText += "\nHumidity: " + ShellyElevate.getHumidity();
     }
 
     function testGetScreenBrightness() {
-        document.getElementById("output").innerText = "Screen Brightness: " + ShellyElevate.getScreenBrightness();
+        document.getElementById("output").innerText += "\nScreen Brightness: " + ShellyElevate.getScreenBrightness();
     }
 
     function testGetScreenSaverRunning() {
-        document.getElementById("output").innerText = "Screen Saver Running: " + ShellyElevate.getScreenSaverRunning();
+        document.getElementById("output").innerText += "\nScreen Saver Running: " + ShellyElevate.getScreenSaverRunning();
     }
 
     function testGetScreenSaverEnabled() {
-        document.getElementById("output").innerText = "Screen Saver Enabled: " + ShellyElevate.getScreenSaverEnabled();
+        document.getElementById("output").innerText += "\nScreen Saver Enabled: " + ShellyElevate.getScreenSaverEnabled();
     }
 
     function testGetScreenSaverId() {
-        document.getElementById("output").innerText = "Screen Saver ID: " + ShellyElevate.getScreenSaverId();
+        document.getElementById("output").innerText += "\nScreen Saver ID: " + ShellyElevate.getScreenSaverId();
     }
 
     function testGetExtendedJavascriptInterfaceEnabled() {
-        document.getElementById("output").innerText = "Extended JS Enabled: " + ShellyElevate.getExtendedJavascriptInterfaceEnabled();
+        document.getElementById("output").innerText += "\nExtended JS Enabled: " + ShellyElevate.getExtendedJavascriptInterfaceEnabled();
     }
 
-    function testSetRelay(state) {
-        ShellyElevate.setRelay(state);
-        document.getElementById("output").innerText = "Set Relay: " + state;
+    function testSetRelay(button, state) {
+        ShellyElevate.setRelay(button, state);
+        document.getElementById("output").innerText += "\nSet Relay: " + state;
     }
 
     function testSleep() {
         ShellyElevate.sleep();
-        document.getElementById("output").innerText = "Device is sleeping.";
+        document.getElementById("output").innerText += "\nDevice is sleeping.";
     }
 
     function testWake() {
         ShellyElevate.wake();
-        document.getElementById("output").innerText = "Device woke up.";
+        document.getElementById("output").innerText += "\nDevice woke up.";
     }
 
     function testSetScreenBrightness(brightness) {
         ShellyElevate.setScreenBrightness(brightness);
-        document.getElementById("output").innerText = "Set Screen Brightness: " + brightness;
+        document.getElementById("output").innerText += "\nSet Screen Brightness: " + brightness;
     }
 
     function testSetScreenSaverEnabled(enabled) {
         ShellyElevate.setScreenSaverEnabled(enabled);
-        document.getElementById("output").innerText = "Set Screen Saver Enabled: " + enabled;
+        document.getElementById("output").innerText += "\nSet Screen Saver Enabled: " + enabled;
     }
 
     function testSetScreenSaverId(id) {
         ShellyElevate.setScreenSaverId(id);
-        document.getElementById("output").innerText = "Set Screen Saver ID: " + id;
+        document.getElementById("output").innerText += "\nSet Screen Saver ID: " + id;
     }
+
+    function onButtonPressed(buttonId) {
+    	document.getElementById("output").innerText += "\nButton pressed: " + buttonId;
+    }
+
+    function onMotion() {
+        document.getElementById("output").innerText += "\nonMotion event triggered";
+    }
+
+    function onScreenOn() {
+        document.getElementById("output").innerText += "\nonScreenOn event triggered";
+    }
+
+    function onScreenOff() {
+        document.getElementById("output").innerText += "\nonScreenOff event triggered";
+    }
+
+    function onScreensaverOn() {
+        document.getElementById("output").innerText += "\nonScreensaverOn event triggered";
+    }
+
+    function onScreensaverOff() {
+        document.getElementById("output").innerText += "\nonScreensaverOff event triggered";
+    }
+
+    // Bind all events to their respective functions
+    ShellyElevate.bind('onScreenOn', 'onScreenOn');
+    ShellyElevate.bind('onScreenOff', 'onScreenOff');
+    ShellyElevate.bind('onScreensaverOn', 'onScreensaverOn');
+    ShellyElevate.bind('onScreensaverOff', 'onScreensaverOff');
+    ShellyElevate.bind('onMotion', 'onMotion');
+    ShellyElevate.bind('onButtonPressed', 'onButtonPressed');
 </script>
 </body>
 </html>

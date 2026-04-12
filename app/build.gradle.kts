@@ -1,6 +1,27 @@
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoField
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.jetbrains.kotlin.android)
+}
+
+// Dynamic versioning: Major.YearDayOfYear.HourMinute (e.g., 3.26111.1430)
+fun generateVersionCode(): Int {
+    val now = LocalDateTime.now()
+    val year = now.year % 100  // Last 2 digits of year
+    val dayOfYear = now.dayOfYear
+    // Format: 3YYDDD (e.g., 326111 for year 2026, day 111)
+    return 3_00_000 + (year * 1000) + dayOfYear
+}
+
+fun generateVersionName(): String {
+    val now = LocalDateTime.now()
+    val year = now.year % 100  // Last 2 digits of year
+    val dayOfYear = now.dayOfYear
+    val hourMin = now.format(DateTimeFormatter.ofPattern("HHmm"))
+    return "3.${year}${dayOfYear.toString().padStart(3, '0')}.${hourMin}"
 }
 
 android {
@@ -12,8 +33,8 @@ android {
         minSdk = 24
         //noinspection ExpiredTargetSdkVersion
         targetSdk = 24
-        versionCode = 2_03_00
-        versionName = "2.3.0"
+        versionCode = generateVersionCode()
+        versionName = generateVersionName()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -24,6 +45,8 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Use the default debug signing key for release to simplify installs
+            signingConfig = signingConfigs.getByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -56,6 +79,7 @@ dependencies {
     implementation(libs.preference)
     implementation(libs.nanohttpd)
     implementation(libs.org.eclipse.paho.mqttv5.client)
+    implementation(libs.webkit)
 
     implementation(platform(libs.okhttpbom))
     implementation(libs.okhttp)

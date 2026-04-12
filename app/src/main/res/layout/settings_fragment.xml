@@ -21,27 +21,6 @@
             android:orientation="vertical"
             android:padding="24dp">
 
-            <LinearLayout
-                android:id="@+id/deviceTypeLinearLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:text="@string/device"
-                    android:textSize="18sp" />
-
-                <Spinner
-                    android:id="@+id/deviceTypeSpinner"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:spinnerMode="dialog" />
-            </LinearLayout>
-
             <Button
                 android:id="@+id/findURLButton"
                 android:layout_width="wrap_content"
@@ -70,21 +49,20 @@
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/trustUserCaCerts"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="48dp"
-                android:layout_marginTop="24dp"
-                android:text="@string/trust_user_ca_certs"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switchOnSwipe"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="24dp"
                 android:text="@string/switchOnSwipeText"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/powerButtonAutoReboot"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/power_button_auto_reboot"
                 android:textSize="18sp"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
@@ -234,6 +212,77 @@
                 android:textSize="18sp"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
+            <LinearLayout
+                android:id="@+id/proximityKeepAwakeLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/proximity_keep_awake_seconds"
+                    android:textSize="18sp" />
+
+                <EditText
+                    android:id="@+id/proximityKeepAwakeSeconds"
+                    android:layout_width="70dp"
+                    android:layout_height="wrap_content"
+                    android:ems="3"
+                    android:gravity="end"
+                    android:hint="@string/proximity_keep_awake_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="number"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+
+            <LinearLayout
+                android:id="@+id/sensorStatusLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/proximitySensorAvailability"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/proximity_sensor_available_default"
+                    android:textSize="18sp"
+                    tools:text="Proximity sensor available to app: Yes" />
+
+                <TextView
+                    android:id="@+id/proximitySensorValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/proximity_sensor_value_default"
+                    android:textSize="18sp"
+                    tools:text="Proximity sensor current value: 0.00" />
+
+                <TextView
+                    android:id="@+id/proximitySensorState"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/proximity_sensor_state_default"
+                    android:textSize="18sp"
+                    tools:text="Proximity sensor state: FAR" />
+
+                <TextView
+                    android:id="@+id/lightSensorValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/light_sensor_value_default"
+                    android:textSize="18sp"
+                    tools:text="Light sensor current value: 4.21 lx" />
+            </LinearLayout>
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/httpServerEnabled"
                 android:layout_width="match_parent"
@@ -311,6 +360,15 @@
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/mediaEnabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/media_enabled"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/mqttEnabled"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -318,6 +376,31 @@
                 android:text="@string/mqtt"
                 android:textSize="18sp"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <LinearLayout
+                android:id="@+id/mqttClientIdLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="24dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/client_id"
+                    android:textSize="18sp" />
+
+                <EditText
+                    android:id="@+id/mqttClientId"
+                    android:layout_width="200dp"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/mqtt_client_id_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="textUri"
+                    android:textSize="18sp" />
+            </LinearLayout>
 
             <LinearLayout
                 android:id="@+id/mqttBrokerLayout"
@@ -363,11 +446,10 @@
                     android:id="@+id/mqttPort"
                     android:layout_width="60dp"
                     android:layout_height="wrap_content"
-                    android:hint="1883"
+                    android:hint="@string/mqtt_port_hint"
                     android:imeOptions="actionDone"
                     android:inputType="number"
-                    android:textSize="18sp"
-                    tools:ignore="HardcodedText" />
+                    android:textSize="18sp" />
             </LinearLayout>
 
             <LinearLayout
