@@ -50,7 +50,7 @@ public class DeviceSensorManager implements SensorEventListener {
 
     private float maxProximitySensorValue = 1.0f;
     // Stores the SensorManager proximity max range; -1 means no hardware sensor was registered.
-    private float sensorManagerProximityMaxRange = -1f;
+    private float fallbackProximityMaxRange = -1f;
     private final String proximityEventDevice;
     private ExecutorService proximityFallbackExecutor;
     private volatile Process proximityFallbackProcess;
@@ -78,8 +78,8 @@ public class DeviceSensorManager implements SensorEventListener {
         Sensor proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         if (proximitySensor != null) {
             sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
-            sensorManagerProximityMaxRange = proximitySensor.getMaximumRange();
-            Log.i(TAG, "SensorManager proximity sensor registered (max range " + sensorManagerProximityMaxRange + ")");
+            fallbackProximityMaxRange = proximitySensor.getMaximumRange();
+            Log.i(TAG, "SensorManager proximity sensor registered (max range " + fallbackProximityMaxRange + ")");
         }
 
         // Prefer gpio_keys proximity when the device supports it; onSensorChanged will ignore
@@ -89,13 +89,8 @@ public class DeviceSensorManager implements SensorEventListener {
             maxProximitySensorValue = 1f;
             Log.i(TAG, "Using gpio_keys proximity from " + proximityEventDevice);
             proximitySensorAvailable = true;
-        } else if (sensorManagerProximityMaxRange >= 0f) {
-            maxProximitySensorValue = sensorManagerProximityMaxRange;
-            Log.i(TAG, "Using SensorManager proximity sensor with max range " + maxProximitySensorValue);
-            proximitySensorAvailable = true;
         } else {
-            Log.w(TAG, "Proximity sensor unavailable (no gpio_keys or SensorManager sensor)");
-            proximitySensorAvailable = false;
+            applyProximityFallback();
         }
     }
 
@@ -201,15 +196,19 @@ public class DeviceSensorManager implements SensorEventListener {
             // automatically take over because onSensorChanged gates on !usingGpioKeysProximity.
             if (usingGpioKeysProximity) {
                 usingGpioKeysProximity = false;
-                if (sensorManagerProximityMaxRange >= 0f) {
-                    maxProximitySensorValue = sensorManagerProximityMaxRange;
-                    proximitySensorAvailable = true;
-                    Log.i(TAG, "gpio_keys reader stopped; falling back to SensorManager proximity");
-                } else {
-                    proximitySensorAvailable = false;
-                    Log.w(TAG, "gpio_keys reader stopped and no SensorManager proximity sensor available");
-                }
+                applyProximityFallback();
             }
+        }
+    }
+
+    private void applyProximityFallback() {
+        if (fallbackProximityMaxRange >= 0f) {
+            maxProximitySensorValue = fallbackProximityMaxRange;
+            proximitySensorAvailable = true;
+            Log.i(TAG, "Using SensorManager proximity sensor with max range " + maxProximitySensorValue);
+        } else {
+            proximitySensorAvailable = false;
+            Log.w(TAG, "Proximity sensor unavailable (no gpio_keys or SensorManager sensor)");
         }
     }
 
