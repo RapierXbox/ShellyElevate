@@ -7,6 +7,7 @@ import android.app.NotificationManager;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -17,6 +18,8 @@ import androidx.core.app.NotificationCompat;
 import java.util.List;
 
 public class KioskService extends Service {
+	private static final String WATCHDOG_TAG = "KioskService";
+
 	@Override
 	public void onCreate() {
 		super.onCreate();
@@ -69,6 +72,12 @@ public class KioskService extends Service {
 		Runnable checkTask = new Runnable() {
 			@Override
 			public void run() {
+				if (isLiteModeEnabled()) {
+					Log.i(WATCHDOG_TAG, "Lite mode enabled, skipping MainActivity relaunch");
+					handler.postDelayed(this, 30000);
+					return;
+				}
+
 				if (!isActivityRunning(MainActivity.class)) {
 					Log.w("KioskService", "MainActivity not running, relaunching...");
 					Intent activityIntent = new Intent(KioskService.this, MainActivity.class);
@@ -79,6 +88,11 @@ public class KioskService extends Service {
 			}
 		};
 		handler.postDelayed(checkTask, 30000); // initial delay 30s
+	}
+
+	private boolean isLiteModeEnabled() {
+		SharedPreferences prefs = getSharedPreferences(Constants.SHARED_PREFERENCES_NAME, MODE_PRIVATE);
+		return prefs.getBoolean(Constants.SP_LITE_MODE, false);
 	}
 
 	private boolean isActivityRunning(Class<?> activityClass) {

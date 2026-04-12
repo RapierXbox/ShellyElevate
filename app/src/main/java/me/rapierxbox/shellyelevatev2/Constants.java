@@ -34,6 +34,7 @@ public class Constants {
     public static final String SP_SCREEN_SAVER_DELAY = "screenSaverDelay";
     public static final String SP_SCREEN_SAVER_ID = "screenSaverId";
     public static final String SP_WAKE_ON_PROXIMITY = "wakeOnProximity";
+    public static final String SP_PROXIMITY_KEEP_AWAKE_SECONDS = "proximityKeepAwakeSeconds";
     public static final String SP_SCREEN_SAVER_MIN_BRIGHTNESS = "screenSaverMinBrightness";
     public static final String SP_TOUCH_TO_WAKE = "touchToWake";
 
