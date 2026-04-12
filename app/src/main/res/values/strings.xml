@@ -41,9 +41,25 @@
     <string name="reboot">Reboot</string>
     <string name="B_exit">Exit</string>
     <string name="wake_on_proximity">Wake on Proximity</string>
+    <string name="proximity_keep_awake_seconds">Keep awake after proximity (seconds)</string>
+    <string name="proximity_keep_awake_hint">30</string>
+    <string name="proximity_keep_awake_minimum">Keep awake time must be 0 seconds or more</string>
     <string name="ignore_ssl_errors">Ignore SSL Errors</string>
     <string name="media_enabled">Media Enabled</string>
     <string name="client_id">Client ID</string>
     <string name="mqtt_client_id_hint">your custom client id</string>
     <string name="mqtt_port_hint">1883</string>
+    <string name="proximity_sensor_available">Proximity sensor available to app: %1$s</string>
+    <string name="sensor_available_yes">Yes</string>
+    <string name="sensor_available_no">No</string>
+    <string name="proximity_sensor_available_default">Proximity sensor available to app:</string>
+    <string name="proximity_sensor_value">Proximity sensor current value: %1$.2f</string>
+    <string name="proximity_sensor_value_default">Proximity sensor current value:</string>
+    <string name="proximity_sensor_state">Proximity sensor state: %1$s</string>
+    <string name="proximity_sensor_state_default">Proximity sensor state:</string>
+    <string name="proximity_state_near">NEAR</string>
+    <string name="proximity_state_far">FAR</string>
+    <string name="proximity_state_unavailable">UNAVAILABLE</string>
+    <string name="light_sensor_value">Light sensor current value: %1$.2f lx</string>
+    <string name="light_sensor_value_default">Light sensor current value:</string>
 </resources>

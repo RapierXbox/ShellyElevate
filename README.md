@@ -83,6 +83,19 @@ Compile the APK by yourself (a dev container image is offered, so it's easy to d
 adb install shellyelevatev2.apk
 ```
 
+### Build signed APKs automatically in GitHub Releases
+
+This repository includes a GitHub Actions workflow that builds a **signed release APK** (using the app's configured release signing, currently debug key based) and uploads it to the **Releases** section.
+
+To publish a new release APK:
+
+```bash
+git tag v3.0.0
+git push origin v3.0.0
+```
+
+The workflow (`.github/workflows/release-apk.yml`) will build `app/build/outputs/apk/release/*.apk` and attach it to that GitHub release.
+
 ### Step 4: Grant Permissions
 
 ShellyElevate requires special permissions to control screen brightness and prevent battery optimization from killing the service:

@@ -35,6 +35,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
     private long lastProximityEventTime = 0L;
+    private long lastProximityWakeTime = 0L;
+    private Boolean lastNearState = null;
 
     public static ScreenSaver[] getAvailableScreenSavers() {
         return new ScreenSaver[]{
@@ -190,14 +192,42 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (prefs == null) return;
 
         boolean wakeOnProximity = prefs.getBoolean(SP_WAKE_ON_PROXIMITY, true);
-        float threshold = 0.5f; // 0.5 cm buffer
+        int configuredKeepAwakeSeconds = Math.max(0, prefs.getInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, 30));
+        long keepAwakeMs = configuredKeepAwakeSeconds * 1000L;
+        float threshold = maxProximitySensorValue <= 1.5f ? 0.5f : Math.max(0.5f, maxProximitySensorValue * 0.1f);
         boolean isNear = proximity < maxProximitySensorValue - threshold;
-        if (screenSaverRunning && isNear) {
-            // Wake even if the pref is off to avoid being stuck at brightness 0
-            stopScreenSaver();
-        } else if (wakeOnProximity && isNear) {
-            // Not in saver yet, but a near event should refresh the idle timer
-            lastTouchEventTime = now;
+
+        // Skip duplicate near/far state updates to avoid spammy wake handling.
+        if (lastNearState != null && lastNearState == isNear) {
+            return;
         }
+        lastNearState = isNear;
+
+        if (screenSaverRunning && isNear) {
+            // Wake even if the pref is off to avoid being stuck at brightness 0.
+            stopScreenSaver();
+            lastProximityWakeTime = now;
+            keepAwakeAfterProximity(now, keepAwakeMs);
+        } else if (wakeOnProximity && isNear) {
+            // Ignore repeated near edges that happen too quickly due to noisy sensors.
+            if (now - lastProximityWakeTime < 1000L) return;
+            lastProximityWakeTime = now;
+            keepAwakeAfterProximity(now, keepAwakeMs);
+        }
+    }
+
+    private void keepAwakeAfterProximity(long now, long keepAwakeMs) {
+        var prefs = ShellyElevateApplication.mSharedPreferences;
+        if (prefs == null) return;
+
+        long idleDelayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
+        if (keepAwakeMs <= 0L) {
+            lastTouchEventTime = now;
+            return;
+        }
+
+        // checkLastTouchEventTime starts saver when now - lastTouchEventTime > idleDelayMs.
+        // Back-calculate a synthetic last-touch timestamp so saver starts after keepAwakeMs.
+        lastTouchEventTime = now - idleDelayMs + keepAwakeMs;
     }
 }
