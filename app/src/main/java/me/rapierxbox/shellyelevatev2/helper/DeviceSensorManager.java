@@ -45,6 +45,7 @@ public class DeviceSensorManager implements SensorEventListener {
     private final Context context;
     private final boolean lightSensorAvailable;
     private final boolean proximitySensorAvailable;
+    private boolean usingGpioKeysProximity = false;
 
     private float maxProximitySensorValue = 1.0f;
     private ExecutorService proximityFallbackExecutor;
@@ -65,13 +66,24 @@ public class DeviceSensorManager implements SensorEventListener {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
 
-        // Proximity is sourced exclusively from gpio key events on /dev/input/event4.
-        proximitySensorAvailable = startProximityKeyFallback();
-        if (proximitySensorAvailable) {
+        // Try gpio_keys proximity first; fall back to SensorManager if unavailable
+        usingGpioKeysProximity = startProximityKeyFallback();
+        if (usingGpioKeysProximity) {
             maxProximitySensorValue = 1f;
             Log.i(TAG, "Using gpio_keys proximity from " + PROXIMITY_EVENT_DEVICE);
+            proximitySensorAvailable = true;
         } else {
-            Log.w(TAG, "Proximity gpio_keys unavailable at " + PROXIMITY_EVENT_DEVICE);
+            // Fallback to SensorManager proximity sensor
+            Sensor proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+            if (proximitySensor != null) {
+                sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
+                maxProximitySensorValue = proximitySensor.getMaximumRange();
+                Log.i(TAG, "Using SensorManager proximity sensor with max range " + maxProximitySensorValue);
+                proximitySensorAvailable = true;
+            } else {
+                Log.w(TAG, "Proximity sensor unavailable (no gpio_keys or SensorManager sensor)");
+                proximitySensorAvailable = false;
+            }
         }
     }
 
@@ -125,6 +137,10 @@ public class DeviceSensorManager implements SensorEventListener {
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
                 lastLuxBroadcastAtMs = now;
             }
+        } else if (event.sensor.getType() == Sensor.TYPE_PROXIMITY && !usingGpioKeysProximity) {
+            // Handle proximity from SensorManager only if not using gpio_keys
+            lastMeasuredDistance = event.values[0];
+            publishProximity(lastMeasuredDistance);
         }
     }
 
