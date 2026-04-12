@@ -42,14 +42,31 @@ jobs:
       - name: Build signed release APK
         run: ./gradlew clean :app:assembleRelease --no-daemon --stacktrace
 
+      - name: Extract version from gradle
+        id: version
+        run: |
+          VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP 'v\d+\.\d+\.\d+|\d+\.\d+') | head -1
+          if [ -z "$VERSION" ]; then
+            # Generate version if extraction fails
+            DATE=$(date +%y%j)
+            VERSION="3.${DATE}"
+          fi
+          echo "name=v${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Resolve release tag
         id: tag
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           else
-            echo "name=manual-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+            echo "name=${{ steps.version.outputs.name }}" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Prepare APK for release
+        run: |
+          VERSION="${{ steps.version.outputs.name }}"
+          VERSION=${VERSION#v}  # Remove 'v' prefix if present
+          cp app/build/outputs/apk/release/*.apk ShellyElevateV2-${VERSION}.apk
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -58,5 +75,4 @@ jobs:
           name: ${{ steps.tag.outputs.name }}
           generate_release_notes: true
           files: |
-            app/build/outputs/apk/release/*.apk
-
+            ShellyElevateV2-*.apk
