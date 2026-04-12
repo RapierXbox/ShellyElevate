@@ -950,6 +950,16 @@ This project is provided "as is" without warranty. Use at your own risk. See [LI
 
 ---
 
+## Downloads
+
+**Pre-built APKs** are available under [Releases](https://github.com/RapierXbox/ShellyElevate/releases). Download the latest `.apk` file and install via ADB:
+
+```bash
+adb install ShellyElevateV2-<version>.apk
+```
+
+---
+
 ## Troubleshooting
 
 ### Settings won't open
