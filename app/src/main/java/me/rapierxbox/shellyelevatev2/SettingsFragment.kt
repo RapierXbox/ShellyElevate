@@ -135,7 +135,17 @@ class SettingsFragment : Fragment() {
         binding.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
         loadValues()
         setupListeners()
+    }
+
+    override fun onResume() {
+        super.onResume()
         sensorStatusHandler.post(sensorStatusRunnable)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        sensorStatusHandler.removeCallbacks(sensorStatusRunnable)
+        saveSettings()
     }
 
     private fun updateSensorStatus() {
@@ -376,11 +386,6 @@ class SettingsFragment : Fragment() {
 
     private fun getLocalIpAddress(): String? =
         NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { it.isSiteLocalAddress }?.hostAddress
-
-    override fun onPause() {
-        super.onPause()
-        saveSettings()
-    }
 
     fun getScreenSaverSpinnerAdapter(): ArrayAdapter<String?> {
         val adapter = ArrayAdapter<String?>(ShellyElevateApplication.mApplicationContext, android.R.layout.simple_spinner_item)
