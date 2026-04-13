@@ -77,7 +77,7 @@ You should see your device listed. If not, ensure USB debugging is enabled.
 
 ### Step 3: Install ShellyElevate
 
-Compile the APK by yourself (a dev container image is offered, so it's easy to do in VS Code) or download the latest APK from [Releases](https://github.com/dbochicchio/ShellyElevate/releases) and install it:
+Compile the APK by yourself (a dev container image is offered, so it's easy to do in VS Code) or download the latest APK from [Releases](https://github.com/RapierXbox/ShellyElevate/releases) and install it:
 
 ```bash
 adb install shellyelevatev2.apk
@@ -947,7 +947,7 @@ Contributions, feature requests, and bug reports are welcome! Please:
 
 - 📖 [Jailbreak Guide](https://github.com/RapierXbox/ShellyElevate/wiki/Jailbreak) - Hack your Shelly Wall Display
 - 🏠 [Home Assistant Integration](https://github.com/RapierXbox/ShellyElevate/wiki/Integration-into-Home-Assistant) - Setup guide
-- 🐛 [Issue Tracker](https://github.com/dbochicchio/ShellyElevate/issues) - Report bugs
+- 🐛 [Issue Tracker](https://github.com/RapierXbox/ShellyElevate/issues) - Report bugs
 
 ---
 
@@ -965,7 +965,7 @@ This project is provided "as is" without warranty. Use at your own risk. See [LI
 
 ## Downloads
 
-**Pre-built APKs** are available under [Releases](https://github.com/dbochicchio/ShellyElevate/releases). Download the latest `.apk` file and install via ADB:
+**Pre-built APKs** are available under [Releases](https://github.com/RapierXbox/ShellyElevate/releases). Download the latest `.apk` file and install via ADB:
 
 ```bash
 adb install ShellyElevateV2-<version>.apk
