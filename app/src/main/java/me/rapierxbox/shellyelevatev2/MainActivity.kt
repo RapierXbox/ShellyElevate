@@ -598,28 +598,28 @@ class MainActivity : ComponentActivity() {
             131 -> {
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> buttonPressDetector0.onPressDown()
-                    KeyEvent.ACTION_UP -> buttonPressDetector0.onPressUp()
+                    KeyEvent.ACTION_UP -> { toggleMappedRelay(0); buttonPressDetector0.onPressUp() }
                 }
                 return true
             }
             132 -> {
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> buttonPressDetector1.onPressDown()
-                    KeyEvent.ACTION_UP -> buttonPressDetector1.onPressUp()
+                    KeyEvent.ACTION_UP -> { toggleMappedRelay(1); buttonPressDetector1.onPressUp() }
                 }
                 return true
             }
             133 -> {
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> buttonPressDetector2.onPressDown()
-                    KeyEvent.ACTION_UP -> buttonPressDetector2.onPressUp()
+                    KeyEvent.ACTION_UP -> { toggleMappedRelay(2); buttonPressDetector2.onPressUp() }
                 }
                 return true
             }
             134 -> {
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> buttonPressDetector3.onPressDown()
-                    KeyEvent.ACTION_UP -> buttonPressDetector3.onPressUp()
+                    KeyEvent.ACTION_UP -> { toggleMappedRelay(3); buttonPressDetector3.onPressUp() }
                 }
                 return true
             }
@@ -644,6 +644,23 @@ class MainActivity : ComponentActivity() {
             mMQTTServer.publishSwitch(i, state)
         }
         mShellyElevateJavascriptInterface.onButtonPressed(100 + i)
+    }
+
+    /**
+     * Toggle the relay mapped to the given button, if button-to-relay mapping is enabled
+     * and a relay is configured for this button.
+     */
+    private fun toggleMappedRelay(buttonId: Int) {
+        lifecycleScope.launch(Dispatchers.IO) {
+            val relayEnabled = mSharedPreferences.getBoolean(Constants.SP_BUTTON_RELAY_ENABLED, false)
+            if (!relayEnabled) return@launch
+            val relayIndex = mSharedPreferences.getInt(String.format(java.util.Locale.US, Constants.SP_BUTTON_RELAY_MAP_FORMAT, buttonId), -1)
+            if (relayIndex < 0) return@launch
+            if (relayIndex >= DeviceModel.getReportedDevice().relays) return@launch
+            val deviceHelper = ShellyElevateApplication.mDeviceHelper ?: return@launch
+            val currentState = deviceHelper.getRelay(relayIndex)
+            deviceHelper.setRelay(relayIndex, !currentState)
+        }
     }
 
     /**

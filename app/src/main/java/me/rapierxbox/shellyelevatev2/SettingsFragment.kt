@@ -44,6 +44,8 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID
 import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_MIN_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
 import me.rapierxbox.shellyelevatev2.Constants.SP_POWER_BUTTON_AUTO_REBOOT
+import me.rapierxbox.shellyelevatev2.Constants.SP_BUTTON_RELAY_ENABLED
+import me.rapierxbox.shellyelevatev2.Constants.SP_BUTTON_RELAY_MAP_FORMAT
 import me.rapierxbox.shellyelevatev2.Constants.SP_PROXIMITY_KEEP_AWAKE_SECONDS
 import me.rapierxbox.shellyelevatev2.Constants.SP_WAKE_ON_PROXIMITY
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
@@ -61,6 +63,7 @@ import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
 import java.io.IOException
 import java.net.NetworkInterface
+import java.util.Locale
 import java.util.UUID
 
 class SettingsFragment : Fragment() {
@@ -198,6 +201,15 @@ class SettingsFragment : Fragment() {
         // Power button auto-reboot
         binding.powerButtonAutoReboot.isChecked = mSharedPreferences.getBoolean(SP_POWER_BUTTON_AUTO_REBOOT, true)
 
+        // Button-to-Relay Mapping
+        val hasButtonRelayCapability = device.buttons > 0 && device.relays > 0
+        binding.buttonRelayEnabled.isVisible = hasButtonRelayCapability
+        binding.buttonRelayMappingLayout.isVisible = hasButtonRelayCapability && mSharedPreferences.getBoolean(SP_BUTTON_RELAY_ENABLED, false)
+        if (hasButtonRelayCapability) {
+            binding.buttonRelayEnabled.isChecked = mSharedPreferences.getBoolean(SP_BUTTON_RELAY_ENABLED, false)
+            setupButtonRelaySpinners(device.buttons, device.relays)
+        }
+
         // media
         binding.mediaEnabled.isChecked = mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false)
 
@@ -316,6 +328,10 @@ class SettingsFragment : Fragment() {
             binding.httpServerAddressLayout.isVisible = isChecked
         }
 
+        binding.buttonRelayEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.buttonRelayMappingLayout.isVisible = isChecked
+        }
+
         binding.httpServerButton.setOnClickListener {
             mHttpServer.start()
             binding.httpServerText.text = getString(R.string.http_server_running)
@@ -327,6 +343,57 @@ class SettingsFragment : Fragment() {
             mSwipeHelper?.onTouchEvent(event)
             mScreenSaverManager.onTouchEvent(event)
             false
+        }
+    }
+
+    private fun setupButtonRelaySpinners(buttonCount: Int, relayCount: Int) {
+        // Build options list: "None" + "Relay 0" ... "Relay N-1"
+        val options = mutableListOf(getString(R.string.button_relay_none))
+        for (i in 0 until relayCount) {
+            options.add(getString(R.string.button_relay_relay_label, i))
+        }
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, options)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+
+        val buttonLayouts = listOf(
+            binding.buttonRelayMap0Layout,
+            binding.buttonRelayMap1Layout,
+            binding.buttonRelayMap2Layout,
+            binding.buttonRelayMap3Layout
+        )
+        val buttonLabels = listOf(
+            binding.buttonRelayMap0Label,
+            binding.buttonRelayMap1Label,
+            binding.buttonRelayMap2Label,
+            binding.buttonRelayMap3Label
+        )
+        val buttonSpinners = listOf(
+            binding.buttonRelayMap0,
+            binding.buttonRelayMap1,
+            binding.buttonRelayMap2,
+            binding.buttonRelayMap3
+        )
+
+        for (i in buttonLayouts.indices) {
+            val visible = i < buttonCount
+            buttonLayouts[i].isVisible = visible
+            if (visible) {
+                buttonLabels[i].text = getString(R.string.button_relay_button_label, i)
+                buttonSpinners[i].adapter = adapter
+                // Stored value: -1 = None (position 0), 0 = Relay 0 (position 1), etc.
+                val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
+                buttonSpinners[i].setSelection((storedRelay + 1).coerceIn(0, options.size - 1))
+            }
+        }
+
+        val maxSupportedButtons = buttonLayouts.size
+        if (buttonCount > maxSupportedButtons) {
+            Log.w("SettingsFragment", "Device reports $buttonCount buttons, but settings UI supports only $maxSupportedButtons button relay mappings.")
+            Toast.makeText(
+                requireContext(),
+                "This device exposes $buttonCount buttons, but only the first $maxSupportedButtons can be configured here.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -355,6 +422,21 @@ class SettingsFragment : Fragment() {
 
             // Power button auto-reboot
             putBoolean(SP_POWER_BUTTON_AUTO_REBOOT, binding.powerButtonAutoReboot.isChecked)
+
+            // Button-to-Relay Mapping
+            if (device.buttons > 0 && device.relays > 0) {
+                putBoolean(SP_BUTTON_RELAY_ENABLED, binding.buttonRelayEnabled.isChecked)
+                val buttonSpinners = listOf(
+                    binding.buttonRelayMap0,
+                    binding.buttonRelayMap1,
+                    binding.buttonRelayMap2,
+                    binding.buttonRelayMap3
+                )
+                for (i in 0 until device.buttons.coerceAtMost(4)) {
+                    // position 0 = None (-1), position 1 = Relay 0 (0), etc.
+                    putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), buttonSpinners[i].selectedItemPosition - 1)
+                }
+            }
 
             // media
             putBoolean(SP_MEDIA_ENABLED, binding.mediaEnabled.isChecked)

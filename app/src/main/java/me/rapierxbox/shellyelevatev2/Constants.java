@@ -14,6 +14,8 @@ public class Constants {
     //IO SP Keys
     public static final String SP_SWITCH_ON_SWIPE = "switchOnSwipe";
     public static final String SP_POWER_BUTTON_AUTO_REBOOT = "powerButtonAutoReboot";
+    public static final String SP_BUTTON_RELAY_ENABLED = "buttonRelayEnabled";
+    public static final String SP_BUTTON_RELAY_MAP_FORMAT = "buttonRelayMap%d";
 
     //Webserver SP Keys
     public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
