@@ -651,11 +651,11 @@ class MainActivity : ComponentActivity() {
      * and a relay is configured for this button.
      */
     private fun toggleMappedRelay(buttonId: Int) {
-        val relayEnabled = mSharedPreferences.getBoolean(Constants.SP_BUTTON_RELAY_ENABLED, false)
-        if (!relayEnabled) return
-        val relayIndex = mSharedPreferences.getInt(String.format(Constants.SP_BUTTON_RELAY_MAP_FORMAT, buttonId), -1)
-        if (relayIndex < 0) return
         lifecycleScope.launch(Dispatchers.IO) {
+            val relayEnabled = mSharedPreferences.getBoolean(Constants.SP_BUTTON_RELAY_ENABLED, false)
+            if (!relayEnabled) return@launch
+            val relayIndex = mSharedPreferences.getInt(String.format(Constants.SP_BUTTON_RELAY_MAP_FORMAT, buttonId), -1)
+            if (relayIndex < 0) return@launch
             val deviceHelper = ShellyElevateApplication.mDeviceHelper ?: return@launch
             val currentState = deviceHelper.getRelay(relayIndex)
             deviceHelper.setRelay(relayIndex, !currentState)

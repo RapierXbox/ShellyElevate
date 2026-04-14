@@ -373,7 +373,7 @@ class SettingsFragment : Fragment() {
             binding.buttonRelayMap3
         )
 
-        for (i in 0..3) {
+        for (i in buttonLayouts.indices) {
             val visible = i < buttonCount
             buttonLayouts[i].isVisible = visible
             if (visible) {
