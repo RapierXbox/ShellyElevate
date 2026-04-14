@@ -62,4 +62,8 @@
     <string name="proximity_state_unavailable">UNAVAILABLE</string>
     <string name="light_sensor_value">Light sensor current value: %1$.2f lx</string>
     <string name="light_sensor_value_default">Light sensor current value:</string>
+    <string name="button_relay_mapping">Button-to-Relay Mapping</string>
+    <string name="button_relay_button_label">Button %1$d</string>
+    <string name="button_relay_none">None</string>
+    <string name="button_relay_relay_label">Relay %1$d</string>
 </resources>
