@@ -97,6 +97,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:layout_weight="1"
+                        android:labelFor="@id/buttonRelayMap0"
                         android:textSize="18sp" />
 
                     <Spinner
@@ -120,6 +121,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:layout_weight="1"
+                        android:labelFor="@id/buttonRelayMap1"
                         android:textSize="18sp" />
 
                     <Spinner
@@ -143,6 +145,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:layout_weight="1"
+                        android:labelFor="@id/buttonRelayMap2"
                         android:textSize="18sp" />
 
                     <Spinner
@@ -166,6 +169,7 @@
                         android:layout_height="wrap_content"
                         android:layout_gravity="center_vertical"
                         android:layout_weight="1"
+                        android:labelFor="@id/buttonRelayMap3"
                         android:textSize="18sp" />
 
                     <Spinner

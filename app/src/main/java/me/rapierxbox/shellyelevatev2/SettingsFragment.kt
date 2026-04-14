@@ -63,6 +63,7 @@ import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
 import java.io.IOException
 import java.net.NetworkInterface
+import java.util.Locale
 import java.util.UUID
 
 class SettingsFragment : Fragment() {
@@ -380,9 +381,19 @@ class SettingsFragment : Fragment() {
                 buttonLabels[i].text = getString(R.string.button_relay_button_label, i)
                 buttonSpinners[i].adapter = adapter
                 // Stored value: -1 = None (position 0), 0 = Relay 0 (position 1), etc.
-                val storedRelay = mSharedPreferences.getInt(String.format(SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
+                val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
                 buttonSpinners[i].setSelection((storedRelay + 1).coerceIn(0, options.size - 1))
             }
+        }
+
+        val maxSupportedButtons = buttonLayouts.size
+        if (buttonCount > maxSupportedButtons) {
+            Log.w("SettingsFragment", "Device reports $buttonCount buttons, but settings UI supports only $maxSupportedButtons button relay mappings.")
+            Toast.makeText(
+                requireContext(),
+                "This device exposes $buttonCount buttons, but only the first $maxSupportedButtons can be configured here.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -423,7 +434,7 @@ class SettingsFragment : Fragment() {
                 )
                 for (i in 0 until device.buttons.coerceAtMost(4)) {
                     // position 0 = None (-1), position 1 = Relay 0 (0), etc.
-                    putInt(String.format(SP_BUTTON_RELAY_MAP_FORMAT, i), buttonSpinners[i].selectedItemPosition - 1)
+                    putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), buttonSpinners[i].selectedItemPosition - 1)
                 }
             }
 

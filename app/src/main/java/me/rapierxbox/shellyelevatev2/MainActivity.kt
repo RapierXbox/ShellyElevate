@@ -654,8 +654,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val relayEnabled = mSharedPreferences.getBoolean(Constants.SP_BUTTON_RELAY_ENABLED, false)
             if (!relayEnabled) return@launch
-            val relayIndex = mSharedPreferences.getInt(String.format(Constants.SP_BUTTON_RELAY_MAP_FORMAT, buttonId), -1)
+            val relayIndex = mSharedPreferences.getInt(String.format(java.util.Locale.US, Constants.SP_BUTTON_RELAY_MAP_FORMAT, buttonId), -1)
             if (relayIndex < 0) return@launch
+            if (relayIndex >= DeviceModel.getReportedDevice().relays) return@launch
             val deviceHelper = ShellyElevateApplication.mDeviceHelper ?: return@launch
             val currentState = deviceHelper.getRelay(relayIndex)
             deviceHelper.setRelay(relayIndex, !currentState)
