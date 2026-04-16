@@ -14,7 +14,7 @@ public enum DeviceModel {
     PEGASUS("Pegasus",  "Shelly Wall Display X2", "SAWD-2A1XX10EU1", true, false, -2.6d, 8.0d, 0, 1, 2),
 
     //V2
-    BLAKE("Blake", "Shelly Wall Display XL","SAWD-3A1XE10EU2", true, true, -1.2d, 10.0d, 4, 1, 2),
+    BLAKE("Blake", "Shelly Wall Display XL","SAWD-3A1XE10EU2", true, true, -1.2d, 7.0d, 4, 1, 2),
     MAVERICK("Maverick", "Shelly Wall Display U1", "SAWD-4A1XE10US0", true, true, 0d, 0.0d, 0, 1, 1), // TODO: not yet available
     JENNA("Jenna", "Shelly Wall Display X2i", "SAWD-5A1XX10EU0", true, true, 0d, 0.0d, 0, 1, 2), // TODO: not yet available
     CALLY("Cally","Shelly Wall Display XLi", "SAWD-6A1XX10EU0", true, true, 0d, 0.0d, 4, 1, 2), // TODO: not yet available
