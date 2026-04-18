@@ -80,7 +80,7 @@ You should see your device listed. If not, ensure USB debugging is enabled.
 Compile the APK by yourself (a dev container image is offered, so it's easy to do in VS Code) or download the latest APK from [Releases](https://github.com/RapierXbox/ShellyElevate/releases) and install it:
 
 ```bash
-adb install shellyelevatev2.apk
+adb install -g shellyelevatev2.apk
 ```
 
 ### Build signed APKs automatically in GitHub Releases
