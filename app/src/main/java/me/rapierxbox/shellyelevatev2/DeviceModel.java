@@ -18,7 +18,7 @@ public enum DeviceModel {
     MAVERICK("Maverick", "Shelly Wall Display U1", "SAWD-4A1XE10US0", true, true, 0d, 0.0d, 0, 1, 1), // TODO: not yet available
     JENNA("Jenna", "Shelly Wall Display X2i", "SAWD-5A1XX10EU0", true, true, 0d, 0.0d, 0, 1, 2), // TODO: not yet available
     CALLY("Cally","Shelly Wall Display XLi", "SAWD-6A1XX10EU0", true, true, 0d, 0.0d, 4, 1, 2), // TODO: not yet available
-    DAYNA("Dayna", "Shelly Wall Display D1", "SAWD-6A0XX0EU0", true, true, 0d, 0.0d, 0, 0, 0 /* didnt check the decompiled version for it jet */), // TODO: not yet available
+    DAYNA("Dayna", "Shelly Wall Display D1", "SAWD-6A0XX0EU0", true, true, 0d, 0.0d, 0, 0 /* this is confirmed */, 0 /* didnt check the decompiled version for it jet */), // TODO: not yet available
     ;
 
     private final String model;
