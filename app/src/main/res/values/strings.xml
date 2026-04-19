@@ -66,4 +66,8 @@
     <string name="button_relay_button_label">Button %1$d</string>
     <string name="button_relay_none">None</string>
     <string name="button_relay_relay_label">Relay %1$d</string>
+    <string name="bt_proxy_enabled">Bluetooth Proxy (ESPHome API)</string>
+    <string name="bt_proxy_name">Device Name</string>
+    <string name="bt_proxy_name_hint">ShellyElevate</string>
+    <string name="bt_proxy_address">Add to HA -> ESPHome -> %1$s:6053</string>
 </resources>

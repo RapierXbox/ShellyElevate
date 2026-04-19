@@ -40,6 +40,10 @@ public class Constants {
     public static final String SP_SCREEN_SAVER_MIN_BRIGHTNESS = "screenSaverMinBrightness";
     public static final String SP_TOUCH_TO_WAKE = "touchToWake";
 
+    //Bluetooth Proxy SP Keys
+    public static final String SP_BLUETOOTH_PROXY_ENABLED = "bluetoothProxyEnabled";
+    public static final String SP_BLUETOOTH_PROXY_NAME    = "bluetoothProxyName";
+
     //MQTT SP Keys
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
     public static final String SP_MQTT_BROKER = "mqttBroker";

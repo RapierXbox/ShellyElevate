@@ -223,6 +223,12 @@ class SettingsFragment : Fragment() {
         binding.mqttPasswordLayout.isVisible = binding.mqttEnabled.isChecked
         binding.mqttClientIdLayout.isVisible = binding.mqttEnabled.isChecked
 
+        // Bluetooth Proxy
+        binding.bluetoothProxyEnabled.isChecked = mSharedPreferences.getBoolean(SP_BLUETOOTH_PROXY_ENABLED, false)
+        binding.bluetoothProxyName.setText(mSharedPreferences.getString(SP_BLUETOOTH_PROXY_NAME, "ShellyElevate"))
+        binding.bluetoothProxyLayout.isVisible = binding.bluetoothProxyEnabled.isChecked
+        binding.bluetoothProxyAddress.text = getString(R.string.bt_proxy_address, getLocalIpAddress())
+
         mSharedPreferences.edit { putBoolean("settingEverShown", true) }
     }
 
@@ -298,6 +304,10 @@ class SettingsFragment : Fragment() {
 
         binding.buttonRelayEnabled.setOnCheckedChangeListener { _, isChecked ->
             binding.buttonRelayMappingLayout.isVisible = isChecked
+        }
+
+        binding.bluetoothProxyEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.bluetoothProxyLayout.isVisible = isChecked
         }
 
         binding.httpServerButton.setOnClickListener {
@@ -425,6 +435,9 @@ class SettingsFragment : Fragment() {
 
             //Http Server
             putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
+            // Bluetooth Proxy
+            putBoolean(SP_BLUETOOTH_PROXY_ENABLED, binding.bluetoothProxyEnabled.isChecked)
+            putString(SP_BLUETOOTH_PROXY_NAME, binding.bluetoothProxyName.text.toString().trim())
         }
 
         if (!binding.httpServerEnabled.isChecked && mHttpServer.isAlive) mHttpServer.stop()

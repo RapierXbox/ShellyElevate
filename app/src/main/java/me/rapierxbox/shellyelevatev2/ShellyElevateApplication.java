@@ -25,6 +25,8 @@ import me.rapierxbox.shellyelevatev2.helper.ScreenManager;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
+import me.rapierxbox.shellyelevatev2.bluetooth.BluetoothProxyManager;
+import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import android.content.BroadcastReceiver;
 import android.content.Intent;
@@ -41,6 +43,7 @@ public class ShellyElevateApplication extends Application {
     public static MediaHelper mMediaHelper;
     public static ScreenSaverManager mScreenSaverManager;
     public static ScreenManager mScreenManager;
+    public static BluetoothProxyManager mBluetoothProxyManager;
 
     public static Context mApplicationContext;
     public static SharedPreferences mSharedPreferences;
@@ -104,6 +107,9 @@ public class ShellyElevateApplication extends Application {
             }
 
             mMQTTServer = new MQTTServer();
+
+            // Bluetooth Proxy
+            mBluetoothProxyManager = new BluetoothProxyManager();
 
             // HTTP Server
             mHttpServer = new HttpServer();
@@ -206,6 +212,7 @@ public class ShellyElevateApplication extends Application {
         mScreenManager.onDestroy();
 
         mMQTTServer.onDestroy();
+        if (mBluetoothProxyManager != null) mBluetoothProxyManager.onDestroy();
         mMediaHelper.onDestroy();
 
         if (httpWatchdog != null && !httpWatchdog.isShutdown()) {
