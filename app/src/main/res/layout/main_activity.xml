@@ -16,6 +16,79 @@
         app:layout_constraintTop_toTopOf="parent" >
     </WebView>
 
+    <FrameLayout
+        android:id="@+id/voiceScoreBarContainer"
+        android:layout_width="28dp"
+        android:layout_height="0dp"
+        android:background="#CC000000"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <View
+            android:id="@+id/voiceScoreBar"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_gravity="bottom"
+            android:background="@color/voice_score_green" />
+
+        <View
+            android:id="@+id/voiceThresholdLine"
+            android:layout_width="match_parent"
+            android:layout_height="2dp"
+            android:background="#AAFFFFFF"
+            android:layout_gravity="bottom" />
+
+        <TextView
+            android:id="@+id/voiceScoreValue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom"
+            android:layout_marginBottom="6dp"
+            android:gravity="center"
+            android:text=".00"
+            android:textColor="#FFFFFFFF"
+            android:textSize="9sp" />
+
+    </FrameLayout>
+
+
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/voiceBubble"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="20dp"
+        android:clickable="false"
+        android:focusable="false"
+        android:visibility="gone"
+        app:cardBackgroundColor="#CC1565C0"
+        app:cardCornerRadius="20dp"
+        app:cardElevation="4dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <TextView
+            android:id="@+id/voiceBubbleText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="3"
+            android:maxWidth="300dp"
+            android:paddingBottom="10dp"
+            android:paddingEnd="20dp"
+            android:paddingStart="20dp"
+            android:paddingTop="10dp"
+            android:textColor="#FFFFFFFF"
+            android:textSize="16sp" />
+
+    </com.google.android.material.card.MaterialCardView>
+
     <View
         android:id="@+id/swipeDetectionOverlay"
         android:background="@android:color/transparent"
@@ -26,6 +99,17 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toTopOf="parent"
         />
+
+    <View
+        android:id="@+id/voiceIndicatorDot"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:background="@drawable/voice_indicator_dot"
+        android:visibility="gone"
+        android:layout_marginTop="8dp"
+        android:layout_marginEnd="8dp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
 
     <View
         android:id="@+id/settingButtonOverlayRight"

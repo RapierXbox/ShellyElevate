@@ -47,6 +47,9 @@
     <color name="md_theme_surfaceContainerHighest">#E7E0F0</color>
     <!-- Missing defaults to satisfy lint for non-night configurations -->
     <color name="md_theme_scrim">#000000</color>
+    <color name="voice_score_green">#4CAF50</color>
+    <color name="voice_score_amber">#FFC107</color>
+    <color name="voice_score_red">#F44336</color>
 
     <!-- Medium contrast aliases to base colors -->
     <color name="md_theme_primary_mediumContrast">@color/md_theme_primary</color>

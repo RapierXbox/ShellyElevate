@@ -80,6 +80,7 @@ dependencies {
     implementation(libs.nanohttpd)
     implementation(libs.org.eclipse.paho.mqttv5.client)
     implementation(libs.webkit)
+    implementation(libs.tensorflow.lite)
 
     implementation(platform(libs.okhttpbom))
     implementation(libs.okhttp)

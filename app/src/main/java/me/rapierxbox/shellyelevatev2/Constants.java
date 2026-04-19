@@ -44,6 +44,18 @@ public class Constants {
     public static final String SP_BLUETOOTH_PROXY_ENABLED = "bluetoothProxyEnabled";
     public static final String SP_BLUETOOTH_PROXY_NAME    = "bluetoothProxyName";
 
+    //Voice Assistant SP Keys
+    public static final String SP_VOICE_ASSISTANT_ENABLED = "voiceAssistantEnabled";
+    public static final String SP_VOICE_ASSISTANT_TOKEN = "voiceAssistantToken";
+    public static final String SP_VOICE_ASSISTANT_PIPELINE_ID = "voiceAssistantPipelineId";
+    public static final String SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS = "voiceAssistantMaxRecordSeconds";
+    public static final String SP_VOICE_WAKE_ENABLED = "voiceWakeEnabled";
+    public static final String SP_VOICE_WAKE_MODEL_NAME = "voiceWakeModelName";
+    public static final String SP_VOICE_WAKE_SOUND_ENABLED = "voiceWakeSoundEnabled";
+    public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 50 is default sens
+    public static final String SP_VOICE_SCORE_BAR_ENABLED   = "voiceScoreBarEnabled";
+    public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
+
     //MQTT SP Keys
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
     public static final String SP_MQTT_BROKER = "mqttBroker";
@@ -96,6 +108,19 @@ public class Constants {
     public static final String MQTT_TOPIC_SWIPE_EVENT = "shellyelevatev2/%s/swipe_event";
     public static final String MQTT_TOPIC_SLEEPING_BINARY_SENSOR = "shellyelevatev2/%s/sleeping";
     public static final String MQTT_TOPIC_HOME_ASSISTANT_STATUS = "homeassistant/status";
+
+    //Voice Assistant Intents
+    public static final String INTENT_VOICE_STATE_CHANGED = "me.rapierxbox.shellyelevatev2.VOICE_STATE_CHANGED";
+    public static final String INTENT_VOICE_STATE_KEY     = "voiceState";
+    public static final String INTENT_VOICE_TEXT          = "me.rapierxbox.shellyelevatev2.VOICE_TEXT";
+    public static final String INTENT_VOICE_TEXT_KEY      = "voiceText";
+    public static final String INTENT_VOICE_SCORE         = "me.rapierxbox.shellyelevatev2.VOICE_SCORE";
+    public static final String INTENT_VOICE_SCORE_KEY     = "wakeScore";
+    public static final String INTENT_VOICE_THRESHOLD_KEY = "wakeThreshold";
+
+    //Voice MQTT Topics
+    public static final String MQTT_TOPIC_VOICE_TRIGGER = "shellyelevatev2/%s/voice_trigger";
+    public static final String MQTT_TOPIC_VOICE_STATUS  = "shellyelevatev2/%s/voice_status";
 
     //Button Press Types
     public static final String BUTTON_PRESS_TYPE_SHORT = "short";

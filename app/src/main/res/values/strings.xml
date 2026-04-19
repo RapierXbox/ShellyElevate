@@ -17,6 +17,7 @@
     <string name="http_server_address">Address:</string>
     <string name="extended_js_interface">Extended JS Interface</string>
     <string name="brightness">Brightness</string>
+    <string name="volume">Volume</string>
     <string name="mqtt">MQTT</string>
     <string name="broker_address">Broker address</string>
     <string name="http_server_running">Running</string>
@@ -70,4 +71,27 @@
     <string name="bt_proxy_name">Device Name</string>
     <string name="bt_proxy_name_hint">ShellyElevate</string>
     <string name="bt_proxy_address">Add to HA -> ESPHome -> %1$s:6053</string>
+    <string name="voice_assistant">Voice Assistant (HA Assist)</string>
+    <string name="voice_assistant_token">Long-Lived Access Token</string>
+    <string name="voice_assistant_token_hint">HA Profile → Security → Create Token</string>
+    <string name="voice_assistant_pipeline_id">Pipeline ID (optional)</string>
+    <string name="voice_assistant_pipeline_id_hint">Leave empty for default pipeline</string>
+    <string name="voice_assistant_max_seconds">Max listen (seconds)</string>
+    <string name="voice_assistant_max_seconds_hint">10</string>
+    <string name="voice_wake_enabled">Wake word detection</string>
+    <string name="voice_wake_model_name">Wake word model</string>
+    <string name="voice_wake_model_hint">filename without .tflite</string>
+    <string name="voice_wake_model_status">Model status: %1$s</string>
+    <string name="voice_wake_model_status_loaded">Loaded</string>
+    <string name="voice_wake_model_status_not_found">File not found</string>
+    <string name="voice_wake_model_status_error">Load error</string>
+    <string name="voice_wake_model_status_none">No model configured</string>
+    <string name="voice_wake_model_path">Place .tflite file at:\n%1$s/</string>
+    <string name="voice_wake_sound">Wake word detection sound</string>
+    <string name="voice_wake_cooldown">Cooldown after detection (seconds)</string>
+    <string name="voice_wake_sensitivity">Detection sensitivity</string>
+    <string name="voice_score_bar">Show wake word score bar</string>
+    <string name="voice_listening">Listening…</string>
+    <string name="voice_error">Voice error: %1$s</string>
+    <string name="voice_requires_url">Set the HA URL above before enabling voice</string>
 </resources>

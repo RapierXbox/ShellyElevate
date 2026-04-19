@@ -6,7 +6,6 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.graphics.Bitmap
 import android.net.http.SslError
 import android.os.Bundle
 import android.util.Log
@@ -27,6 +26,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.core.view.updateLayoutParams
 import androidx.annotation.RequiresPermission
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -42,6 +42,16 @@ import me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_TURN_SCREEN_OFF
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_TURN_SCREEN_ON
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_STATE_CHANGED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_STATE_KEY
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_TEXT
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_TEXT_KEY
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_SCORE
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_SCORE_KEY
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_THRESHOLD_KEY
+import me.rapierxbox.shellyelevatev2.Constants.SP_VOICE_SCORE_BAR_ENABLED
+import androidx.core.content.ContextCompat
+import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SETTINGS_EVER_SHOWN
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer
@@ -87,6 +97,7 @@ class MainActivity : ComponentActivity() {
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error reloading WebView on settings change", e)
             }
+            applyScoreBarSetting()
         }
     }
 
@@ -104,6 +115,78 @@ class MainActivity : ComponentActivity() {
                 binding.myWebView.evaluateJavascript(javascriptCode, null)
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error injecting JS", e)
+            }
+        }
+    }
+
+    private val voiceStateReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val stateName = intent?.getStringExtra(INTENT_VOICE_STATE_KEY) ?: return
+            val active = stateName == VoiceAssistantManager.State.LISTENING.name
+                    || stateName == VoiceAssistantManager.State.PROCESSING.name
+            binding.voiceIndicatorDot.visibility = if (active) View.VISIBLE else View.GONE
+            if (active) resetScoreBar()
+        }
+    }
+
+    private var scoreBarRegistered = false
+
+    private val colorGreen by lazy { ContextCompat.getColor(this, R.color.voice_score_green) }
+    private val colorAmber by lazy { ContextCompat.getColor(this, R.color.voice_score_amber) }
+    private val colorRed   by lazy { ContextCompat.getColor(this, R.color.voice_score_red)   }
+
+    private fun resetScoreBar() {
+        binding.voiceScoreBar.updateLayoutParams { height = 0 }
+        binding.voiceScoreValue.text = ".00"
+        binding.voiceScoreBar.setBackgroundColor(colorGreen)
+    }
+
+    private val voiceScoreReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val score = intent?.getFloatExtra(INTENT_VOICE_SCORE_KEY, 0f) ?: 0f
+            val threshold = intent?.getFloatExtra(INTENT_VOICE_THRESHOLD_KEY, 0.5f) ?: 0.5f
+            val h = binding.voiceScoreBarContainer.height.takeIf { it > 0 } ?: return
+
+            binding.voiceScoreBar.updateLayoutParams { height = (h * score.coerceIn(0f, 1f)).toInt() }
+
+            val thrPx = (h * threshold.coerceIn(0f, 1f)).toInt()
+            (binding.voiceThresholdLine.layoutParams as android.widget.FrameLayout.LayoutParams)
+                .bottomMargin = thrPx
+            binding.voiceThresholdLine.requestLayout()
+            binding.voiceThresholdLine.invalidate()
+
+            val barColor = when {
+                score >= threshold -> colorRed
+                score >= threshold * 0.5f -> colorAmber
+                else -> colorGreen
+            }
+            binding.voiceScoreBar.setBackgroundColor(barColor)
+            binding.voiceScoreValue.text = String.format("%.2f", score)
+        }
+    }
+
+    private fun applyScoreBarSetting() {
+        val enabled = mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false)
+        if (enabled && !scoreBarRegistered) {
+            LocalBroadcastManager.getInstance(this).registerReceiver(
+                voiceScoreReceiver, IntentFilter(INTENT_VOICE_SCORE))
+            scoreBarRegistered = true
+            binding.voiceScoreBarContainer.visibility = View.VISIBLE
+        } else if (!enabled && scoreBarRegistered) {
+            LocalBroadcastManager.getInstance(this).unregisterReceiver(voiceScoreReceiver)
+            scoreBarRegistered = false
+            binding.voiceScoreBarContainer.visibility = View.GONE
+        }
+    }
+
+    private val voiceTextReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val text = intent?.getStringExtra(INTENT_VOICE_TEXT_KEY) ?: ""
+            if (text.isEmpty()) {
+                binding.voiceBubble.visibility = View.GONE
+            } else {
+                binding.voiceBubbleText.text = text
+                binding.voiceBubble.visibility = View.VISIBLE
             }
         }
     }
@@ -431,6 +514,8 @@ class MainActivity : ComponentActivity() {
         LocalBroadcastManager.getInstance(this).apply {
             registerReceiver(settingsChangedBroadcastReceiver, IntentFilter(INTENT_SETTINGS_CHANGED))
             registerReceiver(webviewJavascriptInjectorBroadcastReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
+            registerReceiver(voiceStateReceiver, IntentFilter(INTENT_VOICE_STATE_CHANGED))
+            registerReceiver(voiceTextReceiver, IntentFilter(INTENT_VOICE_TEXT))
             registerReceiver(screenStateReceiver, IntentFilter().apply {
                 addAction(INTENT_TURN_SCREEN_ON)
                 addAction(INTENT_TURN_SCREEN_OFF)
@@ -544,6 +629,7 @@ class MainActivity : ComponentActivity() {
         setupSwipeOverlay()
 
         registerBroadcastReceivers()
+        applyScoreBarSetting()
 
         // Only show settings on first run, but not if launched from settings or if already in settings task
         if (!mSharedPreferences.getBoolean(SP_SETTINGS_EVER_SHOWN, false)) {
@@ -706,6 +792,9 @@ class MainActivity : ComponentActivity() {
         LocalBroadcastManager.getInstance(this).apply {
             unregisterReceiver(settingsChangedBroadcastReceiver)
             unregisterReceiver(webviewJavascriptInjectorBroadcastReceiver)
+            unregisterReceiver(voiceStateReceiver)
+            unregisterReceiver(voiceTextReceiver)
+            if (scoreBarRegistered) unregisterReceiver(voiceScoreReceiver)
             unregisterReceiver(screenStateReceiver)
         }
         cancelRetry()

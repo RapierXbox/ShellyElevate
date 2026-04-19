@@ -43,6 +43,7 @@ public class ShellyElevateApplication extends Application {
     public static MediaHelper mMediaHelper;
     public static ScreenSaverManager mScreenSaverManager;
     public static ScreenManager mScreenManager;
+    public static VoiceAssistantManager mVoiceAssistantManager;
     public static BluetoothProxyManager mBluetoothProxyManager;
 
     public static Context mApplicationContext;
@@ -107,6 +108,9 @@ public class ShellyElevateApplication extends Application {
             }
 
             mMQTTServer = new MQTTServer();
+
+            // Voice Assistant
+            mVoiceAssistantManager = new VoiceAssistantManager();
 
             // Bluetooth Proxy
             mBluetoothProxyManager = new BluetoothProxyManager();
@@ -212,6 +216,7 @@ public class ShellyElevateApplication extends Application {
         mScreenManager.onDestroy();
 
         mMQTTServer.onDestroy();
+        if (mVoiceAssistantManager != null) mVoiceAssistantManager.onDestroy();
         if (mBluetoothProxyManager != null) mBluetoothProxyManager.onDestroy();
         mMediaHelper.onDestroy();
 

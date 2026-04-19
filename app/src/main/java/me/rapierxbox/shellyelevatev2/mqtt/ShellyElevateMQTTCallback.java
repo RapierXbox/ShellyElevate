@@ -5,6 +5,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceAssistantManager;
 
 import android.content.Intent;
 import android.util.Log;
@@ -89,6 +90,11 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
                 // Payload is JSON with press_type field. No default action on incoming power button;
                 // power button behavior is configured on the device (auto-reboot on long press).
                 Log.i("MQTT", "Power button event received from HA: " + new String(message.getPayload(), StandardCharsets.UTF_8));
+                break;
+            case MQTT_TOPIC_VOICE_TRIGGER:
+                if (mVoiceAssistantManager != null) {
+                    mVoiceAssistantManager.trigger();
+                }
                 break;
         }
     }

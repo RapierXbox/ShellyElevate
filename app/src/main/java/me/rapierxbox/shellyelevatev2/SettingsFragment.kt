@@ -1,8 +1,10 @@
 package me.rapierxbox.shellyelevatev2
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Context.MODE_PRIVATE
 import android.content.Intent
+import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -22,8 +24,10 @@ import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import kotlin.math.roundToInt
 import me.rapierxbox.shellyelevatev2.Constants.*
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.*
+import me.rapierxbox.shellyelevatev2.voice.WakeWordDetector
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
@@ -186,6 +190,12 @@ class SettingsFragment : Fragment() {
         binding.brightnessSetting.value = mSharedPreferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS).toFloat()
         binding.minBrightness.value = mSharedPreferences.getInt(SP_MIN_BRIGHTNESS, 48).toFloat()
 
+        // Volume
+        val audioManager = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        binding.volumeSetting.value = (curVol.toFloat() / maxVol * 100f).coerceIn(0f, 100f).roundToInt().toFloat()
+
         //Screen saver
         binding.screenSaver.isChecked = mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
         binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
@@ -223,6 +233,22 @@ class SettingsFragment : Fragment() {
         binding.mqttPasswordLayout.isVisible = binding.mqttEnabled.isChecked
         binding.mqttClientIdLayout.isVisible = binding.mqttEnabled.isChecked
 
+        // Voice Assistant
+        binding.voiceAssistantEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)
+        binding.voiceAssistantToken.setText(mSharedPreferences.getString(SP_VOICE_ASSISTANT_TOKEN, ""))
+        binding.voiceAssistantPipelineId.setText(mSharedPreferences.getString(SP_VOICE_ASSISTANT_PIPELINE_ID, ""))
+        binding.voiceAssistantMaxSeconds.setText(
+            mSharedPreferences.getInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10).toString())
+        binding.voiceWakeEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
+        binding.voiceWakeModelName.setText(mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, ""))
+        binding.voiceWakeModelLayout.isVisible = binding.voiceWakeEnabled.isChecked
+        binding.voiceWakeSensitivity.value = mSharedPreferences.getInt(SP_VOICE_WAKE_SENSITIVITY, 50).toFloat()
+        binding.voiceWakeCooldown.value    = mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5).toFloat()
+        binding.voiceWakeSoundEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)
+        binding.voiceScoreBarEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false)
+        binding.voiceAssistantLayout.isVisible = binding.voiceAssistantEnabled.isChecked
+        updateWakeModelStatus()
+
         // Bluetooth Proxy
         binding.bluetoothProxyEnabled.isChecked = mSharedPreferences.getBoolean(SP_BLUETOOTH_PROXY_ENABLED, false)
         binding.bluetoothProxyName.setText(mSharedPreferences.getString(SP_BLUETOOTH_PROXY_NAME, "ShellyElevate"))
@@ -242,6 +268,19 @@ class SettingsFragment : Fragment() {
 
         binding.brightnessSetting.addOnChangeListener { slider, value, fromUser ->
             mDeviceHelper.setScreenBrightness(value.toInt())
+        }
+
+        var lastAppliedVol = -1
+        binding.volumeSetting.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                val am = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val target = (value / 100f * maxVol).roundToInt().coerceIn(0, maxVol)
+                if (target != lastAppliedVol) {
+                    lastAppliedVol = target
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, target, AudioManager.FLAG_PLAY_SOUND) // play sound flag lets android play its own volume change tone at next level
+                }
+            }
         }
 
         binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
@@ -304,6 +343,22 @@ class SettingsFragment : Fragment() {
 
         binding.buttonRelayEnabled.setOnCheckedChangeListener { _, isChecked ->
             binding.buttonRelayMappingLayout.isVisible = isChecked
+        }
+
+        binding.voiceAssistantEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.voiceAssistantLayout.isVisible = isChecked
+            if (isChecked) {
+                val haUrl = binding.webviewURL.text.toString()
+                if (haUrl.isEmpty()) {
+                    Toast.makeText(requireContext(), R.string.voice_requires_url, Toast.LENGTH_LONG).show()
+                    binding.voiceAssistantEnabled.isChecked = false
+                    binding.voiceAssistantLayout.isVisible = false
+                }
+            }
+        }
+
+        binding.voiceWakeEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.voiceWakeModelLayout.isVisible = isChecked
         }
 
         binding.bluetoothProxyEnabled.setOnCheckedChangeListener { _, isChecked ->
@@ -435,6 +490,20 @@ class SettingsFragment : Fragment() {
 
             //Http Server
             putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
+
+            // Voice Assistant
+            putBoolean(SP_VOICE_ASSISTANT_ENABLED, binding.voiceAssistantEnabled.isChecked)
+            putString(SP_VOICE_ASSISTANT_TOKEN, binding.voiceAssistantToken.text.toString())
+            putString(SP_VOICE_ASSISTANT_PIPELINE_ID, binding.voiceAssistantPipelineId.text.toString())
+            putInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS,
+                binding.voiceAssistantMaxSeconds.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10)
+            putBoolean(SP_VOICE_WAKE_ENABLED, binding.voiceWakeEnabled.isChecked)
+            putString(SP_VOICE_WAKE_MODEL_NAME, binding.voiceWakeModelName.text.toString().trim())
+            putInt(SP_VOICE_WAKE_SENSITIVITY, binding.voiceWakeSensitivity.value.toInt())
+            putInt(SP_VOICE_WAKE_COOLDOWN_SEC, binding.voiceWakeCooldown.value.toInt())
+            putBoolean(SP_VOICE_WAKE_SOUND_ENABLED, binding.voiceWakeSoundEnabled.isChecked)
+            putBoolean(SP_VOICE_SCORE_BAR_ENABLED, binding.voiceScoreBarEnabled.isChecked)
+
             // Bluetooth Proxy
             putBoolean(SP_BLUETOOTH_PROXY_ENABLED, binding.bluetoothProxyEnabled.isChecked)
             putString(SP_BLUETOOTH_PROXY_NAME, binding.bluetoothProxyName.text.toString().trim())
@@ -459,6 +528,18 @@ class SettingsFragment : Fragment() {
         }
 
         return adapter
+    }
+
+    private fun updateWakeModelStatus() {
+        val manager = mVoiceAssistantManager ?: return
+        val statusText = when (manager.wakeModelStatus) {
+            WakeWordDetector.ModelStatus.LOADED        -> getString(R.string.voice_wake_model_status_loaded)
+            WakeWordDetector.ModelStatus.FILE_NOT_FOUND -> getString(R.string.voice_wake_model_status_not_found)
+            WakeWordDetector.ModelStatus.LOAD_ERROR    -> getString(R.string.voice_wake_model_status_error)
+            WakeWordDetector.ModelStatus.NOT_LOADED    -> getString(R.string.voice_wake_model_status_none)
+        }
+        binding.voiceWakeModelStatus.text = getString(R.string.voice_wake_model_status, statusText)
+        binding.voiceWakeModelPath.text   = getString(R.string.voice_wake_model_path, manager.wakeModelDirectory)
     }
 
     companion object {
