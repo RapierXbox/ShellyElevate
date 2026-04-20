@@ -95,7 +95,7 @@ public class Constants {
     public static final String MQTT_TOPIC_PROXIMITY_SENSOR = "shellyelevatev2/%s/proximity";
     public static final String MQTT_TOPIC_RELAY_STATE = "shellyelevatev2/%s/relay_state";
     public static final String MQTT_TOPIC_RELAY_COMMAND = "shellyelevatev2/%s/relay_command";
-    public static String MQTT_TOPIC_SWITCH_STATE = "shellyelevatev2/%s/switch_state";
+    public static final String MQTT_TOPIC_SWITCH_STATE = "shellyelevatev2/%s/switch_state";
     public static final String MQTT_TOPIC_UPDATE = "shellyelevatev2/%s/update";
     public static final String MQTT_TOPIC_UPDATE_GENERIC = "shellyelevatev2/update";
     public static final String MQTT_TOPIC_HELLO = "shellyelevatev2/%s/hello";
