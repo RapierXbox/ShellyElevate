@@ -95,7 +95,7 @@ public class KioskService extends Service {
 		return prefs.getBoolean(Constants.SP_LITE_MODE, false);
 	}
 
-	private boolean isActivityRunning(Class<?> activityClass) {
+	private boolean isActivityAtTop(Class<?> activityClass) {
 		ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
 		if (am != null) {
 			List<ActivityManager.RunningTaskInfo> tasks = am.getRunningTasks(Integer.MAX_VALUE);
