@@ -78,7 +78,7 @@ public class KioskService extends Service {
 					return;
 				}
 
-				if (!isActivityRunning(MainActivity.class)) {
+				if (!isActivityAtTop(MainActivity.class) && !isActivityAtTop(SettingsActivity.class)) {
 					Log.w("KioskService", "MainActivity not running, relaunching...");
 					Intent activityIntent = new Intent(KioskService.this, MainActivity.class);
 					activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
