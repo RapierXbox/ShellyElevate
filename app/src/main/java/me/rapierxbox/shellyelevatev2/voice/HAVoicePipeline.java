@@ -54,6 +54,7 @@ public class HAVoicePipeline {
     private final AtomicInteger messageId = new AtomicInteger(1);
     private volatile AuthState authState = AuthState.WAITING;
     private volatile int sttBinaryHandlerId = -1;
+    private volatile boolean closing = false;
     private String haBaseUrl;
     private String accessToken;
 
@@ -67,13 +68,22 @@ public class HAVoicePipeline {
         this.accessToken = token;
         this.authState = AuthState.WAITING;
         this.sttBinaryHandlerId = -1;
+        this.closing = false;
         this.messageId.set(1);
 
         Uri uri = Uri.parse(haUrl);
         String scheme = "https".equalsIgnoreCase(uri.getScheme()) ? "wss" : "ws";
         int port = uri.getPort();
-        String wsUrl = scheme + "://" + uri.getHost()
+        String userInfo = uri.getEncodedUserInfo();
+        String basePath = uri.getEncodedPath();
+        if (basePath == null) basePath = "";
+        // strip trailing slash so we dont produce "//api/websocket"
+        if (basePath.endsWith("/")) basePath = basePath.substring(0, basePath.length() - 1);
+        String wsUrl = scheme + "://"
+                + (userInfo != null && !userInfo.isEmpty() ? userInfo + "@" : "")
+                + uri.getHost()
                 + (port != -1 ? ":" + port : "")
+                + basePath
                 + "/api/websocket";
 
         Log.d(TAG, "Connecting to " + wsUrl);
@@ -93,6 +103,7 @@ public class HAVoicePipeline {
 
             @Override
             public void onFailure(WebSocket ws, Throwable t, Response response) {
+                if (closing) return;
                 Log.e(TAG, "WebSocket failure: " + (t != null ? t.getMessage() : "null"));
                 callback.onError(t != null ? t.getMessage() : "Connection failed");
                 callback.onDisconnected();
@@ -101,6 +112,7 @@ public class HAVoicePipeline {
             @Override
             public void onClosed(WebSocket ws, int code, String reason) {
                 Log.i(TAG, "WebSocket closed: " + code + " " + reason);
+                if (closing) return;
                 callback.onDisconnected();
             }
         });
@@ -263,6 +275,7 @@ public class HAVoicePipeline {
     }
 
     public void close() {
+        closing = true;
         if (webSocket != null) {
             webSocket.close(1000, "Session complete");
             webSocket = null;
