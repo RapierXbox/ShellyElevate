@@ -47,6 +47,7 @@ public class DeviceHelper {
         for (String brightnessFile : screenBrightnessFiles) {
             if (new File(brightnessFile).exists()) {
                 screenBrightnessFile = brightnessFile;
+                break;
             }
         }
         if (screenBrightnessFile == null) {
@@ -97,7 +98,13 @@ public class DeviceHelper {
     }
 
     public int getScreenBrightness() {
-        return Integer.parseInt(sanitizeString(readFileContent(screenBrightnessFile)));
+        String raw = sanitizeString(readFileContent(screenBrightnessFile));
+        if (raw.isEmpty()) return lastScreenBrightness;
+        try {
+            return Integer.parseInt(raw);
+        } catch (NumberFormatException e) {
+            return lastScreenBrightness;
+        }
     }
 
     public boolean getRelay(int num) {
