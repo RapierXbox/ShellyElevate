@@ -15,6 +15,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
@@ -37,6 +38,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private long lastProximityEventTime = 0L;
     private long lastProximityWakeTime = 0L;
     private Boolean lastNearState = null;
+    private volatile ScheduledFuture<?> idleTask;
 
     public static ScreenSaver[] getAvailableScreenSavers() {
         return new ScreenSaver[]{
@@ -53,12 +55,12 @@ public class ScreenSaverManager extends BroadcastReceiver {
         this.lastTouchEventTime = System.currentTimeMillis();
         this.screenSaverRunning = false;
 
-        // Periodic idle check
-        scheduler.scheduleWithFixedDelay(this::checkLastTouchEventTime, 0, 1, TimeUnit.SECONDS);
+        rescheduleIdleCheck();
 
-        // Register proximity receiver
-        LocalBroadcastManager.getInstance(appContext)
-                .registerReceiver(this, new IntentFilter(INTENT_PROXIMITY_UPDATED));
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(INTENT_PROXIMITY_UPDATED);
+        filter.addAction(INTENT_SETTINGS_CHANGED);
+        LocalBroadcastManager.getInstance(appContext).registerReceiver(this, filter);
 
         Log.i(TAG, "ScreenSaverManager initialized");
     }
@@ -76,6 +78,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
     public boolean onTouchEvent(MotionEvent event) {
         lastTouchEventTime = System.currentTimeMillis();
+        rescheduleIdleCheck();
         if (event == null) return true;
 
         if (event.getAction() == ACTION_UP && isScreenSaverRunning()) {
@@ -105,33 +108,45 @@ public class ScreenSaverManager extends BroadcastReceiver {
                 ShellyElevateApplication.mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true);
     }
 
-	private void checkLastTouchEventTime() {
+	private synchronized void rescheduleIdleCheck() {
+		ScheduledFuture<?> current = idleTask;
+		if (current != null) { current.cancel(false); idleTask = null; }
+		if (scheduler.isShutdown()) return;
+
 		var prefs = ShellyElevateApplication.mSharedPreferences;
 		if (prefs == null) return;
+		if (keepAliveFlag || screenSaverRunning) return;
+		if (!prefs.getBoolean(SP_SCREEN_SAVER_ENABLED, true)) return;
 
-		long delay = prefs.getInt(SP_SCREEN_SAVER_DELAY, 45) * 1000L;
-		boolean enabled = prefs.getBoolean(SP_SCREEN_SAVER_ENABLED, true);
+		long delayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
+		long elapsed = System.currentTimeMillis() - lastTouchEventTime;
+		long remaining = Math.max(0L, delayMs - elapsed);
+		idleTask = scheduler.schedule(this::onIdleDeadline, remaining, TimeUnit.MILLISECONDS);
+	}
 
-		// NEW: skip idle check if keepAlive is active
-		if (keepAliveFlag || !enabled || screenSaverRunning) return;
+	private void onIdleDeadline() {
+		idleTask = null;
+		var prefs = ShellyElevateApplication.mSharedPreferences;
+		if (prefs == null) return;
+		if (keepAliveFlag || screenSaverRunning) return;
+		if (!prefs.getBoolean(SP_SCREEN_SAVER_ENABLED, true)) return;
 
-		if (System.currentTimeMillis() - lastTouchEventTime > delay) {
-			startScreenSaver();
-		}
+		long delayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
+		long elapsed = System.currentTimeMillis() - lastTouchEventTime;
+		if (elapsed >= delayMs) startScreenSaver();
+		else rescheduleIdleCheck();
 	}
 
 	public void keepAlive(boolean keepAlive) {
 		this.keepAliveFlag = keepAlive;
 		if (keepAlive) {
 			Log.i(TAG, "KeepAlive enabled: screensaver will not start");
-			// If saver is already running, stop it immediately
-			if (screenSaverRunning) {
-				stopScreenSaver();
-			}
+			if (screenSaverRunning) stopScreenSaver();
+			rescheduleIdleCheck();
 		} else {
 			Log.i(TAG, "KeepAlive disabled: screensaver logic resumes");
-			// Reset idle timer so saver doesn't start instantly
 			lastTouchEventTime = System.currentTimeMillis();
+			rescheduleIdleCheck();
 		}
 	}
 
@@ -166,6 +181,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
         });
 
         lastTouchEventTime = System.currentTimeMillis();
+        rescheduleIdleCheck();
 
         Log.i(TAG, "Stopping screensaver: " + saver.getClass().getSimpleName());
 
@@ -175,6 +191,10 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
     @Override
     public void onReceive(Context context, Intent intent) {
+        if (INTENT_SETTINGS_CHANGED.equals(intent.getAction())) {
+            rescheduleIdleCheck();
+            return;
+        }
         float maxProximitySensorValue = mDeviceSensorManager != null
                 ? mDeviceSensorManager.getMaxProximitySensorValue()
                 : 5.0f;
@@ -225,11 +245,9 @@ public class ScreenSaverManager extends BroadcastReceiver {
         long idleDelayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
         if (keepAwakeMs <= 0L) {
             lastTouchEventTime = now;
-            return;
+        } else {
+            lastTouchEventTime = now - idleDelayMs + keepAwakeMs;
         }
-
-        // checkLastTouchEventTime starts saver when now - lastTouchEventTime > idleDelayMs.
-        // Back-calculate a synthetic last-touch timestamp so saver starts after keepAwakeMs.
-        lastTouchEventTime = now - idleDelayMs + keepAwakeMs;
+        rescheduleIdleCheck();
     }
 }
