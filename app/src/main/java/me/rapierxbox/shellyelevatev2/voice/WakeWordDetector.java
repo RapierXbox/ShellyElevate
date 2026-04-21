@@ -158,6 +158,14 @@ public class WakeWordDetector {
             inputZeroPoint = inputIs8bit ? tflite.getInputTensor(0).quantizationParams().getZeroPoint() : 0;
             outputScale = outputIs8bit ? tflite.getOutputTensor(0).quantizationParams().getScale(): 1f;
             outputZeroPoint = outputIs8bit ? tflite.getOutputTensor(0).quantizationParams().getZeroPoint() : 0;
+            // some models ship without in quant parmams
+            // val/of = inf -> rnd and maxint -> 127
+            // fallback to mWW v2 mapping
+            if (inputIs8bit && inputScale == 0f) {
+                inputScale = MelSpectrogramExtractor.OUT_MAX / 255f;
+                inputZeroPoint = -128;
+                Log.w(TAG, "input quant params missing for " + modelName + ", using fallback");
+            }
 
             int outCols = tflite.getOutputTensor(0).shape()[tflite.getOutputTensor(0).shape().length - 1];
             if (hasChannelDim) {
@@ -230,15 +238,20 @@ public class WakeWordDetector {
             }
             JSONObject json = new JSONObject(sb.toString());
 
-            if (json.has("sliding_window_average"))
-                slidingWindowSize = Math.max(1, json.getInt("sliding_window_average"));
+            // tatertotterson models nest confog under micro... esphome models are flat
+            JSONObject cfg = json.has("micro") ? json.getJSONObject("micro") : json;
 
-            if (json.has("probability_cutoff")) {
-                baseThreshold = (float) json.getDouble("probability_cutoff");
+            if (cfg.has("sliding_window_average"))
+                slidingWindowSize = Math.max(1, cfg.getInt("sliding_window_average"));
+            else if (cfg.has("sliding_window_size"))
+                slidingWindowSize = Math.max(1, cfg.getInt("sliding_window_size"));
+
+            if (cfg.has("probability_cutoff")) {
+                baseThreshold = (float) cfg.getDouble("probability_cutoff");
                 scoreThreshold = baseThreshold; // will be overridden by setSensitivity if called
             }
 
-            // resolve idx for positive class
+            // resolve idx for positive class (official format only... tate uses index 0)
             if (json.has("class_mapping") && json.has("positive_output_class")) {
                 String posClass = json.getString("positive_output_class");
                 JSONObject mapping = json.getJSONObject("class_mapping");
@@ -392,7 +405,7 @@ public class WakeWordDetector {
                 for (int t = 0; t < nFrames; t++) {
                     float[] row = frameRing[(base + t) % nFrames];
                     for (int f = 0; f < MelSpectrogramExtractor.N_MELS; f++)
-                        input4dByte[0][t][f][0] = quantize(row[f], inputScale, inputZeroPoint, inputIsUnsigned);
+                        input4dByte[0][t][f][0] = quantizeMel(row[f], inputZeroPoint, inputIsUnsigned);
                 }
                 try { tflite.run(input4dByte, outArray); }
                 catch (Exception e) { Log.e(TAG, "inference error", e); return; }
@@ -409,7 +422,7 @@ public class WakeWordDetector {
                 for (int t = 0; t < nFrames; t++) {
                     float[] row = frameRing[(base + t) % nFrames];
                     for (int f = 0; f < MelSpectrogramExtractor.N_MELS; f++)
-                        input3dByte[0][t][f] = quantize(row[f], inputScale, inputZeroPoint, inputIsUnsigned);
+                        input3dByte[0][t][f] = quantizeMel(row[f], inputZeroPoint, inputIsUnsigned);
                 }
                 try { tflite.run(input3dByte, outArray); }
                 catch (Exception e) { Log.e(TAG, "inference error", e); return; }
@@ -430,10 +443,17 @@ public class WakeWordDetector {
         if (outputIs8bit) {
             int idx = Math.min(positiveOutputIdx, outputBufByte[0].length - 1);
             byte b = outputBufByte[0][idx];
-            rawByte = outputIsUnsigned ? (b & 0xFF) : (int) b;
             float scale = outputScale;
-            if (scale == 0f) scale = outputIsUnsigned ? 1f / 255f : 1f / 127f; // if flatbuffer has no quant params scale comes back 0
-            rawScore = (rawByte - outputZeroPoint) * scale;
+            int zp = outputZeroPoint;
+            if (scale == 0f) {
+                // No quant params — assume unsigned probability byte: [0,255] → [0,1]
+                scale = 1f / 255f;
+                rawByte = b & 0xFF;
+                zp = 0;
+            } else {
+                rawByte = outputIsUnsigned ? (b & 0xFF) : (int) b;
+            }
+            rawScore = (rawByte - zp) * scale;
         } else {
             int idx = Math.min(positiveOutputIdx, outputBuf[0].length - 1);
             rawScore = outputBuf[0][idx];
@@ -450,20 +470,22 @@ public class WakeWordDetector {
 
         debugFrameCount++;
         if (avgScore > debugMaxEver) debugMaxEver = avgScore;
+        boolean firstFew = (debugFrameCount <= 5);
         boolean periodic = (debugFrameCount % 100 == 0);
         boolean notable  = (avgScore > 0.05f);
-        if ((periodic || notable) && BuildConfig.DEBUG) {
+        if (firstFew || periodic || notable) {
             float melMin = Float.MAX_VALUE, melMax = -Float.MAX_VALUE;
             float[] recent = frameRing[(frameRingPos - 1 + nFrames) % nFrames];
             for (float v : recent) { if (v < melMin) melMin = v; if (v > melMax) melMax = v; }
-            Log.d(TAG, (notable ? "!!! " : "    ")
+            String msg = (notable ? "!!! " : "    ")
                 + "avg=" + String.format("%.4f", avgScore)
                 + " raw=" + String.format("%.4f", rawScore)
                 + " rawByte=" + rawByte
                 + " thr=" + String.format("%.2f", scoreThreshold)
                 + " maxEver=" + String.format("%.4f", debugMaxEver)
-                + " mel=[" + String.format("%.1f", melMin) + ".." + String.format("%.1f", melMax) + "]"
-                + " outScale=" + outputScale);
+                + " mel=[" + String.format("%.1f", melMin) + ".." + String.format("%.1f", melMax) + "]";
+            if (firstFew) Log.i(TAG, "infer#" + debugFrameCount + " " + msg);
+            else          Log.d(TAG, msg);
         }
 
         long nowMs = System.currentTimeMillis();
@@ -486,8 +508,15 @@ public class WakeWordDetector {
         }
     }
 
-    private static byte quantize(float val, float scale, int zeroPoint, boolean unsigned) {
-        int q = Math.round(val / scale) + zeroPoint;
+    // Maps our [0, OUT_MAX] mel float -> INT8/UINT8, bypassing the mode's inputScale.
+    // Training pipelines differ: okay_nabu uses float [0,26] features (scale≈0.102),
+    // TaterTotterson uses uint16 [0,666] features (scale~=2.61). Both represent the same
+    // signal... just a 25.6× linear rescaling. By mapping directly to the full INT8 range
+    // using only the zero-point, we produce identical quantized values regardless of which
+    // float scale the model was trained on.
+    private static byte quantizeMel(float val, int zeroPoint, boolean unsigned) {
+        float range = unsigned ? 255f : (127f - zeroPoint);
+        int q = Math.round(val * range / MelSpectrogramExtractor.OUT_MAX) + zeroPoint;
         return unsigned ? (byte) Math.max(0, Math.min(255, q))
                         : (byte) Math.max(-128, Math.min(127, q));
     }
