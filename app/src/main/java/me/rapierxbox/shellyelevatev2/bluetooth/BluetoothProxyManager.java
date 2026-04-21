@@ -80,7 +80,7 @@ public class BluetoothProxyManager {
     private static final byte[] WRITE_QUEUE_SENTINEL = new byte[0]; // writeloop exit
 
     private volatile boolean      enabled = false;
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ExecutorService executor = Executors.newFixedThreadPool(4);
     private volatile ServerSocket serverSocket;
     private final AtomicReference<ClientSession> activeSession = new AtomicReference<>();
     private volatile BluetoothLeScanner bleScanner;
