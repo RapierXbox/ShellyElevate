@@ -24,13 +24,12 @@ import android.widget.Toast;
 import androidx.annotation.RequiresPermission;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import me.rapierxbox.shellyelevatev2.BuildConfig;
 import okhttp3.OkHttpClient;
 
 // state machine: diabled -> idle -> listening -> processing -> speaking -> idle
@@ -62,10 +61,14 @@ public class VoiceAssistantManager {
     private WakeWordDetector wakeDetector;
     private volatile String loadedModelName = "";
 
-    private final ExecutorService audioExecutor = Executors.newSingleThreadExecutor();
-    private final ExecutorService toneExecutor  = Executors.newSingleThreadExecutor();
-    private final ScheduledExecutorService scheduler     = Executors.newSingleThreadScheduledExecutor();
+    private final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(2);
     private final Handler mainHandler   = new Handler(Looper.getMainLooper());
+
+    private static final int TONE_SAMPLE_RATE = 44100;
+    private static final double WAKE_TONE_DURATION_SEC = 0.8;
+    private static final double END_TONE_DURATION_SEC = 0.5;
+    private final short[] wakeToneBuffer = renderTone(660.0, WAKE_TONE_DURATION_SEC, 5.0);
+    private final short[] endToneBuffer  = renderTone(440.0, END_TONE_DURATION_SEC, 9.0);
 
     private final AtomicBoolean audioStreaming  = new AtomicBoolean(false);
     private final AtomicBoolean speechEnded     = new AtomicBoolean(false);
@@ -134,6 +137,7 @@ public class VoiceAssistantManager {
 
         wakeDetector.setSensitivity(mSharedPreferences.getInt(SP_VOICE_WAKE_SENSITIVITY, 50));
         wakeDetector.setCooldown(mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5));
+        wakeDetector.setScoreBroadcastEnabled(mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false));
 
         if (state == State.IDLE && !wakeDetector.isRunning()
                 && wakeDetector.getModelStatus() == WakeWordDetector.ModelStatus.LOADED) {
@@ -163,32 +167,37 @@ public class VoiceAssistantManager {
         if (enabled && state == State.IDLE) trigger();
     }
 
-    private void playWakeSound() { playTone(660.0, 0.8, 5.0); }
-    private void playEndSound()  { playTone(440.0, 0.5, 9.0); }
+    private void playWakeSound() { playTone(wakeToneBuffer, WAKE_TONE_DURATION_SEC); }
+    private void playEndSound()  { playTone(endToneBuffer,  END_TONE_DURATION_SEC); }
 
-    private void playTone(double freq, double durationSec, double decayConstant) {
-        toneExecutor.execute(() -> {
-            final int sampleRate = 44100;
-            final int numSamples = (int) (sampleRate * durationSec);
-            final int attackSamples = sampleRate / 200; // 5 ms lin attack
-            short[] buf = new short[numSamples];
-            for (int i = 0; i < numSamples; i++) {
-                double attack = i < attackSamples ? (double) i / attackSamples : 1.0;
-                double envelope = attack * Math.exp(-decayConstant * i / numSamples);
-                buf[i] = (short) (Short.MAX_VALUE * 0.75 * envelope
-                        * Math.sin(2.0 * Math.PI * freq * i / sampleRate));
-            }
+    private static short[] renderTone(double freq, double durationSec, double decayConstant) {
+        int numSamples = (int) (TONE_SAMPLE_RATE * durationSec);
+        int attackSamples = TONE_SAMPLE_RATE / 200;
+        short[] buf = new short[numSamples];
+        for (int i = 0; i < numSamples; i++) {
+            double attack = i < attackSamples ? (double) i / attackSamples : 1.0;
+            double envelope = attack * Math.exp(-decayConstant * i / numSamples);
+            buf[i] = (short) (Short.MAX_VALUE * 0.75 * envelope
+                    * Math.sin(2.0 * Math.PI * freq * i / TONE_SAMPLE_RATE));
+        }
+        return buf;
+    }
+
+    private void playTone(short[] buf, double durationSec) {
+        scheduler.execute(() -> {
+            AudioTrack track = null;
             try {
-                AudioTrack track = new AudioTrack(AudioManager.STREAM_MUSIC, sampleRate,
+                track = new AudioTrack(AudioManager.STREAM_MUSIC, TONE_SAMPLE_RATE,
                         AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                        numSamples * 2, AudioTrack.MODE_STATIC);
-                track.write(buf, 0, numSamples);
+                        buf.length * 2, AudioTrack.MODE_STATIC);
+                track.write(buf, 0, buf.length);
                 track.play();
                 Thread.sleep((long) (durationSec * 1000) + 200);
                 track.stop();
-                track.release();
             } catch (Exception e) {
                 Log.w(TAG, "could not play tone", e);
+            } finally {
+                if (track != null) { try { track.release(); } catch (Exception ignored) {} }
             }
         });
     }
@@ -275,7 +284,7 @@ public class VoiceAssistantManager {
         pipeline.startPipeline(pipelineId.isEmpty() ? null : pipelineId);
 
         audioStreaming.set(true);
-        audioExecutor.execute(this::captureAndStream);
+        scheduler.execute(this::captureAndStream);
 
         int maxSec = mSharedPreferences.getInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10);
         if (maxDurationFuture != null && !maxDurationFuture.isDone()) maxDurationFuture.cancel(false);
@@ -367,9 +376,11 @@ public class VoiceAssistantManager {
                     } else {
                         speechFrames = 0;
                         if (speechStarted && ++silentFrames >= VAD_STOP_FRAMES) {
-                            Log.d(TAG, "local VAD: silence after speech, ending capture"
-                                    + " (floor=" + String.format("%.4f", noiseFloor)
-                                    + " thr=" + String.format("%.4f", speechThreshold) + ")");
+                            if (BuildConfig.DEBUG) {
+                                Log.d(TAG, "local VAD: silence after speech, ending capture"
+                                        + " (floor=" + String.format("%.4f", noiseFloor)
+                                        + " thr=" + String.format("%.4f", speechThreshold) + ")");
+                            }
                             break;
                         }
                     }
@@ -437,8 +448,6 @@ public class VoiceAssistantManager {
         manuallyDisabled = true; enabled = false;
         shutdown();
         LocalBroadcastManager.getInstance(mApplicationContext).unregisterReceiver(settingsReceiver);
-        audioExecutor.shutdownNow();
-        toneExecutor.shutdownNow();
         scheduler.shutdownNow();
         okHttpClient.dispatcher().executorService().shutdown();
         okHttpClient.connectionPool().evictAll();
