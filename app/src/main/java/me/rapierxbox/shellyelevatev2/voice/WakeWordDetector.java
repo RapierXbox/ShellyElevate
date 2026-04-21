@@ -65,6 +65,7 @@ public class WakeWordDetector {
 
     private volatile ModelStatus modelStatus = ModelStatus.NOT_LOADED;
     private Interpreter tflite;
+    private File modelFile; // remembered so we can rebuild the interpreter on start
     private int nFrames;
     private boolean hasChannelDim;
     private float[][][] input3d;
@@ -128,6 +129,7 @@ public class WakeWordDetector {
 
         try {
             tflite = new Interpreter(loadMappedFile(file), new Interpreter.Options().setNumThreads(1));
+            modelFile = file;
 
             int[] shape = tflite.getInputTensor(0).shape();
             if (shape.length == 3) {
@@ -208,6 +210,7 @@ public class WakeWordDetector {
 
     private void closeModel() {
         if (tflite != null) { try { tflite.close(); } catch (Exception ignored) {} tflite = null; }
+        modelFile = null;
         frameRing = null;
         input3d = null; input4d = null; input3dByte = null; input4dByte = null;
         outputBuf = null; outputBufByte = null;
@@ -351,14 +354,30 @@ public class WakeWordDetector {
 
             activeRecorder.set(recorder);
             recorder.startRecording();
-            if (tflite != null) { try { tflite.resetVariableTensors(); } catch (Exception ignored) {} } // reset tensor state so stale pos stoate from prior detection does not refire (doesnt really work)
+            // resetVariableTensors() is unreliable for converted v2 streaming graphs:
+            // some models keep accumulating LSTM state across stop/start and gradually
+            // drift the score upward on pure silence until they false-fire.
+            // rebuilding the interpreter from the file guarantees fresh variable state.
+            if (modelFile != null) {
+                try {
+                    if (tflite != null) { tflite.close(); tflite = null; }
+                    tflite = new Interpreter(loadMappedFile(modelFile), new Interpreter.Options().setNumThreads(1));
+                } catch (Exception e) {
+                    Log.e(TAG, "failed to rebuild interpreter on start", e);
+                    return;
+                }
+            }
             if (scoreWindow != null) {
                 java.util.Arrays.fill(scoreWindow, 0f);
                 scoreWindowPos = 0; scoreWindowSum = 0f;
             }
             debugMaxEver = 0f; debugFrameCount = 0;
             framesCollected = 0; frameRingPos = 0; newFramesSinceInfer = 0;
-            if (lastTriggerAt != 0L) lastTriggerAt = System.currentTimeMillis();
+            // start cooldown unconditionally: covers cold-start noise estimate convergence (~400ms),
+            // sliding window fill, and any stale streaming-tensor state. without this the first
+            // few inferences run on inflated mel values (low noise estimate -> over-boosted pcan)
+            // and can fire immediately on silence
+            lastTriggerAt = System.currentTimeMillis();
 
             MelSpectrogramExtractor extractor = new MelSpectrogramExtractor();
             byte[] buf = new byte[CHUNK_BYTES];
