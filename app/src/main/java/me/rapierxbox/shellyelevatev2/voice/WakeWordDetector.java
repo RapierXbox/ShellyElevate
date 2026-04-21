@@ -48,6 +48,7 @@ public class WakeWordDetector {
     private static final int CHUNK_BYTES = MelSpectrogramExtractor.HOP_SAMPLES * 2 * 10; // 100ms = 10 mel hops
     private volatile float scoreThreshold = 0.5f;
     private volatile long cooldownMs = 5_000L;
+    private volatile boolean scoreBroadcastEnabled = false;
     private static final long SHUTDOWN_TIMEOUT_MS = 1_000L;
 
     public enum ModelStatus { NOT_LOADED, LOADED, FILE_NOT_FOUND, LOAD_ERROR }
@@ -286,6 +287,10 @@ public class WakeWordDetector {
         cooldownMs = seconds * 1000L;
     }
 
+    public void setScoreBroadcastEnabled(boolean enabled) {
+        scoreBroadcastEnabled = enabled;
+    }
+
     public void start() {
         if (modelStatus != ModelStatus.LOADED) {
             Log.w(TAG, "cant start: model not loaded (" + modelStatus + ")"); return;
@@ -489,32 +494,36 @@ public class WakeWordDetector {
 
         debugFrameCount++;
         if (avgScore > debugMaxEver) debugMaxEver = avgScore;
-        boolean firstFew = (debugFrameCount <= 5);
-        boolean periodic = (debugFrameCount % 100 == 0);
-        boolean notable  = (avgScore > 0.05f);
-        if (firstFew || periodic || notable) {
-            float melMin = Float.MAX_VALUE, melMax = -Float.MAX_VALUE;
-            float[] recent = frameRing[(frameRingPos - 1 + nFrames) % nFrames];
-            for (float v : recent) { if (v < melMin) melMin = v; if (v > melMax) melMax = v; }
-            String msg = (notable ? "!!! " : "    ")
-                + "avg=" + String.format("%.4f", avgScore)
-                + " raw=" + String.format("%.4f", rawScore)
-                + " rawByte=" + rawByte
-                + " thr=" + String.format("%.2f", scoreThreshold)
-                + " maxEver=" + String.format("%.4f", debugMaxEver)
-                + " mel=[" + String.format("%.1f", melMin) + ".." + String.format("%.1f", melMax) + "]";
-            if (firstFew) Log.i(TAG, "infer#" + debugFrameCount + " " + msg);
-            else          Log.d(TAG, msg);
+        if (BuildConfig.DEBUG) {
+            boolean firstFew = (debugFrameCount <= 5);
+            boolean periodic = (debugFrameCount % 100 == 0);
+            boolean notable  = (avgScore > 0.05f);
+            if (firstFew || periodic || notable) {
+                float melMin = Float.MAX_VALUE, melMax = -Float.MAX_VALUE;
+                float[] recent = frameRing[(frameRingPos - 1 + nFrames) % nFrames];
+                for (float v : recent) { if (v < melMin) melMin = v; if (v > melMax) melMax = v; }
+                String msg = (notable ? "!!! " : "    ")
+                    + "avg=" + String.format("%.4f", avgScore)
+                    + " raw=" + String.format("%.4f", rawScore)
+                    + " rawByte=" + rawByte
+                    + " thr=" + String.format("%.2f", scoreThreshold)
+                    + " maxEver=" + String.format("%.4f", debugMaxEver)
+                    + " mel=[" + String.format("%.1f", melMin) + ".." + String.format("%.1f", melMax) + "]";
+                if (firstFew) Log.i(TAG, "infer#" + debugFrameCount + " " + msg);
+                else          Log.d(TAG, msg);
+            }
         }
 
-        long nowMs = System.currentTimeMillis();
-        if (nowMs - lastScoreBroadcastMs >= 50) {
-            lastScoreBroadcastMs = nowMs;
-            final float bs = avgScore, bt = scoreThreshold;
-            mainHandler.post(() -> LocalBroadcastManager.getInstance(context).sendBroadcast(
-                    new Intent(Constants.INTENT_VOICE_SCORE)
-                            .putExtra(Constants.INTENT_VOICE_SCORE_KEY, bs)
-                            .putExtra(Constants.INTENT_VOICE_THRESHOLD_KEY, bt)));
+        if (scoreBroadcastEnabled) {
+            long nowMs = System.currentTimeMillis();
+            if (nowMs - lastScoreBroadcastMs >= 50) {
+                lastScoreBroadcastMs = nowMs;
+                final float bs = avgScore, bt = scoreThreshold;
+                mainHandler.post(() -> LocalBroadcastManager.getInstance(context).sendBroadcast(
+                        new Intent(Constants.INTENT_VOICE_SCORE)
+                                .putExtra(Constants.INTENT_VOICE_SCORE_KEY, bs)
+                                .putExtra(Constants.INTENT_VOICE_THRESHOLD_KEY, bt)));
+            }
         }
 
         if (avgScore >= scoreThreshold) {
