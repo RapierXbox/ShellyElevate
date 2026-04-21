@@ -33,6 +33,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.webkit.WebSettingsCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED
@@ -69,7 +70,6 @@ import android.net.Uri
 import java.io.IOException
 
 class MainActivity : ComponentActivity() {
-    private var isActive: Boolean = false
     private var initialLoadDone = false
     private var retryJob: kotlinx.coroutines.Job? = null
     private var firstPaintDone = false
