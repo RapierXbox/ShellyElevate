@@ -54,10 +54,17 @@ public class MQTTServer {
     // Lightweight coalescing for bursty publishes (switches/buttons/relays)
     private static final long COALESCE_WINDOW_MS = 40L;
     private final Object coalesceLock = new Object();
-    private final java.util.HashMap<String, String> pendingPayloads = new java.util.HashMap<>();
-    private final java.util.HashMap<String, Integer> pendingQos = new java.util.HashMap<>();
-    private final java.util.HashMap<String, Boolean> pendingRetained = new java.util.HashMap<>();
+    private java.util.HashMap<String, Pending> pending = new java.util.HashMap<>();
     private volatile boolean flushScheduled = false;
+
+    private static final class Pending {
+        final String payload;
+        final int qos;
+        final boolean retained;
+        Pending(String payload, int qos, boolean retained) {
+            this.payload = payload; this.qos = qos; this.retained = retained;
+        }
+    }
 
     public MQTTServer() {
         mMemoryPersistence = new MemoryPersistence();
@@ -316,9 +323,7 @@ public class MQTTServer {
     private void publishInternalCoalesced(String topic, String payload, int qos, boolean retained) {
         if (scheduler.isShutdown()) return;
         synchronized (coalesceLock) {
-            pendingPayloads.put(topic, payload);
-            pendingQos.put(topic, qos);
-            pendingRetained.put(topic, retained);
+            pending.put(topic, new Pending(payload, qos, retained));
             if (!flushScheduled) {
                 flushScheduled = true;
                 scheduler.schedule(this::flushPendingPublishes, COALESCE_WINDOW_MS, TimeUnit.MILLISECONDS);
@@ -327,29 +332,19 @@ public class MQTTServer {
     }
 
     private void flushPendingPublishes() {
-        java.util.Map<String, String> toSend;
-        java.util.Map<String, Integer> qosMap;
-        java.util.Map<String, Boolean> retainedMap;
+        java.util.HashMap<String, Pending> toSend;
         synchronized (coalesceLock) {
-            toSend = new java.util.HashMap<>(pendingPayloads);
-            qosMap = new java.util.HashMap<>(pendingQos);
-            retainedMap = new java.util.HashMap<>(pendingRetained);
-            pendingPayloads.clear();
-            pendingQos.clear();
-            pendingRetained.clear();
+            toSend = pending;
+            pending = new java.util.HashMap<>();
             flushScheduled = false;
         }
 
         if (toSend.isEmpty()) return;
         if (!shouldSend()) return;
 
-        // Publish all pending in the scheduler thread to avoid excess context switches
-        for (java.util.Map.Entry<String, String> e : toSend.entrySet()) {
-            String topic = e.getKey();
-            String payload = e.getValue();
-            int qos = qosMap.getOrDefault(topic, 1);
-            boolean retained = retainedMap.getOrDefault(topic, false);
-            publishInternalSync(topic, payload, qos, retained);
+        for (java.util.Map.Entry<String, Pending> e : toSend.entrySet()) {
+            Pending p = e.getValue();
+            publishInternalSync(e.getKey(), p.payload, p.qos, p.retained);
         }
     }
 
