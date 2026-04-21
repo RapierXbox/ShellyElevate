@@ -91,6 +91,8 @@ class SettingsFragment : Fragment() {
     private var selectedModelName: String = ""
     private var downloadJob: Job? = null
 
+    private lateinit var binder: SettingsBinder
+
     override fun onDestroyView() {
         super.onDestroyView()
         downloadJob?.cancel()
@@ -141,8 +143,11 @@ class SettingsFragment : Fragment() {
         }, viewLifecycleOwner)
 
         binding.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
-        loadValues()
-        setupListeners()
+
+        buildBinder()
+        binder.loadAll()
+        loadInlineValues()
+        setupInlineListeners()
         setupModelChooser()
     }
 
@@ -179,120 +184,107 @@ class SettingsFragment : Fragment() {
         binding.lightSensorValue.text = getString(R.string.light_sensor_value, lightValue)
     }
 
-    private fun loadValues() {
+    private fun buildBinder() {
         val device = DeviceModel.getReportedDevice()
         hasProximitySensor = device.hasProximitySensor
-
-        //Functional mode
-        binding.liteMode.isChecked = mSharedPreferences.getBoolean(SP_LITE_MODE, false)
-
-        //WebView
-        binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
-        binding.ignoreSslErrors.isChecked = mSharedPreferences.getBoolean(SP_IGNORE_SSL_ERRORS, false)
-        binding.extendedJavascriptInterface.isChecked = mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
-
-        //MQTT
-        binding.mqttEnabled.isChecked = mSharedPreferences.getBoolean(SP_MQTT_ENABLED, false)
-        binding.mqttBroker.setText(mSharedPreferences.getString(SP_MQTT_BROKER, ""))
-        binding.mqttPort.setText(mSharedPreferences.getInt(SP_MQTT_PORT, MQTT_DEFAULT_PORT).toString())
-        binding.mqttUsername.setText(mSharedPreferences.getString(SP_MQTT_USERNAME, ""))
-        binding.mqttPassword.setText(mSharedPreferences.getString(SP_MQTT_PASSWORD, ""))
-        binding.mqttClientId.setText(mSharedPreferences.getString(SP_MQTT_CLIENTID,
-            "shellyelevate-" + UUID.randomUUID().toString().replace("-".toRegex(), "").substring(2, 6)))
-
-        //Switch
-        binding.switchOnSwipe.isChecked = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
-
-        // Power button auto-reboot
-        binding.powerButtonAutoReboot.isChecked = mSharedPreferences.getBoolean(SP_POWER_BUTTON_AUTO_REBOOT, true)
-
-        // Button-to-Relay Mapping
+        val defaultClientId = "shellyelevate-" + UUID.randomUUID().toString().replace("-".toRegex(), "").substring(2, 6)
         val hasButtonRelayCapability = device.buttons > 0 && device.relays > 0
-        binding.buttonRelayEnabled.isVisible = hasButtonRelayCapability
-        binding.buttonRelayMappingLayout.isVisible = hasButtonRelayCapability && mSharedPreferences.getBoolean(SP_BUTTON_RELAY_ENABLED, false)
-        if (hasButtonRelayCapability) {
-            binding.buttonRelayEnabled.isChecked = mSharedPreferences.getBoolean(SP_BUTTON_RELAY_ENABLED, false)
-            setupButtonRelaySpinners(device.buttons, device.relays)
+
+        binder = SettingsBinder(mSharedPreferences).apply {
+            +SwitchPref(binding.liteMode, SP_LITE_MODE, false)
+
+            +SwitchPref(binding.ignoreSslErrors, SP_IGNORE_SSL_ERRORS, false)
+            +SwitchPref(binding.extendedJavascriptInterface, SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
+
+            +SwitchPref(binding.mqttEnabled, SP_MQTT_ENABLED, false)
+            visibleWhen(binding.mqttEnabled,
+                binding.mqttBrokerLayout, binding.mqttPortLayout,
+                binding.mqttUsernameLayout, binding.mqttPasswordLayout,
+                binding.mqttClientIdLayout)
+            +TextPref(binding.mqttBroker, SP_MQTT_BROKER)
+            +IntTextPref(binding.mqttPort, SP_MQTT_PORT, MQTT_DEFAULT_PORT)
+            +TextPref(binding.mqttUsername, SP_MQTT_USERNAME)
+            +TextPref(binding.mqttPassword, SP_MQTT_PASSWORD)
+            +TextPref(binding.mqttClientId, SP_MQTT_CLIENTID, defaultClientId)
+
+            +SwitchPref(binding.switchOnSwipe, SP_SWITCH_ON_SWIPE, true)
+            +SwitchPref(binding.powerButtonAutoReboot, SP_POWER_BUTTON_AUTO_REBOOT, true)
+            +SwitchPref(binding.mediaEnabled, SP_MEDIA_ENABLED, false)
+
+            +SwitchPref(binding.automaticBrightness, SP_AUTOMATIC_BRIGHTNESS, true)
+            visibleWhenNot(binding.automaticBrightness, binding.brightnessSettingLayout)
+            visibleWhen(binding.automaticBrightness, binding.minBrightnessLayout)
+            +SliderPref(binding.brightnessSetting, SP_BRIGHTNESS, DEFAULT_BRIGHTNESS) { mDeviceHelper.setScreenBrightness(it) }
+            +SliderPref(binding.minBrightness, SP_MIN_BRIGHTNESS, 48) { mDeviceHelper.setScreenBrightness(it) }
+
+            +SwitchPref(binding.screenSaver, SP_SCREEN_SAVER_ENABLED, true)
+            +IntTextPref(binding.screenSaverDelay, SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY)
+            +SpinnerPref(binding.screenSaverType, SP_SCREEN_SAVER_ID, 0)
+            +IntTextPref(binding.proximityKeepAwakeSeconds, SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS, min = 0)
+            +SliderPref(binding.screensaverMinBrightness, SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT) { mDeviceHelper.setScreenBrightness(it) }
+
+            +SwitchPref(binding.httpServerEnabled, SP_HTTP_SERVER_ENABLED, true)
+            visibleWhen(binding.httpServerEnabled, binding.httpServerAddressLayout, binding.httpServerLayout)
+
+            +SwitchPref(binding.voiceAssistantEnabled, SP_VOICE_ASSISTANT_ENABLED, false)
+            +TextPref(binding.voiceAssistantToken, SP_VOICE_ASSISTANT_TOKEN)
+            +TextPref(binding.voiceAssistantPipelineId, SP_VOICE_ASSISTANT_PIPELINE_ID)
+            +IntTextPref(binding.voiceAssistantMaxSeconds, SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, min = 1)
+            +SwitchPref(binding.voiceWakeEnabled, SP_VOICE_WAKE_ENABLED, true)
+            visibleWhen(binding.voiceWakeEnabled, binding.voiceWakeModelLayout)
+            +SwitchPref(binding.voiceWakeExperimentalModels, SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
+            +SliderPref(binding.voiceWakeSensitivity, SP_VOICE_WAKE_SENSITIVITY, 50)
+            +SliderPref(binding.voiceWakeCooldown, SP_VOICE_WAKE_COOLDOWN_SEC, 5)
+            +SwitchPref(binding.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)
+            +SwitchPref(binding.voiceScoreBarEnabled, SP_VOICE_SCORE_BAR_ENABLED, false)
+
+            +SwitchPref(binding.bluetoothProxyEnabled, SP_BLUETOOTH_PROXY_ENABLED, false)
+            visibleWhen(binding.bluetoothProxyEnabled, binding.bluetoothProxyLayout)
+            +TextPref(binding.bluetoothProxyName, SP_BLUETOOTH_PROXY_NAME, "ShellyElevate", trim = true)
+
+            +SwitchPref(binding.publishThermalSensors, SP_PUBLISH_THERMAL_SENSORS, false)
+            +SwitchPref(binding.dynamicTempOffsetEnabled, SP_DYNAMIC_TEMP_OFFSET_ENABLED, false)
+            visibleWhen(binding.dynamicTempOffsetEnabled, binding.dynamicTempOffsetLayout)
+            +FloatTextPref(binding.dynamicTempOffsetBaseline, SP_DYNAMIC_TEMP_OFFSET_BASELINE, 40.0f)
+            +FloatTextPref(binding.dynamicTempOffsetK, SP_DYNAMIC_TEMP_OFFSET_K, 0.3f)
+
+            if (hasButtonRelayCapability) {
+                +SwitchPref(binding.buttonRelayEnabled, SP_BUTTON_RELAY_ENABLED, false)
+                visibleWhen(binding.buttonRelayEnabled, binding.buttonRelayMappingLayout)
+            }
         }
 
-        // media
-        binding.mediaEnabled.isChecked = mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false)
+        binding.buttonRelayEnabled.isVisible = hasButtonRelayCapability
+        if (hasButtonRelayCapability) {
+            setupButtonRelaySpinners(device.buttons, device.relays)
+        } else {
+            binding.buttonRelayMappingLayout.isVisible = false
+        }
+    }
 
-        //Brightness management
-        binding.automaticBrightness.isChecked = mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true)
-        binding.brightnessSetting.value = mSharedPreferences.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS).toFloat()
-        binding.minBrightness.value = mSharedPreferences.getInt(SP_MIN_BRIGHTNESS, 48).toFloat()
+    private fun loadInlineValues() {
+        binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
 
-        // Volume
         val audioManager = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         binding.volumeSetting.value = (curVol.toFloat() / maxVol * 100f).coerceIn(0f, 100f).roundToInt().toFloat()
 
-        //Screen saver
-        binding.screenSaver.isChecked = mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true)
-        binding.screenSaverDelay.setText(mSharedPreferences.getInt(SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY).toString())
-        binding.screenSaverType.setSelection(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0))
         binding.wakeOnProximity.isChecked = mSharedPreferences.getBoolean(SP_WAKE_ON_PROXIMITY, true)
-        binding.proximityKeepAwakeSeconds.setText(mSharedPreferences.getInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS).toString())
-        binding.screensaverMinBrightness.value = mSharedPreferences.getInt(SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT).toFloat()
 
-        //Http Server
-        binding.httpServerEnabled.isChecked = mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)
-        binding.httpServerAddress.text = getString(R.string.server_url, getLocalIpAddress())
-        binding.httpServerStatus.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
-
-        //Update Visibility
-        //ScreenSaver
         binding.screenSaverDelayLayout.isVisible = binding.screenSaver.isChecked
         binding.screenSaverTypeLayout.isVisible = binding.screenSaver.isChecked
+        binding.minBrightnessScreenSaverLayout.isVisible = binding.screenSaver.isChecked
         binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked && hasProximitySensor
         binding.proximityKeepAwakeLayout.isVisible = binding.screenSaver.isChecked && hasProximitySensor
-        binding.minBrightnessScreenSaverLayout.isVisible = binding.screenSaver.isChecked
 
-        //Brightness management
-        binding.brightnessSettingLayout.isVisible = !binding.automaticBrightness.isChecked
-        binding.minBrightnessLayout.isVisible = binding.automaticBrightness.isChecked
-
-        //Http Server
-        binding.httpServerAddressLayout.isVisible = binding.httpServerEnabled.isChecked
-        binding.httpServerLayout.isVisible = binding.httpServerEnabled.isChecked
-        binding.httpServerButton.isVisible = !mHttpServer.isAlive
-
-        //MQTT
-        binding.mqttBrokerLayout.isVisible = binding.mqttEnabled.isChecked
-        binding.mqttPortLayout.isVisible = binding.mqttEnabled.isChecked
-        binding.mqttUsernameLayout.isVisible = binding.mqttEnabled.isChecked
-        binding.mqttPasswordLayout.isVisible = binding.mqttEnabled.isChecked
-        binding.mqttClientIdLayout.isVisible = binding.mqttEnabled.isChecked
-
-        // Voice Assistant
-        binding.voiceAssistantEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)
-        binding.voiceAssistantToken.setText(mSharedPreferences.getString(SP_VOICE_ASSISTANT_TOKEN, ""))
-        binding.voiceAssistantPipelineId.setText(mSharedPreferences.getString(SP_VOICE_ASSISTANT_PIPELINE_ID, ""))
-        binding.voiceAssistantMaxSeconds.setText(mSharedPreferences.getInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10).toString())
-        binding.voiceWakeEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
-        binding.voiceWakeExperimentalModels.isChecked = mSharedPreferences.getBoolean(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
-        selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
-        // Model label and list populated by setupModelChooser() called from onViewCreated
-        binding.voiceWakeModelLayout.isVisible = binding.voiceWakeEnabled.isChecked
-        binding.voiceWakeSensitivity.value = mSharedPreferences.getInt(SP_VOICE_WAKE_SENSITIVITY, 50).toFloat()
-        binding.voiceWakeCooldown.value    = mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5).toFloat()
-        binding.voiceWakeSoundEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)
-        binding.voiceScoreBarEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false)
         binding.voiceAssistantLayout.isVisible = binding.voiceAssistantEnabled.isChecked
-        updateWakeModelStatus()
 
-        // Bluetooth Proxy
-        binding.bluetoothProxyEnabled.isChecked = mSharedPreferences.getBoolean(SP_BLUETOOTH_PROXY_ENABLED, false)
-        binding.bluetoothProxyName.setText(mSharedPreferences.getString(SP_BLUETOOTH_PROXY_NAME, "ShellyElevate"))
-        binding.bluetoothProxyLayout.isVisible = binding.bluetoothProxyEnabled.isChecked
-        binding.bluetoothProxyAddress.text = getString(R.string.bt_proxy_address, getLocalIpAddress())
+        selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
 
-        // Thermal sensors
-        binding.publishThermalSensors.isChecked = mSharedPreferences.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)
-        binding.dynamicTempOffsetEnabled.isChecked = mSharedPreferences.getBoolean(SP_DYNAMIC_TEMP_OFFSET_ENABLED, false)
-        binding.dynamicTempOffsetLayout.isVisible = binding.dynamicTempOffsetEnabled.isChecked
+        binding.httpServerAddress.text = getString(R.string.server_url, getLocalIpAddress())
+        binding.httpServerStatus.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
+        binding.httpServerButton.isVisible = !mHttpServer.isAlive
 
         val zones = ThermalZoneReader.discoverZones()
         val zoneNames = zones.map { it.type }
@@ -303,10 +295,82 @@ class SettingsFragment : Fragment() {
         val zoneIdx = zoneNames.indexOf(savedZone)
         if (zoneIdx >= 0) binding.dynamicTempOffsetZone.setSelection(zoneIdx)
 
-        binding.dynamicTempOffsetBaseline.setText(mSharedPreferences.getFloat(SP_DYNAMIC_TEMP_OFFSET_BASELINE, 40.0f).toString())
-        binding.dynamicTempOffsetK.setText(mSharedPreferences.getFloat(SP_DYNAMIC_TEMP_OFFSET_K, 0.3f).toString())
+        binding.bluetoothProxyAddress.text = getString(R.string.bt_proxy_address, getLocalIpAddress())
 
-        mSharedPreferences.edit { putBoolean("settingEverShown", true) }
+        updateWakeModelStatus()
+
+        mSharedPreferences.edit { putBoolean(SP_SETTINGS_EVER_SHOWN, true) }
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupInlineListeners() {
+        binding.findURLButton.setOnClickListener {
+            ServiceHelper.getHAURL(requireContext().applicationContext) { url ->
+                requireActivity().runOnUiThread { binding.webviewURL.setText(url) }
+            }
+        }
+
+        var lastAppliedVol = -1
+        binding.volumeSetting.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) {
+                val am = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
+                val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                val target = (value / 100f * maxVol).roundToInt().coerceIn(0, maxVol)
+                if (target != lastAppliedVol) {
+                    lastAppliedVol = target
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, target, AudioManager.FLAG_PLAY_SOUND)
+                }
+            }
+        }
+
+        binding.screenSaver.setOnCheckedChangeListener { _, isChecked ->
+            binding.screenSaverDelayLayout.isVisible = isChecked
+            binding.screenSaverTypeLayout.isVisible = isChecked
+            binding.wakeOnProximity.isVisible = isChecked && hasProximitySensor
+            binding.proximityKeepAwakeLayout.isVisible = isChecked && hasProximitySensor
+            binding.minBrightnessScreenSaverLayout.isVisible = isChecked
+        }
+
+        binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE &&
+                (binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
+                binding.screenSaverDelay.setText("5")
+                Toast.makeText(requireContext(), R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
+            }
+            false
+        }
+
+        binding.proximityKeepAwakeSeconds.setOnEditorActionListener { _, actionId, _ ->
+            if (actionId == EditorInfo.IME_ACTION_DONE) {
+                val v = binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull() ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS
+                if (v < 0) {
+                    binding.proximityKeepAwakeSeconds.setText(PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS.toString())
+                    Toast.makeText(requireContext(), R.string.proximity_keep_awake_minimum, Toast.LENGTH_SHORT).show()
+                }
+            }
+            false
+        }
+
+        binding.voiceAssistantEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.voiceAssistantLayout.isVisible = isChecked
+            if (isChecked && binding.webviewURL.text.toString().isEmpty()) {
+                Toast.makeText(requireContext(), R.string.voice_requires_url, Toast.LENGTH_LONG).show()
+                binding.voiceAssistantEnabled.isChecked = false
+                binding.voiceAssistantLayout.isVisible = false
+            }
+        }
+
+        binding.httpServerButton.setOnClickListener {
+            mHttpServer.start()
+            binding.httpServerText.text = getString(R.string.http_server_running)
+            binding.httpServerButton.isVisible = false
+        }
+
+        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
+            mSwipeHelper?.onTouchEvent(event)
+            mScreenSaverManager.onTouchEvent(event)
+            false
+        }
     }
 
     private fun setupModelChooser() {
@@ -502,128 +566,6 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    // ─────────────── Listeners ───────────────
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun setupListeners() {
-        binding.findURLButton.setOnClickListener {
-            ServiceHelper.getHAURL(requireContext().applicationContext) { url ->
-                requireActivity().runOnUiThread { binding.webviewURL.setText(url) }
-            }
-        }
-
-        binding.brightnessSetting.addOnChangeListener { _, value, _ ->
-            mDeviceHelper.setScreenBrightness(value.toInt())
-        }
-
-        var lastAppliedVol = -1
-        binding.volumeSetting.addOnChangeListener { _, value, fromUser ->
-            if (fromUser) {
-                val am = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
-                val maxVol = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
-                val target = (value / 100f * maxVol).roundToInt().coerceIn(0, maxVol)
-                if (target != lastAppliedVol) {
-                    lastAppliedVol = target
-                    am.setStreamVolume(AudioManager.STREAM_MUSIC, target, AudioManager.FLAG_PLAY_SOUND)
-                }
-            }
-        }
-
-        binding.automaticBrightness.setOnCheckedChangeListener { _, isChecked ->
-            binding.brightnessSettingLayout.isVisible = !isChecked
-            binding.minBrightnessLayout.isVisible = isChecked
-        }
-
-        binding.minBrightness.addOnChangeListener { slider, value, fromUser ->
-            //Give user a feedback about the configured min brightness
-            mDeviceHelper.setScreenBrightness(value.toInt())
-        }
-
-        binding.screensaverMinBrightness.addOnChangeListener { slider, value, fromUser ->
-            //Give user a feedback about the configured min brightness
-            mDeviceHelper.setScreenBrightness(value.toInt())
-        }
-
-        binding.screenSaver.setOnCheckedChangeListener { _, isChecked ->
-            binding.screenSaverDelayLayout.isVisible = isChecked
-            binding.screenSaverTypeLayout.isVisible = isChecked
-            binding.wakeOnProximity.isVisible = isChecked && hasProximitySensor
-            binding.proximityKeepAwakeLayout.isVisible = isChecked && hasProximitySensor
-            binding.minBrightnessScreenSaverLayout.isVisible = isChecked
-        }
-
-        binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE &&
-                (binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
-                binding.screenSaverDelay.setText("5")
-                Toast.makeText(requireContext(), R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
-            }
-            false
-        }
-
-        binding.proximityKeepAwakeSeconds.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                val v = binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull() ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS
-                if (v < 0) {
-                    binding.proximityKeepAwakeSeconds.setText(PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS.toString())
-                    Toast.makeText(requireContext(), R.string.proximity_keep_awake_minimum, Toast.LENGTH_SHORT).show()
-                }
-            }
-            false
-        }
-
-        binding.mqttEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.mqttBrokerLayout.isVisible = isChecked
-            binding.mqttPortLayout.isVisible = isChecked
-            binding.mqttUsernameLayout.isVisible = isChecked
-            binding.mqttPasswordLayout.isVisible = isChecked
-            binding.mqttClientIdLayout.isVisible = isChecked
-        }
-
-        binding.httpServerEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.httpServerLayout.isVisible = isChecked
-            binding.httpServerAddressLayout.isVisible = isChecked
-        }
-
-        binding.buttonRelayEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.buttonRelayMappingLayout.isVisible = isChecked
-        }
-
-        binding.voiceAssistantEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.voiceAssistantLayout.isVisible = isChecked
-            if (isChecked && binding.webviewURL.text.toString().isEmpty()) {
-                Toast.makeText(requireContext(), R.string.voice_requires_url, Toast.LENGTH_LONG).show()
-                binding.voiceAssistantEnabled.isChecked = false
-                binding.voiceAssistantLayout.isVisible = false
-            }
-        }
-
-        binding.voiceWakeEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.voiceWakeModelLayout.isVisible = isChecked
-        }
-
-        binding.bluetoothProxyEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.bluetoothProxyLayout.isVisible = isChecked
-        }
-
-        binding.dynamicTempOffsetEnabled.setOnCheckedChangeListener { _, isChecked ->
-            binding.dynamicTempOffsetLayout.isVisible = isChecked
-        }
-
-        binding.httpServerButton.setOnClickListener {
-            mHttpServer.start()
-            binding.httpServerText.text = getString(R.string.http_server_running)
-            binding.httpServerButton.isVisible = false
-        }
-
-        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            // Guard against null SwipeHelper when settings opens before app singletons are ready
-            mSwipeHelper?.onTouchEvent(event)
-            mScreenSaverManager.onTouchEvent(event)
-            false
-        }
-    }
-
     private fun setupButtonRelaySpinners(buttonCount: Int, relayCount: Int) {
         // Build options list: "None" + "Relay 0" ... "Relay N-1"
         val options = mutableListOf(getString(R.string.button_relay_none))
@@ -654,81 +596,25 @@ class SettingsFragment : Fragment() {
     }
 
     private fun saveSettings() {
+        binder.saveAll()
+
         requireContext().getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).edit {
             val device = DeviceModel.getReportedDevice()
 
-            //Functional mode
-            putBoolean(SP_LITE_MODE, binding.liteMode.isChecked)
-
-            //WebView
             putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
-            putBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, binding.extendedJavascriptInterface.isChecked)
-            putBoolean(SP_IGNORE_SSL_ERRORS, binding.ignoreSslErrors.isChecked)
 
-            //MQTT
-            putBoolean(SP_MQTT_ENABLED, binding.mqttEnabled.isChecked)
-            putString(SP_MQTT_BROKER, binding.mqttBroker.text.toString())
-            putString(SP_MQTT_USERNAME, binding.mqttUsername.text.toString())
-            putString(SP_MQTT_PASSWORD, binding.mqttPassword.text.toString())
-            putString(SP_MQTT_CLIENTID, binding.mqttClientId.text.toString())
-            putInt(SP_MQTT_PORT, binding.mqttPort.text.toString().toIntOrNull() ?: MQTT_DEFAULT_PORT)
+            putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked && device.hasProximitySensor)
 
-            //Switch
-            putBoolean(SP_SWITCH_ON_SWIPE, binding.switchOnSwipe.isChecked)
+            putString(SP_VOICE_WAKE_MODEL_NAME, selectedModelName)
 
-            // Power button auto-reboot
-            putBoolean(SP_POWER_BUTTON_AUTO_REBOOT, binding.powerButtonAutoReboot.isChecked)
+            putString(SP_DYNAMIC_TEMP_OFFSET_ZONE, binding.dynamicTempOffsetZone.selectedItem?.toString() ?: "")
 
             // Button-to-Relay Mapping
             if (device.buttons > 0 && device.relays > 0) {
-                putBoolean(SP_BUTTON_RELAY_ENABLED, binding.buttonRelayEnabled.isChecked)
                 val spinners = listOf(binding.buttonRelayMap0, binding.buttonRelayMap1, binding.buttonRelayMap2, binding.buttonRelayMap3)
                 for (i in 0 until device.buttons.coerceAtMost(4))
                     putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), spinners[i].selectedItemPosition - 1)
             }
-
-            // media
-            putBoolean(SP_MEDIA_ENABLED, binding.mediaEnabled.isChecked)
-
-            //Brightness management
-            putBoolean(SP_AUTOMATIC_BRIGHTNESS, binding.automaticBrightness.isChecked)
-            putInt(SP_BRIGHTNESS, binding.brightnessSetting.value.toInt())
-            putInt(SP_MIN_BRIGHTNESS, binding.minBrightness.value.toInt())
-
-            //Screen saver
-            putBoolean(SP_SCREEN_SAVER_ENABLED, binding.screenSaver.isChecked)
-            putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
-            putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
-            putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked && device.hasProximitySensor)
-            putInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, (binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull() ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS).coerceAtLeast(0))
-            putInt(SP_SCREEN_SAVER_MIN_BRIGHTNESS, binding.screensaverMinBrightness.value.toInt())
-
-            //Http Server
-            putBoolean(SP_HTTP_SERVER_ENABLED, binding.httpServerEnabled.isChecked)
-
-            // Voice Assistant
-            putBoolean(SP_VOICE_ASSISTANT_ENABLED, binding.voiceAssistantEnabled.isChecked)
-            putString(SP_VOICE_ASSISTANT_TOKEN, binding.voiceAssistantToken.text.toString())
-            putString(SP_VOICE_ASSISTANT_PIPELINE_ID, binding.voiceAssistantPipelineId.text.toString())
-            putInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, binding.voiceAssistantMaxSeconds.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10)
-            putBoolean(SP_VOICE_WAKE_ENABLED, binding.voiceWakeEnabled.isChecked)
-            putBoolean(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, binding.voiceWakeExperimentalModels.isChecked)
-            putString(SP_VOICE_WAKE_MODEL_NAME, selectedModelName)
-            putInt(SP_VOICE_WAKE_SENSITIVITY, binding.voiceWakeSensitivity.value.toInt())
-            putInt(SP_VOICE_WAKE_COOLDOWN_SEC, binding.voiceWakeCooldown.value.toInt())
-            putBoolean(SP_VOICE_WAKE_SOUND_ENABLED, binding.voiceWakeSoundEnabled.isChecked)
-            putBoolean(SP_VOICE_SCORE_BAR_ENABLED, binding.voiceScoreBarEnabled.isChecked)
-
-            // Bluetooth Proxy
-            putBoolean(SP_BLUETOOTH_PROXY_ENABLED, binding.bluetoothProxyEnabled.isChecked)
-            putString(SP_BLUETOOTH_PROXY_NAME, binding.bluetoothProxyName.text.toString().trim())
-
-            // Thermal sensors
-            putBoolean(SP_PUBLISH_THERMAL_SENSORS, binding.publishThermalSensors.isChecked)
-            putBoolean(SP_DYNAMIC_TEMP_OFFSET_ENABLED, binding.dynamicTempOffsetEnabled.isChecked)
-            putString(SP_DYNAMIC_TEMP_OFFSET_ZONE, binding.dynamicTempOffsetZone.selectedItem?.toString() ?: "")
-            putFloat(SP_DYNAMIC_TEMP_OFFSET_BASELINE, binding.dynamicTempOffsetBaseline.text.toString().toFloatOrNull() ?: 40.0f)
-            putFloat(SP_DYNAMIC_TEMP_OFFSET_K, binding.dynamicTempOffsetK.text.toString().toFloatOrNull() ?: 0.3f)
         }
 
         if (!binding.httpServerEnabled.isChecked && mHttpServer.isAlive) mHttpServer.stop()
