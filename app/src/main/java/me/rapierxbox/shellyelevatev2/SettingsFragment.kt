@@ -128,8 +128,10 @@ class SettingsFragment : Fragment() {
                     }
                     R.id.action_restart -> {
                         saveSettings()
-                        try { Runtime.getRuntime().exec("reboot") }
-                        catch (e: IOException) { Log.e("SettingsActivity", "Error rebooting:", e) }
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            try { Runtime.getRuntime().exec("reboot") }
+                            catch (e: IOException) { Log.e("SettingsActivity", "Error rebooting:", e) }
+                        }
                         true
                     }
                     R.id.action_exit -> {
