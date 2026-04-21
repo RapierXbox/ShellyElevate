@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import okhttp3.OkHttpClient;
@@ -53,7 +54,7 @@ public class VoiceAssistantManager {
     private volatile State state = State.DISABLED;
     private volatile boolean enabled = false;
     private volatile boolean manuallyDisabled = false;
-    private volatile int reconnectDelaySec = 5;
+    private final AtomicInteger reconnectDelaySec = new AtomicInteger(5);
 
     private final OkHttpClient okHttpClient;
     private HAVoicePipeline pipeline;
@@ -93,7 +94,7 @@ public class VoiceAssistantManager {
         boolean canEnable = wantEnabled && !token.isEmpty() && !haUrl.isEmpty();
 
         if (canEnable && !enabled) {
-            enabled = true; manuallyDisabled = false; reconnectDelaySec = 5;
+            enabled = true; manuallyDisabled = false; reconnectDelaySec.set(5);
             Log.i(TAG, "enabling");
             connect();
             applyWakeDetectorSettings();
@@ -173,7 +174,7 @@ public class VoiceAssistantManager {
 
             @Override public void onAuthOk() {
                 Log.i(TAG, "authenticated... ready");
-                reconnectDelaySec = 5;
+                reconnectDelaySec.set(5);
                 state = State.IDLE;
                 applyWakeDetectorSettings();
             }
@@ -224,8 +225,7 @@ public class VoiceAssistantManager {
 
     private void scheduleReconnect() {
         if (!enabled || manuallyDisabled || scheduler.isShutdown()) return;
-        int delay = reconnectDelaySec;
-        reconnectDelaySec = Math.min(reconnectDelaySec * 2, 60);
+        int delay = reconnectDelaySec.getAndUpdate(cur -> Math.min(cur * 2, 60));
         Log.i(TAG, "reconnecting in " + delay + "s");
         scheduler.schedule(() -> { if (enabled && !manuallyDisabled) connect(); }, delay, TimeUnit.SECONDS);
     }
