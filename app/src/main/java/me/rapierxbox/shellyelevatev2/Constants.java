@@ -86,6 +86,13 @@ public class Constants {
     public static final String INTENT_SETTINGS_CHANGED = "me.rapierxbox.shellyelevatev2.SETTINGS_CHANGED";
     public static final String INTENT_WEBVIEW_INJECT_JAVASCRIPT = "me.rapierxbox.shellyelevatev2.WEBVIEW_INJECT_JAVASCRIPT";
 
+    //Thermal SP Keys
+    public static final String SP_PUBLISH_THERMAL_SENSORS      = "publishThermalSensors";
+    public static final String SP_DYNAMIC_TEMP_OFFSET_ENABLED  = "dynamicTempOffsetEnabled";
+    public static final String SP_DYNAMIC_TEMP_OFFSET_ZONE     = "dynamicTempOffsetZone";
+    public static final String SP_DYNAMIC_TEMP_OFFSET_BASELINE = "dynamicTempOffsetBaseline";
+    public static final String SP_DYNAMIC_TEMP_OFFSET_K        = "dynamicTempOffsetK";
+
     //MQTT Topics
     public static final String MQTT_TOPIC_CONFIG_DEVICE = "homeassistant/device/%s/config";
     public static final String MQTT_TOPIC_STATUS = "shellyelevatev2/%s/status";
@@ -108,6 +115,7 @@ public class Constants {
     public static final String MQTT_TOPIC_POWER_BUTTON = "shellyelevatev2/%s/power_button";
     public static final String MQTT_TOPIC_SWIPE_EVENT = "shellyelevatev2/%s/swipe_event";
     public static final String MQTT_TOPIC_SLEEPING_BINARY_SENSOR = "shellyelevatev2/%s/sleeping";
+    public static final String MQTT_TOPIC_THERMAL_ZONE = "shellyelevatev2/%s/thermal/%s";
     public static final String MQTT_TOPIC_HOME_ASSISTANT_STATUS = "homeassistant/status";
 
     //Voice Assistant Intents

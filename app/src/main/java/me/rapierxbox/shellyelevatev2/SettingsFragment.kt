@@ -9,6 +9,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
+import android.text.InputType
 import android.util.Log
 import android.view.LayoutInflater
 import android.view.Menu
@@ -18,25 +19,43 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.ArrayAdapter
+import android.widget.EditText
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
 import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 import me.rapierxbox.shellyelevatev2.Constants.*
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.*
+import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader
 import me.rapierxbox.shellyelevatev2.voice.WakeWordDetector
+import me.rapierxbox.shellyelevatev2.voice.WakeWordModel
+import me.rapierxbox.shellyelevatev2.voice.WakeWordModelManager
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
+import okhttp3.OkHttpClient
+import java.io.File
 import java.io.IOException
+import java.security.SecureRandom
+import java.security.cert.X509Certificate
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
+import javax.net.ssl.X509TrustManager
 import java.net.NetworkInterface
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 
 class SettingsFragment : Fragment() {
 
@@ -269,6 +288,23 @@ class SettingsFragment : Fragment() {
         binding.bluetoothProxyName.setText(mSharedPreferences.getString(SP_BLUETOOTH_PROXY_NAME, "ShellyElevate"))
         binding.bluetoothProxyLayout.isVisible = binding.bluetoothProxyEnabled.isChecked
         binding.bluetoothProxyAddress.text = getString(R.string.bt_proxy_address, getLocalIpAddress())
+
+        // Thermal sensors
+        binding.publishThermalSensors.isChecked = mSharedPreferences.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)
+        binding.dynamicTempOffsetEnabled.isChecked = mSharedPreferences.getBoolean(SP_DYNAMIC_TEMP_OFFSET_ENABLED, false)
+        binding.dynamicTempOffsetLayout.isVisible = binding.dynamicTempOffsetEnabled.isChecked
+
+        val zones = ThermalZoneReader.discoverZones()
+        val zoneNames = zones.map { it.type }
+        val zoneAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, zoneNames)
+        zoneAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.dynamicTempOffsetZone.adapter = zoneAdapter
+        val savedZone = mSharedPreferences.getString(SP_DYNAMIC_TEMP_OFFSET_ZONE, null)
+        val zoneIdx = zoneNames.indexOf(savedZone)
+        if (zoneIdx >= 0) binding.dynamicTempOffsetZone.setSelection(zoneIdx)
+
+        binding.dynamicTempOffsetBaseline.setText(mSharedPreferences.getFloat(SP_DYNAMIC_TEMP_OFFSET_BASELINE, 40.0f).toString())
+        binding.dynamicTempOffsetK.setText(mSharedPreferences.getFloat(SP_DYNAMIC_TEMP_OFFSET_K, 0.3f).toString())
 
         mSharedPreferences.edit { putBoolean("settingEverShown", true) }
     }
@@ -570,6 +606,10 @@ class SettingsFragment : Fragment() {
             binding.bluetoothProxyLayout.isVisible = isChecked
         }
 
+        binding.dynamicTempOffsetEnabled.setOnCheckedChangeListener { _, isChecked ->
+            binding.dynamicTempOffsetLayout.isVisible = isChecked
+        }
+
         binding.httpServerButton.setOnClickListener {
             mHttpServer.start()
             binding.httpServerText.text = getString(R.string.http_server_running)
@@ -682,6 +722,13 @@ class SettingsFragment : Fragment() {
             // Bluetooth Proxy
             putBoolean(SP_BLUETOOTH_PROXY_ENABLED, binding.bluetoothProxyEnabled.isChecked)
             putString(SP_BLUETOOTH_PROXY_NAME, binding.bluetoothProxyName.text.toString().trim())
+
+            // Thermal sensors
+            putBoolean(SP_PUBLISH_THERMAL_SENSORS, binding.publishThermalSensors.isChecked)
+            putBoolean(SP_DYNAMIC_TEMP_OFFSET_ENABLED, binding.dynamicTempOffsetEnabled.isChecked)
+            putString(SP_DYNAMIC_TEMP_OFFSET_ZONE, binding.dynamicTempOffsetZone.selectedItem?.toString() ?: "")
+            putFloat(SP_DYNAMIC_TEMP_OFFSET_BASELINE, binding.dynamicTempOffsetBaseline.text.toString().toFloatOrNull() ?: 40.0f)
+            putFloat(SP_DYNAMIC_TEMP_OFFSET_K, binding.dynamicTempOffsetK.text.toString().toFloatOrNull() ?: 0.3f)
         }
 
         if (!binding.httpServerEnabled.isChecked && mHttpServer.isAlive) mHttpServer.stop()

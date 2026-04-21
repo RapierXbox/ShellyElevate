@@ -1,7 +1,9 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
+import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.provider.Settings;
 import android.util.Log;
@@ -137,11 +139,23 @@ public class DeviceHelper {
             double temp = (Double.parseDouble(tempSplit[1]) * 175.0 / 65535.0) - 45.0;
 
             temp += DeviceModel.getReportedDevice().temperatureOffset;
+            temp -= getDynamicTempCorrection();
             return Math.round(temp * 10.0) / 10.0;
         } catch (Exception e) {
             Log.d("TAG", "Error while reading temperature: " + e);
             return -999;
         }
+    }
+
+    public double getDynamicTempCorrection() {
+        if (!mSharedPreferences.getBoolean(SP_DYNAMIC_TEMP_OFFSET_ENABLED, false)) return 0.0;
+        String zone = mSharedPreferences.getString(SP_DYNAMIC_TEMP_OFFSET_ZONE, null);
+        if (zone == null || zone.isEmpty()) return 0.0;
+        Float dev = ThermalZoneReader.readZoneTempCByType(zone);
+        if (dev == null) return 0.0;
+        float baseline = mSharedPreferences.getFloat(SP_DYNAMIC_TEMP_OFFSET_BASELINE, 40.0f);
+        float k = mSharedPreferences.getFloat(SP_DYNAMIC_TEMP_OFFSET_K, 0.3f);
+        return Math.max(0.0, (dev - baseline) * k);
     }
 
     public double getHumidity() {

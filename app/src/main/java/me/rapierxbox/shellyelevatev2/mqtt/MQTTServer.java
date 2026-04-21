@@ -277,6 +277,8 @@ public class MQTTServer {
                     publishSleeping(mScreenSaverManager.isScreenSaverRunning());
                 }, 150, TimeUnit.MILLISECONDS);
 
+                scheduler.schedule(this::publishThermalZones, 2, TimeUnit.SECONDS);
+
             } catch (Exception e) {
                 Log.e("MQTT", "publishStatus failed", e);
             }
@@ -681,6 +683,22 @@ public class MQTTServer {
         sleepingBinarySensorPayload.put("object_id", "shelly_walldisplay_" + clientId + "_sleeping");
         components.put(clientId + "_sleeping", sleepingBinarySensorPayload);
 
+        if (mSharedPreferences.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)) {
+            for (ThermalZoneReader.Zone zone : ThermalZoneReader.discoverZones()) {
+                String zoneId = clientId + "_thermal_" + zone.type;
+                JSONObject thermalPayload = new JSONObject();
+                thermalPayload.put("p", "sensor");
+                thermalPayload.put("name", "Thermal " + zone.type.replace("_", " "));
+                thermalPayload.put("state_topic", String.format(MQTT_TOPIC_THERMAL_ZONE, clientId, zone.type));
+                thermalPayload.put("device_class", "temperature");
+                thermalPayload.put("unit_of_measurement", "°C");
+                thermalPayload.put("state_class", "measurement");
+                thermalPayload.put("unique_id", zoneId);
+                thermalPayload.put("object_id", "shelly_walldisplay_" + zoneId);
+                components.put(zoneId, thermalPayload);
+            }
+        }
+
         // TODO: brightness as both state and control
 
         configPayload.put("cmps", components);
@@ -688,6 +706,16 @@ public class MQTTServer {
         configPayload.put("state_topic", MQTT_TOPIC_STATUS);
 
         mMqttClient.publish(parseTopic(MQTT_TOPIC_CONFIG_DEVICE), configPayload.toString().getBytes(), 1, true);
+    }
+
+    private void publishThermalZones() {
+        if (!mSharedPreferences.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)) return;
+        for (ThermalZoneReader.Zone z : ThermalZoneReader.discoverZones()) {
+            Float t = ThermalZoneReader.readZoneTempC(z);
+            if (t == null) continue;
+            String topic = String.format(MQTT_TOPIC_THERMAL_ZONE, clientId, z.type);
+            publishInternal(topic, String.valueOf(Math.round(t * 10f) / 10f), 1, false);
+        }
     }
 
     private void deleteConfig() throws MqttException {

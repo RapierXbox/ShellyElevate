@@ -106,4 +106,13 @@
     <string name="voice_listening">Listening…</string>
     <string name="voice_error">Voice error: %1$s</string>
     <string name="voice_requires_url">Set the HA URL above before enabling voice</string>
+    <string name="publish_thermal_sensors">Publish device thermal sensors to HA</string>
+    <string name="dynamic_temp_offset">Dynamic temperature offset (deviceheat correction)</string>
+    <string name="thermal_offset_zone">Reference thermal zone</string>
+    <string name="thermal_offset_zone_hint">Select zone</string>
+    <string name="thermal_offset_baseline">Baseline temp >(^°C)</string>
+    <string name="thermal_offset_baseline_hint">40.0</string>
+    <string name="thermal_offset_k">Correction coefficient (k)</string>
+    <string name="thermal_offset_k_hint">0.3</string>
+    <string name="thermal_offset_formula">Correction = k x max(0, device_temp − baseline)</string>
 </resources>

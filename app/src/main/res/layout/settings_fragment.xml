@@ -643,6 +643,111 @@
                     android:textSize="18sp" />
             </LinearLayout>
             <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/publishThermalSensors"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/publish_thermal_sensors"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/dynamicTempOffsetEnabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/dynamic_temp_offset"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <LinearLayout
+                android:id="@+id/dynamicTempOffsetLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="8dp"
+                android:orientation="vertical"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_gravity="center_vertical"
+                        android:text="@string/thermal_offset_zone"
+                        android:textSize="18sp" />
+
+                    <Spinner
+                        android:id="@+id/dynamicTempOffsetZone"
+                        android:layout_width="200dp"
+                        android:layout_height="wrap_content"
+                        android:textSize="16sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_gravity="center_vertical"
+                        android:text="@string/thermal_offset_baseline"
+                        android:textSize="18sp" />
+
+                    <EditText
+                        android:id="@+id/dynamicTempOffsetBaseline"
+                        android:layout_width="80dp"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/thermal_offset_baseline_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="numberDecimal"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="16dp"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_gravity="center_vertical"
+                        android:text="@string/thermal_offset_k"
+                        android:textSize="18sp" />
+
+                    <EditText
+                        android:id="@+id/dynamicTempOffsetK"
+                        android:layout_width="80dp"
+                        android:layout_height="wrap_content"
+                        android:hint="@string/thermal_offset_k_hint"
+                        android:imeOptions="actionDone"
+                        android:inputType="numberDecimal"
+                        android:textSize="18sp" />
+                </LinearLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/thermal_offset_formula"
+                    android:textSize="13sp"
+                    android:alpha="0.6" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/voiceAssistantEnabled"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
