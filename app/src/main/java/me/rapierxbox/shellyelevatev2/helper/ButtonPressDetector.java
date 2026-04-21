@@ -36,6 +36,10 @@ public class ButtonPressDetector {
      * Call this when the button is pressed (ACTION_DOWN)
      */
     public void onPressDown() {
+        // defer any pending multi click decision so it cant fire while the next press is still held
+        if (multiClickTimeoutRunnable != null) {
+            handler.removeCallbacks(multiClickTimeoutRunnable);
+        }
         pressDownTimeMs = System.currentTimeMillis();
         clickCount++;
     }
@@ -47,18 +51,14 @@ public class ButtonPressDetector {
         if (pressDownTimeMs == 0) return;
 
         long pressDurationMs = System.currentTimeMillis() - pressDownTimeMs;
-        String pressType;
+        pressDownTimeMs = 0;
 
         if (pressDurationMs >= LONG_PRESS_MIN_MS) {
-            pressType = Constants.BUTTON_PRESS_TYPE_LONG;
-            fireCallback(pressType);
-        } else if (pressDurationMs <= SHORT_PRESS_MAX_MS) {
-            // Short press - could be part of double/triple click, so wait
+            fireCallback(Constants.BUTTON_PRESS_TYPE_LONG);
+        } else {
             pendingPressType = Constants.BUTTON_PRESS_TYPE_SHORT;
             scheduleMultiClickTimeout();
         }
-
-        pressDownTimeMs = 0;
     }
 
     private void scheduleMultiClickTimeout() {
