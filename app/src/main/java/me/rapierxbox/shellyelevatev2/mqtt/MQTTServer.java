@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
+import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
 
 public class MQTTServer {
 
@@ -129,6 +130,7 @@ public class MQTTServer {
     private void schedulePeriodicTempHum() {
         if (periodicScheduled) return;
         scheduler.scheduleWithFixedDelay(this::publishTempAndHum, 0, 30, TimeUnit.SECONDS);
+        scheduler.scheduleWithFixedDelay(this::publishThermalZones, 5, 30, TimeUnit.SECONDS);
         periodicScheduled = true;
     }
 
