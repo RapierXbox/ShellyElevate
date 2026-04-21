@@ -257,13 +257,15 @@ public class VoiceAssistantManager {
         state = State.IDLE;
         broadcastState(State.IDLE);
         mainHandler.postDelayed(() -> broadcastText(""), 3_000);
-        if (wakeDetector != null) { // delay (could also be fixed by just sending clear spectogram into model instead of reusing old one)
+        final WakeWordDetector detSnapshot = wakeDetector;
+        if (detSnapshot != null) { // delay (could also be fixed by just sending clear spectogram into model instead of reusing old one)
             scheduler.schedule(() -> {
                 if (enabled && state == State.IDLE
                         && mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
-                        && wakeDetector.getModelStatus() == WakeWordDetector.ModelStatus.LOADED
-                        && !wakeDetector.isRunning()) {
-                    wakeDetector.start();
+                        && detSnapshot == wakeDetector
+                        && detSnapshot.getModelStatus() == WakeWordDetector.ModelStatus.LOADED
+                        && !detSnapshot.isRunning()) {
+                    detSnapshot.start();
                 }
             }, 1_500, TimeUnit.MILLISECONDS);
         }
