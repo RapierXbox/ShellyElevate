@@ -329,7 +329,12 @@ public class MQTTServer {
             pending.put(topic, new Pending(payload, qos, retained));
             if (!flushScheduled) {
                 flushScheduled = true;
-                scheduler.schedule(this::flushPendingPublishes, COALESCE_WINDOW_MS, TimeUnit.MILLISECONDS);
+                try {
+                    scheduler.schedule(this::flushPendingPublishes, COALESCE_WINDOW_MS, TimeUnit.MILLISECONDS);
+                } catch (java.util.concurrent.RejectedExecutionException e) {
+                    flushScheduled = false;
+                    Log.w("MQTT", "Coalesce flush rejected; scheduler shutting down");
+                }
             }
         }
     }
