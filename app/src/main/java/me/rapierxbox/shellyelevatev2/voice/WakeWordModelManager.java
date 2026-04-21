@@ -207,12 +207,16 @@ public class WakeWordModelManager {
         wakewordsDir.mkdirs();
         File destTflite = new File(wakewordsDir, stem + ".tflite");
 
+        boolean success = false;
         try (InputStream input  = context.getContentResolver().openInputStream(tfliteUri);
              OutputStream output = new FileOutputStream(destTflite)) {
             if (input == null) throw new IOException("Cannot open input stream for " + tfliteUri);
             byte[] buf = new byte[8192];
             int n;
             while ((n = input.read(buf)) != -1) output.write(buf, 0, n);
+            success = true;
+        } finally {
+            if (!success) destTflite.delete();
         }
 
         tryImportSiblingJson(context, tfliteUri, stem, wakewordsDir);
