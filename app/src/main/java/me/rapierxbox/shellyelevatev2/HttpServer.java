@@ -372,12 +372,14 @@ public class HttpServer extends NanoHTTPD {
                     long deltaTime = System.currentTimeMillis() - ShellyElevateApplication.getApplicationStartTime();
                     deltaTime /= 1000;
                     if (deltaTime > 20) {
-                        try {
-                            Runtime.getRuntime().exec("reboot");
-                            jsonResponse.put("success", true);
-                        } catch (IOException e) {
-                            Log.e("HttpServer", "Error rebooting:", e);
-                        }
+                        new Thread(() -> {
+                            try {
+                                Runtime.getRuntime().exec("reboot");
+                            } catch (IOException e) {
+                                Log.e("HttpServer", "Error rebooting:", e);
+                            }
+                        }, "reboot-exec").start();
+                        jsonResponse.put("success", true);
                     } else {
                         Toast.makeText(mApplicationContext, "Please wait %s seconds before rebooting".replace("%s", String.valueOf(20 - deltaTime)), Toast.LENGTH_LONG).show();
                     }
