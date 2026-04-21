@@ -76,6 +76,7 @@ class MainActivity : ComponentActivity() {
     private val pendingJs = mutableListOf<String>()
 
     private lateinit var binding: MainActivityBinding // Declare the binding object
+    private lateinit var webView: WebView // Current WebView; may be replaced after a render-process crash
 
     private var clicksButtonRight: Int = 0
     private var clicksButtonLeft: Int = 0
@@ -93,7 +94,7 @@ class MainActivity : ComponentActivity() {
             try {
                 val webviewUrl = ServiceHelper.getWebviewUrl()
                 Log.d("MainActivity", "Reloading WebView due to settings change: $webviewUrl")
-                binding.myWebView.loadUrl(webviewUrl)
+                webView.loadUrl(webviewUrl)
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error reloading WebView on settings change", e)
             }
@@ -112,7 +113,7 @@ class MainActivity : ComponentActivity() {
                     return
                 }
                 Log.d("MainActivity", "Injecting JS into WebView")
-                binding.myWebView.evaluateJavascript(javascriptCode, null)
+                webView.evaluateJavascript(javascriptCode, null)
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error injecting JS", e)
             }
@@ -301,7 +302,7 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("SetJavaScriptEnabled")
     private fun configureWebView() {
-        val webSettings: WebSettings = binding.myWebView.settings
+        val webSettings: WebSettings = webView.settings
         webSettings.javaScriptEnabled = true
         webSettings.domStorageEnabled = true
         webSettings.javaScriptCanOpenWindowsAutomatically = true
@@ -330,7 +331,7 @@ class MainActivity : ComponentActivity() {
         // Hint Chromium to preraster when appropriate (improves first paint)
         webSettings.offscreenPreRaster = true
 
-        binding.myWebView.apply {
+        webView.apply {
             // Ensure hardware acceleration stays enabled for proper color/gamut handling
             if (layerType != View.LAYER_TYPE_HARDWARE) {
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
@@ -444,7 +445,7 @@ class MainActivity : ComponentActivity() {
 
                         // Create and configure new WebView
                         val newWebView = WebView(this@MainActivity)
-                        binding.myWebView = newWebView
+                        webView = newWebView
                         configureWebView()
 
                         // Re‑insert at same position
@@ -469,7 +470,7 @@ class MainActivity : ComponentActivity() {
                     super.onPageCommitVisible(view, url)
                     firstPaintDone = true
                     if (pendingJs.isNotEmpty()) {
-                        pendingJs.forEach { binding.myWebView.evaluateJavascript(it, null) }
+                        pendingJs.forEach { webView.evaluateJavascript(it, null) }
                         pendingJs.clear()
                     }
                 }
@@ -540,11 +541,11 @@ class MainActivity : ComponentActivity() {
 
             withContext(Dispatchers.Main) {
                 if (online) {
-                    binding.myWebView.loadUrl(url)
+                    webView.loadUrl(url)
                     initialLoadDone = true
                     cancelRetry()
                 } else {
-                    binding.myWebView.loadUrl(offlineFile)
+                    webView.loadUrl(offlineFile)
                     initialLoadDone = true
                     scheduleRetryOnlineAfterOffline(url)
                 }
@@ -563,7 +564,7 @@ class MainActivity : ComponentActivity() {
                 val online = ServiceHelper.isNetworkReady(applicationContext)
                 if (online) {
                     withContext(Dispatchers.Main) {
-                        binding.myWebView.loadUrl(targetUrl)
+                        webView.loadUrl(targetUrl)
                         cancelRetry()
                     }
                     return@launch
@@ -575,7 +576,7 @@ class MainActivity : ComponentActivity() {
                 val online = ServiceHelper.isNetworkReady(applicationContext)
                 if (online) {
                     withContext(Dispatchers.Main) {
-                        binding.myWebView.loadUrl(targetUrl)
+                        webView.loadUrl(targetUrl)
                         cancelRetry()
                     }
                     return@launch
@@ -620,6 +621,7 @@ class MainActivity : ComponentActivity() {
 
         binding = MainActivityBinding.inflate(layoutInflater) // Inflate the binding
         setContentView(binding.root) // Set the content view using binding.root
+        webView = binding.myWebView
 
         // Initialize button press detectors
         initializeButtonPressDetectors()
