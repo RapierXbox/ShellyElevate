@@ -181,7 +181,7 @@ public class MQTTServer {
         try {
             mMqttConnectionsOptions.setUserName(mSharedPreferences.getString(SP_MQTT_USERNAME, ""));
             mMqttConnectionsOptions.setPassword(mSharedPreferences.getString(SP_MQTT_PASSWORD, "").getBytes());
-            mMqttConnectionsOptions.setAutomaticReconnect(true);
+            mMqttConnectionsOptions.setAutomaticReconnect(false);
             mMqttConnectionsOptions.setConnectionTimeout(5);
             mMqttConnectionsOptions.setCleanStart(true);
 
@@ -203,7 +203,9 @@ public class MQTTServer {
                 public void disconnected(MqttDisconnectResponse disconnectResponse) {
                     Log.w("MQTT", "Disconnected: " + disconnectResponse.getReasonString());
                     connecting = false;
-                    // automatically handled by reconnect
+                    if (!scheduler.isShutdown() && isEnabled() && validForConnection) {
+                        scheduler.schedule(MQTTServer.this::connect, 5, TimeUnit.SECONDS);
+                    }
                 }
 
                 @Override
