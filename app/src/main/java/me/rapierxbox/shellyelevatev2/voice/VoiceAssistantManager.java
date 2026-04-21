@@ -15,7 +15,6 @@ import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
-import android.media.AudioTrack;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -63,12 +62,7 @@ public class VoiceAssistantManager {
 
     private final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(2);
     private final Handler mainHandler   = new Handler(Looper.getMainLooper());
-
-    private static final int TONE_SAMPLE_RATE = 44100;
-    private static final double WAKE_TONE_DURATION_SEC = 0.8;
-    private static final double END_TONE_DURATION_SEC = 0.5;
-    private final short[] wakeToneBuffer = renderTone(660.0, WAKE_TONE_DURATION_SEC, 5.0);
-    private final short[] endToneBuffer  = renderTone(440.0, END_TONE_DURATION_SEC, 9.0);
+    private final TonePlayer tonePlayer = new TonePlayer(scheduler);
 
     private final AtomicBoolean audioStreaming  = new AtomicBoolean(false);
     private final AtomicBoolean speechEnded     = new AtomicBoolean(false);
@@ -163,44 +157,10 @@ public class VoiceAssistantManager {
         mainHandler.post(() -> {
             mScreenSaverManager.stopScreenSaver();
         });
-        if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) playWakeSound();
+        if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) tonePlayer.playWake();
         if (enabled && state == State.IDLE) trigger();
     }
 
-    private void playWakeSound() { playTone(wakeToneBuffer, WAKE_TONE_DURATION_SEC); }
-    private void playEndSound()  { playTone(endToneBuffer,  END_TONE_DURATION_SEC); }
-
-    private static short[] renderTone(double freq, double durationSec, double decayConstant) {
-        int numSamples = (int) (TONE_SAMPLE_RATE * durationSec);
-        int attackSamples = TONE_SAMPLE_RATE / 200;
-        short[] buf = new short[numSamples];
-        for (int i = 0; i < numSamples; i++) {
-            double attack = i < attackSamples ? (double) i / attackSamples : 1.0;
-            double envelope = attack * Math.exp(-decayConstant * i / numSamples);
-            buf[i] = (short) (Short.MAX_VALUE * 0.75 * envelope
-                    * Math.sin(2.0 * Math.PI * freq * i / TONE_SAMPLE_RATE));
-        }
-        return buf;
-    }
-
-    private void playTone(short[] buf, double durationSec) {
-        scheduler.execute(() -> {
-            AudioTrack track = null;
-            try {
-                track = new AudioTrack(AudioManager.STREAM_MUSIC, TONE_SAMPLE_RATE,
-                        AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
-                        buf.length * 2, AudioTrack.MODE_STATIC);
-                track.write(buf, 0, buf.length);
-                track.play();
-                Thread.sleep((long) (durationSec * 1000) + 200);
-                track.stop();
-            } catch (Exception e) {
-                Log.w(TAG, "could not play tone", e);
-            } finally {
-                if (track != null) { try { track.release(); } catch (Exception ignored) {} }
-            }
-        });
-    }
 
     private void connect() {
         if (!enabled || manuallyDisabled) return;
@@ -390,7 +350,7 @@ public class VoiceAssistantManager {
             }
 
             try { recorder.stop(); } catch (Exception ignored) {}
-            if (speechStarted && soundEnabled) playEndSound();
+            if (speechStarted && soundEnabled) tonePlayer.playEnd();
 
         } catch (Exception e) {
             Log.e(TAG, "capture error", e);
