@@ -24,10 +24,10 @@ The Shelly Wall Display has excellent hardware but the stock software is limited
 |----------|----------|
 | **Display** | Full-screen kiosk mode • Auto-start on boot • Load any URL or Home Assistant • SSL error handling |
 | **Hardware** | Temperature/humidity sensors • Light sensor • Proximity sensor • Relay control • Hardware button mapping |
-| **Integration** | MQTT with HA auto-discovery • HTTP REST API • JavaScript bridge to hardware • Sensor state publishing |
+| **Integration** | MQTT with HA auto-discovery • HTTP REST API • JavaScript bridge to hardware • Sensor state publishing • HA BT Proxy |
 | **Screen** | Automatic brightness (lux-based) • Manual brightness control • Multiple screensavers • Wake on proximity/touch |
 | **Control** | Swipe gestures • Hardware button events • Remote wake/sleep • Settings via API |
-| **Advanced** | Media playback • Crash recovery • Hidden settings UI • Lite mode • Debug logging |
+| **Advanced** | Media playback • Crash recovery • Hidden settings UI • Lite mode • Debug logging • HA Voice Assistant Pipeline • microWakeWord|
 
 ## Supported Devices
 

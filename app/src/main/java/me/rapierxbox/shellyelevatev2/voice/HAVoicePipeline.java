@@ -30,16 +30,6 @@ import okio.ByteString;
  *  8. Server processes and returns stt-end, intent-end, tts-end, run-end events
  */
 
-// this was way too much work
-// little protocoll summary
-// connect to ws of ha
-// server sends type:auth_required -> we reply with access token
-// server sends type:auth_ok -> :)
-// we send assist_pipeline/run with start_stage=sst and end_stage=tts
-// server sends run-start event with sst_binary_handler_id
-// we stream pcm audio as binary frames: handler_id,bytes
-// to signal end we just send handler_id
-// ha processes and returns sst-end, intend-ed, tts-end and run-end
 public class HAVoicePipeline {
     private static final String TAG = "HAVoicePipeline";
 
