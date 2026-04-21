@@ -226,7 +226,7 @@ public class ShellyElevateApplication extends Application {
         mMQTTServer.onDestroy();
         if (mVoiceAssistantManager != null) mVoiceAssistantManager.onDestroy();
         if (mBluetoothProxyManager != null) mBluetoothProxyManager.onDestroy();
-        mMediaHelper.onDestroy();
+        if (mMediaHelper != null) mMediaHelper.onDestroy();
 
         if (httpWatchdog != null && !httpWatchdog.isShutdown()) {
             httpWatchdog.shutdownNow();
