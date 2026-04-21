@@ -136,8 +136,10 @@ public class MQTTServer {
 
     private void schedulePeriodicTempHum() {
         if (periodicScheduled) return;
-        scheduler.scheduleWithFixedDelay(this::publishTempAndHum, 0, 30, TimeUnit.SECONDS);
-        scheduler.scheduleWithFixedDelay(this::publishThermalZones, 5, 30, TimeUnit.SECONDS);
+        scheduler.scheduleWithFixedDelay(() -> {
+            publishTempAndHum();
+            publishThermalZones();
+        }, 0, 30, TimeUnit.SECONDS);
         periodicScheduled = true;
     }
 
@@ -366,13 +368,8 @@ public class MQTTServer {
     public void publishTempAndHum() {
         float temp = (float) mDeviceHelper.getTemperature();
         float hum = (float) mDeviceHelper.getHumidity();
-        // Batch both publishes in one executor call to reduce thread handoffs
-        if (temp != -999 || hum != -999) {
-            scheduler.execute(() -> {
-                if (temp != -999) publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, false);
-                if (hum != -999) publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, false);
-            });
-        }
+        if (temp != -999) publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, false);
+        if (hum != -999) publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, false);
     }
 
     public void publishTemp(float temp) {
