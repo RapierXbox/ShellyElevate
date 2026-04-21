@@ -15,6 +15,7 @@ import android.os.StrictMode;
 import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import fi.iki.elonen.NanoHTTPD;
@@ -51,6 +52,7 @@ public class ShellyElevateApplication extends Application {
 
     private static long applicationStartTime;
     private ScheduledExecutorService httpWatchdog;
+    private ScheduledFuture<?> httpWatchdogFuture;
     private int retryDelaySeconds = 5;
     private BroadcastReceiver httpSettingsReceiver;
 
@@ -120,13 +122,7 @@ public class ShellyElevateApplication extends Application {
             httpWatchdog = Executors.newSingleThreadScheduledExecutor();
             if (mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)) {
                 tryStartHttpServer();
-
-                httpWatchdog.scheduleWithFixedDelay(() -> {
-                    if (mHttpServer == null || !mHttpServer.isAlive()) {
-                        Log.w("ShellyElevateV2", "HTTP server not alive. Restarting...");
-                        tryStartHttpServer();
-                    }
-                }, 15, 30, TimeUnit.SECONDS);
+                scheduleHttpWatchdog();
             }
 
             // restore screen status
@@ -143,18 +139,10 @@ public class ShellyElevateApplication extends Application {
                 boolean enabled = mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true);
                 if (!enabled) {
                     if (mHttpServer != null && mHttpServer.isAlive()) mHttpServer.stop();
-                    if (httpWatchdog != null && !httpWatchdog.isShutdown()) httpWatchdog.shutdownNow();
+                    cancelHttpWatchdog();
                 } else {
-                    if (httpWatchdog == null || httpWatchdog.isShutdown()) {
-                        httpWatchdog = Executors.newSingleThreadScheduledExecutor();
-                    }
                     tryStartHttpServer();
-                    httpWatchdog.scheduleWithFixedDelay(() -> {
-                        if (mHttpServer == null || !mHttpServer.isAlive()) {
-                            Log.w("ShellyElevateV2", "HTTP server not alive. Restarting...");
-                            tryStartHttpServer();
-                        }
-                    }, 15, 30, TimeUnit.SECONDS);
+                    scheduleHttpWatchdog();
                 }
             }
         };
@@ -162,6 +150,26 @@ public class ShellyElevateApplication extends Application {
                 .registerReceiver(httpSettingsReceiver, new IntentFilter(Constants.INTENT_SETTINGS_CHANGED));
 
         Log.i("ShellyElevateV2", "Application started");
+    }
+
+    private void scheduleHttpWatchdog() {
+        if (httpWatchdog == null || httpWatchdog.isShutdown()) {
+            httpWatchdog = Executors.newSingleThreadScheduledExecutor();
+        }
+        if (httpWatchdogFuture != null && !httpWatchdogFuture.isCancelled() && !httpWatchdogFuture.isDone()) return;
+        httpWatchdogFuture = httpWatchdog.scheduleWithFixedDelay(() -> {
+            if (mHttpServer == null || !mHttpServer.isAlive()) {
+                Log.w("ShellyElevateV2", "HTTP server not alive. Restarting...");
+                tryStartHttpServer();
+            }
+        }, 15, 30, TimeUnit.SECONDS);
+    }
+
+    private void cancelHttpWatchdog() {
+        if (httpWatchdogFuture != null) {
+            httpWatchdogFuture.cancel(false);
+            httpWatchdogFuture = null;
+        }
     }
 
     private void tryStartHttpServer() {
