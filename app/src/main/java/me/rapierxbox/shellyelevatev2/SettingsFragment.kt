@@ -52,8 +52,29 @@ class SettingsFragment : Fragment() {
         }
     }
 
+    private val okHttpClient by lazy {
+        //for now trust all certs (hmmm should be fine)
+        // android 7 doesnt seem to include sectigo which github uses
+        val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
+            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
+        })
+        val sslContext = SSLContext.getInstance("SSL").apply { init(null, trustAll, SecureRandom()) }
+        OkHttpClient.Builder()
+            .sslSocketFactory(sslContext.socketFactory, trustAll[0] as X509TrustManager)
+            .hostnameVerifier { _, _ -> true }
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
+    private var modelList: MutableList<WakeWordModel> = mutableListOf()
+    private var selectedModelName: String = ""
+    private var downloadJob: Job? = null
+
     override fun onDestroyView() {
         super.onDestroyView()
+        downloadJob?.cancel()
         sensorStatusHandler.removeCallbacks(sensorStatusRunnable)
         // Restore previous brightness when leaving settings
         mDeviceHelper?.setScreenBrightness(savedBrightness)
@@ -66,9 +87,8 @@ class SettingsFragment : Fragment() {
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
-
         activity?.setTitle(R.string.settings)
-        
+
         // Save current brightness and set to max for settings visibility
         savedBrightness = mScreenManager?.let { mSharedPreferences?.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS) ?: DEFAULT_BRIGHTNESS } ?: DEFAULT_BRIGHTNESS
         mScreenManager?.setScreenOn(true)
@@ -85,23 +105,17 @@ class SettingsFragment : Fragment() {
                         startActivity(Intent(Settings.ACTION_SETTINGS))
                         true
                     }
-
                     R.id.action_restart -> {
                         saveSettings()
-                        try {
-                            Runtime.getRuntime().exec("reboot")
-                        } catch (e: IOException) {
-                            Log.e("SettingsActivity", "Error rebooting:", e)
-                        }
+                        try { Runtime.getRuntime().exec("reboot") }
+                        catch (e: IOException) { Log.e("SettingsActivity", "Error rebooting:", e) }
                         true
                     }
-
                     R.id.action_exit -> {
                         requireActivity().moveTaskToBack(true)
                         requireActivity().finishAffinity()
                         true
                     }
-
                     else -> false
                 }
             }
@@ -110,6 +124,7 @@ class SettingsFragment : Fragment() {
         binding.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
         loadValues()
         setupListeners()
+        setupModelChooser()
     }
 
     override fun onResume() {
@@ -164,8 +179,7 @@ class SettingsFragment : Fragment() {
         binding.mqttUsername.setText(mSharedPreferences.getString(SP_MQTT_USERNAME, ""))
         binding.mqttPassword.setText(mSharedPreferences.getString(SP_MQTT_PASSWORD, ""))
         binding.mqttClientId.setText(mSharedPreferences.getString(SP_MQTT_CLIENTID,
-            "shellyelevate-" + UUID.randomUUID().toString().replace("-".toRegex(), "")
-                .substring(2, 6)))
+            "shellyelevate-" + UUID.randomUUID().toString().replace("-".toRegex(), "").substring(2, 6)))
 
         //Switch
         binding.switchOnSwipe.isChecked = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)
@@ -237,10 +251,11 @@ class SettingsFragment : Fragment() {
         binding.voiceAssistantEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)
         binding.voiceAssistantToken.setText(mSharedPreferences.getString(SP_VOICE_ASSISTANT_TOKEN, ""))
         binding.voiceAssistantPipelineId.setText(mSharedPreferences.getString(SP_VOICE_ASSISTANT_PIPELINE_ID, ""))
-        binding.voiceAssistantMaxSeconds.setText(
-            mSharedPreferences.getInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10).toString())
+        binding.voiceAssistantMaxSeconds.setText(mSharedPreferences.getInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10).toString())
         binding.voiceWakeEnabled.isChecked = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
-        binding.voiceWakeModelName.setText(mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, ""))
+        binding.voiceWakeExperimentalModels.isChecked = mSharedPreferences.getBoolean(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
+        selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
+        // Model label and list populated by setupModelChooser() called from onViewCreated
         binding.voiceWakeModelLayout.isVisible = binding.voiceWakeEnabled.isChecked
         binding.voiceWakeSensitivity.value = mSharedPreferences.getInt(SP_VOICE_WAKE_SENSITIVITY, 50).toFloat()
         binding.voiceWakeCooldown.value    = mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5).toFloat()
@@ -258,6 +273,201 @@ class SettingsFragment : Fragment() {
         mSharedPreferences.edit { putBoolean("settingEverShown", true) }
     }
 
+    private fun setupModelChooser() {
+        val wakewordsDir = File(requireContext().filesDir, "wakewords")
+
+        // Build list from disk immediately, then merge GitHub models in background
+        rebuildModelList(WakeWordModelManager.getInstalledModels(wakewordsDir), emptyList(), emptyList())
+        fetchAndMergeRemoteModels(wakewordsDir)
+
+        binding.voiceWakeChooseModel.setOnClickListener { showModelPickerDialog() }
+
+        binding.voiceWakeModelRefresh.setOnClickListener {
+            fetchAndMergeRemoteModels(wakewordsDir)
+        }
+
+        binding.voiceWakeExperimentalModels.setOnCheckedChangeListener { _, _ ->
+            fetchAndMergeRemoteModels(wakewordsDir)
+        }
+    }
+
+    private fun rebuildModelList(
+        installed: List<WakeWordModel.Installed>,
+        downloadable: List<WakeWordModel.Downloadable>,
+        experimental: List<WakeWordModel.Experimental>
+    ) {
+        val installedNames = installed.map { it.name }.toSet()
+        val filteredDownloadable = downloadable.filter { it.name !in installedNames }
+        val filteredExperimental = experimental.filter { it.name !in installedNames }
+        modelList = (installed + filteredDownloadable + filteredExperimental + listOf(WakeWordModel.Custom.INSTANCE)).toMutableList()
+        updateModelLabel()
+    }
+
+    private fun updateModelLabel() {
+        if (_binding == null) return
+        binding.voiceWakeModelLabel.text = selectedModelName.ifEmpty { getString(R.string.voice_wake_model_none_selected) }
+    }
+
+    private fun fetchAndMergeRemoteModels(wakewordsDir: File) {
+        val showExperimental = binding.voiceWakeExperimentalModels.isChecked
+        binding.voiceWakeModelRefresh.isEnabled = false
+
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val (official, experimental) = withContext(Dispatchers.IO) {
+                    val off = WakeWordModelManager.fetchOfficialModels(okHttpClient)
+                    val exp = if (showExperimental) WakeWordModelManager.fetchExperimentalModels(okHttpClient) else emptyList()
+                    Pair(off, exp)
+                }
+                val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
+                rebuildModelList(installed, official, experimental)
+            } catch (e: Exception) {
+                Log.w("SettingsFragment", "GitHub fetch failed: ${e.message}")
+                if (isAdded) Toast.makeText(requireContext(), getString(R.string.voice_wake_model_fetch_failed), Toast.LENGTH_SHORT).show()
+            } finally {
+                if (_binding != null) binding.voiceWakeModelRefresh.isEnabled = true
+            }
+        }
+    }
+
+    private fun showModelPickerDialog() {
+        if (modelList.isEmpty()) return
+        val labels = modelList.map { labelFor(it) }.toTypedArray()
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.voice_wake_model_name)
+            .setItems(labels) { _, which ->
+                val model = modelList.getOrNull(which) ?: return@setItems
+                onModelSelected(model)
+            }
+            .show()
+    }
+
+    private fun labelFor(model: WakeWordModel): String = when (model) {
+        is WakeWordModel.Installed    -> "\u2713  ${model.displayName}"
+        is WakeWordModel.Downloadable -> "\u2B07  ${model.displayName}"
+        is WakeWordModel.Experimental -> "\u26A1  ${model.displayName}"
+        else                          -> model.displayName  // Custom
+    }
+
+    private fun onModelSelected(model: WakeWordModel) {
+        when (model) {
+            is WakeWordModel.Installed -> {
+                selectedModelName = model.name
+                updateModelLabel()
+            }
+            is WakeWordModel.Downloadable -> startModelDownload(model.name, model.tfliteUrl, model.jsonUrl)
+            is WakeWordModel.Experimental -> startModelDownload(model.name, model.tfliteUrl, model.jsonUrl)
+            else -> showCustomModelPathDialog()  // Custom
+        }
+    }
+
+    private fun startModelDownload(name: String, tfliteUrl: String, jsonUrl: String) {
+        downloadJob?.cancel()
+        val wakewordsDir = File(requireContext().filesDir, "wakewords")
+        val mainHandler = Handler(Looper.getMainLooper())
+
+        binding.voiceWakeDownloadProgress.visibility = View.VISIBLE
+        binding.voiceWakeProgressBar.progress = 0
+        binding.voiceWakeProgressText.text = "0%"
+
+        downloadJob = viewLifecycleOwner.lifecycleScope.launch {
+            val destTflite = File(wakewordsDir, "$name.tflite")
+            val destJson   = File(wakewordsDir, "$name.json")
+            val hasJson = jsonUrl.isNotEmpty()
+            try {
+                withContext(Dispatchers.IO) {
+                    WakeWordModelManager.downloadFile(okHttpClient, tfliteUrl, destTflite) { pct ->
+                        val overall = if (hasJson) pct / 2 else pct
+                        mainHandler.post { if (_binding != null) {
+                            binding.voiceWakeProgressBar.progress = overall
+                            binding.voiceWakeProgressText.text = "$overall%"
+                        }}
+                    }
+                    if (hasJson) {
+                        WakeWordModelManager.downloadFile(okHttpClient, jsonUrl, destJson) { pct ->
+                            val overall = 50 + pct / 2
+                            mainHandler.post { if (_binding != null) {
+                                binding.voiceWakeProgressBar.progress = overall
+                                binding.voiceWakeProgressText.text = "$overall%"
+                            }}
+                        }
+                    }
+                }
+                selectedModelName = name
+                mSharedPreferences.edit { putString(SP_VOICE_WAKE_MODEL_NAME, name) }
+                val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
+                rebuildModelList(installed,
+                    modelList.filterIsInstance<WakeWordModel.Downloadable>(),
+                    modelList.filterIsInstance<WakeWordModel.Experimental>())
+                LocalBroadcastManager.getInstance(requireContext())
+                    .sendBroadcast(Intent(INTENT_SETTINGS_CHANGED))
+                updateWakeModelStatus()
+                Toast.makeText(requireContext(), getString(R.string.voice_wake_model_downloaded, name), Toast.LENGTH_SHORT).show()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                destTflite.delete(); destJson.delete()
+                throw e
+            } catch (e: Exception) {
+                Log.e("SettingsFragment", "Download failed for $name", e)
+                destTflite.delete(); destJson.delete()
+                if (isAdded) Toast.makeText(requireContext(), getString(R.string.voice_wake_model_download_failed), Toast.LENGTH_SHORT).show()
+            } finally {
+                if (_binding != null) binding.voiceWakeDownloadProgress.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun showCustomModelPathDialog() {
+        val wakewordsDir = File(requireContext().filesDir, "wakewords")
+        val input = EditText(requireContext()).apply {
+            hint = getString(R.string.voice_wake_model_custom_hint)
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
+            setSingleLine()
+        }
+        val container = android.widget.LinearLayout(requireContext()).apply {
+            setPadding(64, 16, 64, 0)
+            addView(input)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.voice_wake_model_custom_title)
+            .setMessage(R.string.voice_wake_model_custom_message)
+            .setView(container)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val path = input.text.toString().trim()
+                if (path.isNotEmpty()) importModelFromPath(path, wakewordsDir)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun importModelFromPath(path: String, wakewordsDir: File) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val stem = withContext(Dispatchers.IO) {
+                    val src = File(path)
+                    if (!src.exists()) throw IOException("File not found: $path")
+                    val s = src.name.removeSuffix(".tflite")
+                    wakewordsDir.mkdirs()
+                    src.copyTo(File(wakewordsDir, "$s.tflite"), overwrite = true)
+                    val jsonSrc = File(src.parent, "$s.json")
+                    if (jsonSrc.exists()) jsonSrc.copyTo(File(wakewordsDir, "$s.json"), overwrite = true)
+                    s
+                }
+                selectedModelName = stem
+                val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
+                rebuildModelList(installed,
+                    modelList.filterIsInstance<WakeWordModel.Downloadable>(),
+                    modelList.filterIsInstance<WakeWordModel.Experimental>())
+                updateWakeModelStatus()
+                Toast.makeText(requireContext(), getString(R.string.voice_wake_model_imported, stem), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e("SettingsFragment", "Custom import failed", e)
+                if (isAdded) Toast.makeText(requireContext(), getString(R.string.voice_wake_model_import_failed), Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    // ─────────────── Listeners ───────────────
+
     @SuppressLint("ClickableViewAccessibility")
     private fun setupListeners() {
         binding.findURLButton.setOnClickListener {
@@ -266,7 +476,7 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        binding.brightnessSetting.addOnChangeListener { slider, value, fromUser ->
+        binding.brightnessSetting.addOnChangeListener { _, value, _ ->
             mDeviceHelper.setScreenBrightness(value.toInt())
         }
 
@@ -278,7 +488,7 @@ class SettingsFragment : Fragment() {
                 val target = (value / 100f * maxVol).roundToInt().coerceIn(0, maxVol)
                 if (target != lastAppliedVol) {
                     lastAppliedVol = target
-                    am.setStreamVolume(AudioManager.STREAM_MUSIC, target, AudioManager.FLAG_PLAY_SOUND) // play sound flag lets android play its own volume change tone at next level
+                    am.setStreamVolume(AudioManager.STREAM_MUSIC, target, AudioManager.FLAG_PLAY_SOUND)
                 }
             }
         }
@@ -307,20 +517,18 @@ class SettingsFragment : Fragment() {
         }
 
         binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
-            if (actionId == EditorInfo.IME_ACTION_DONE) {
-                if ((binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
-                    binding.screenSaverDelay.setText("5")
-                    Toast.makeText(requireContext(), R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
-                }
+            if (actionId == EditorInfo.IME_ACTION_DONE &&
+                (binding.screenSaverDelay.text.toString().toIntOrNull() ?: 5) < 5) {
+                binding.screenSaverDelay.setText("5")
+                Toast.makeText(requireContext(), R.string.delay_must_be_bigger_then_5s, Toast.LENGTH_SHORT).show()
             }
-
-            return@setOnEditorActionListener false
+            false
         }
 
         binding.proximityKeepAwakeSeconds.setOnEditorActionListener { _, actionId, _ ->
             if (actionId == EditorInfo.IME_ACTION_DONE) {
-                val keepAwakeSeconds = binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull() ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS
-                if (keepAwakeSeconds < 0) {
+                val v = binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull() ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS
+                if (v < 0) {
                     binding.proximityKeepAwakeSeconds.setText(PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS.toString())
                     Toast.makeText(requireContext(), R.string.proximity_keep_awake_minimum, Toast.LENGTH_SHORT).show()
                 }
@@ -347,13 +555,10 @@ class SettingsFragment : Fragment() {
 
         binding.voiceAssistantEnabled.setOnCheckedChangeListener { _, isChecked ->
             binding.voiceAssistantLayout.isVisible = isChecked
-            if (isChecked) {
-                val haUrl = binding.webviewURL.text.toString()
-                if (haUrl.isEmpty()) {
-                    Toast.makeText(requireContext(), R.string.voice_requires_url, Toast.LENGTH_LONG).show()
-                    binding.voiceAssistantEnabled.isChecked = false
-                    binding.voiceAssistantLayout.isVisible = false
-                }
+            if (isChecked && binding.webviewURL.text.toString().isEmpty()) {
+                Toast.makeText(requireContext(), R.string.voice_requires_url, Toast.LENGTH_LONG).show()
+                binding.voiceAssistantEnabled.isChecked = false
+                binding.voiceAssistantLayout.isVisible = false
             }
         }
 
@@ -382,30 +587,13 @@ class SettingsFragment : Fragment() {
     private fun setupButtonRelaySpinners(buttonCount: Int, relayCount: Int) {
         // Build options list: "None" + "Relay 0" ... "Relay N-1"
         val options = mutableListOf(getString(R.string.button_relay_none))
-        for (i in 0 until relayCount) {
-            options.add(getString(R.string.button_relay_relay_label, i))
-        }
+        for (i in 0 until relayCount) options.add(getString(R.string.button_relay_relay_label, i))
         val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, options)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
 
-        val buttonLayouts = listOf(
-            binding.buttonRelayMap0Layout,
-            binding.buttonRelayMap1Layout,
-            binding.buttonRelayMap2Layout,
-            binding.buttonRelayMap3Layout
-        )
-        val buttonLabels = listOf(
-            binding.buttonRelayMap0Label,
-            binding.buttonRelayMap1Label,
-            binding.buttonRelayMap2Label,
-            binding.buttonRelayMap3Label
-        )
-        val buttonSpinners = listOf(
-            binding.buttonRelayMap0,
-            binding.buttonRelayMap1,
-            binding.buttonRelayMap2,
-            binding.buttonRelayMap3
-        )
+        val buttonLayouts = listOf(binding.buttonRelayMap0Layout, binding.buttonRelayMap1Layout, binding.buttonRelayMap2Layout, binding.buttonRelayMap3Layout)
+        val buttonLabels  = listOf(binding.buttonRelayMap0Label,  binding.buttonRelayMap1Label,  binding.buttonRelayMap2Label,  binding.buttonRelayMap3Label)
+        val buttonSpinners = listOf(binding.buttonRelayMap0, binding.buttonRelayMap1, binding.buttonRelayMap2, binding.buttonRelayMap3)
 
         for (i in buttonLayouts.indices) {
             val visible = i < buttonCount
@@ -419,14 +607,9 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        val maxSupportedButtons = buttonLayouts.size
-        if (buttonCount > maxSupportedButtons) {
-            Log.w("SettingsFragment", "Device reports $buttonCount buttons, but settings UI supports only $maxSupportedButtons button relay mappings.")
-            Toast.makeText(
-                requireContext(),
-                "This device exposes $buttonCount buttons, but only the first $maxSupportedButtons can be configured here.",
-                Toast.LENGTH_LONG
-            ).show()
+        if (buttonCount > buttonLayouts.size) {
+            Log.w("SettingsFragment", "Device has $buttonCount buttons but UI supports only ${buttonLayouts.size}")
+            Toast.makeText(requireContext(), "Only the first ${buttonLayouts.size} buttons can be configured here.", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -459,16 +642,9 @@ class SettingsFragment : Fragment() {
             // Button-to-Relay Mapping
             if (device.buttons > 0 && device.relays > 0) {
                 putBoolean(SP_BUTTON_RELAY_ENABLED, binding.buttonRelayEnabled.isChecked)
-                val buttonSpinners = listOf(
-                    binding.buttonRelayMap0,
-                    binding.buttonRelayMap1,
-                    binding.buttonRelayMap2,
-                    binding.buttonRelayMap3
-                )
-                for (i in 0 until device.buttons.coerceAtMost(4)) {
-                    // position 0 = None (-1), position 1 = Relay 0 (0), etc.
-                    putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), buttonSpinners[i].selectedItemPosition - 1)
-                }
+                val spinners = listOf(binding.buttonRelayMap0, binding.buttonRelayMap1, binding.buttonRelayMap2, binding.buttonRelayMap3)
+                for (i in 0 until device.buttons.coerceAtMost(4))
+                    putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), spinners[i].selectedItemPosition - 1)
             }
 
             // media
@@ -484,8 +660,7 @@ class SettingsFragment : Fragment() {
             putInt(SP_SCREEN_SAVER_DELAY, binding.screenSaverDelay.text.toString().toIntOrNull() ?: SCREEN_SAVER_DEFAULT_DELAY)
             putInt(SP_SCREEN_SAVER_ID, binding.screenSaverType.selectedItemPosition)
             putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked && device.hasProximitySensor)
-            putInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, (binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull()
-                ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS).coerceAtLeast(0))
+            putInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, (binding.proximityKeepAwakeSeconds.text.toString().toIntOrNull() ?: PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS).coerceAtLeast(0))
             putInt(SP_SCREEN_SAVER_MIN_BRIGHTNESS, binding.screensaverMinBrightness.value.toInt())
 
             //Http Server
@@ -495,10 +670,10 @@ class SettingsFragment : Fragment() {
             putBoolean(SP_VOICE_ASSISTANT_ENABLED, binding.voiceAssistantEnabled.isChecked)
             putString(SP_VOICE_ASSISTANT_TOKEN, binding.voiceAssistantToken.text.toString())
             putString(SP_VOICE_ASSISTANT_PIPELINE_ID, binding.voiceAssistantPipelineId.text.toString())
-            putInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS,
-                binding.voiceAssistantMaxSeconds.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10)
+            putInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, binding.voiceAssistantMaxSeconds.text.toString().toIntOrNull()?.coerceAtLeast(1) ?: 10)
             putBoolean(SP_VOICE_WAKE_ENABLED, binding.voiceWakeEnabled.isChecked)
-            putString(SP_VOICE_WAKE_MODEL_NAME, binding.voiceWakeModelName.text.toString().trim())
+            putBoolean(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, binding.voiceWakeExperimentalModels.isChecked)
+            putString(SP_VOICE_WAKE_MODEL_NAME, selectedModelName)
             putInt(SP_VOICE_WAKE_SENSITIVITY, binding.voiceWakeSensitivity.value.toInt())
             putInt(SP_VOICE_WAKE_COOLDOWN_SEC, binding.voiceWakeCooldown.value.toInt())
             putBoolean(SP_VOICE_WAKE_SOUND_ENABLED, binding.voiceWakeSoundEnabled.isChecked)
@@ -522,23 +697,21 @@ class SettingsFragment : Fragment() {
     fun getScreenSaverSpinnerAdapter(): ArrayAdapter<String?> {
         val adapter = ArrayAdapter<String?>(ShellyElevateApplication.mApplicationContext, android.R.layout.simple_spinner_item)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-
-        for (screenSaver in ScreenSaverManager.getAvailableScreenSavers()) {
-            adapter.add(screenSaver.getName())
-        }
-
+        for (screenSaver in ScreenSaverManager.getAvailableScreenSavers()) adapter.add(screenSaver.getName())
         return adapter
     }
 
     private fun updateWakeModelStatus() {
         val manager = mVoiceAssistantManager ?: return
         val statusText = when (manager.wakeModelStatus) {
-            WakeWordDetector.ModelStatus.LOADED        -> getString(R.string.voice_wake_model_status_loaded)
+            WakeWordDetector.ModelStatus.LOADED         -> getString(R.string.voice_wake_model_status_loaded)
             WakeWordDetector.ModelStatus.FILE_NOT_FOUND -> getString(R.string.voice_wake_model_status_not_found)
-            WakeWordDetector.ModelStatus.LOAD_ERROR    -> getString(R.string.voice_wake_model_status_error)
-            WakeWordDetector.ModelStatus.NOT_LOADED    -> getString(R.string.voice_wake_model_status_none)
+            WakeWordDetector.ModelStatus.LOAD_ERROR     -> getString(R.string.voice_wake_model_status_error)
+            WakeWordDetector.ModelStatus.NOT_LOADED     -> getString(R.string.voice_wake_model_status_none)
         }
-        binding.voiceWakeModelStatus.text = getString(R.string.voice_wake_model_status, statusText)
+        val loadedName = manager.loadedModelName
+        val display = if (loadedName.isNotEmpty()) "$loadedName ($statusText)" else statusText
+        binding.voiceWakeModelStatus.text = getString(R.string.voice_wake_model_status, display)
         binding.voiceWakeModelPath.text   = getString(R.string.voice_wake_model_path, manager.wakeModelDirectory)
     }
 

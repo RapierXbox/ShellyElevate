@@ -749,10 +749,21 @@
                     android:layout_marginTop="8dp"
                     android:orientation="vertical">
 
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/voiceWakeExperimentalModels"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginBottom="8dp"
+                        android:text="@string/voice_wake_experimental_models"
+                        android:textSize="16sp"
+                        tools:ignore="UseSwitchCompatOrMaterialXml" />
+
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal">
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical">
 
                         <TextView
                             android:layout_width="0dp"
@@ -762,15 +773,60 @@
                             android:text="@string/voice_wake_model_name"
                             android:textSize="16sp" />
 
-                        <EditText
-                            android:id="@+id/voiceWakeModelName"
+                        <TextView
+                            android:id="@+id/voiceWakeModelLabel"
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
-                            android:layout_weight="2"
-                            android:hint="@string/voice_wake_model_hint"
-                            android:imeOptions="actionDone"
-                            android:inputType="text"
-                            android:textSize="16sp" />
+                            android:layout_weight="1"
+                            android:layout_gravity="center_vertical"
+                            android:ellipsize="end"
+                            android:maxLines="1"
+                            android:textSize="14sp"
+                            tools:text="okay_nabu" />
+
+                        <Button
+                            android:id="@+id/voiceWakeChooseModel"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/voice_wake_model_choose"
+                            android:textSize="13sp" />
+
+                        <ImageButton
+                            android:id="@+id/voiceWakeModelRefresh"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:src="@android:drawable/ic_menu_rotate"
+                            android:contentDescription="@string/voice_wake_model_refresh"
+                            android:background="?attr/selectableItemBackgroundBorderless" />
+
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/voiceWakeDownloadProgress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:visibility="gone">
+
+                        <ProgressBar
+                            android:id="@+id/voiceWakeProgressBar"
+                            style="?android:attr/progressBarStyleHorizontal"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:max="100"
+                            android:progress="0" />
+
+                        <TextView
+                            android:id="@+id/voiceWakeProgressText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:textSize="12sp"
+                            android:text="0%" />
 
                     </LinearLayout>
 

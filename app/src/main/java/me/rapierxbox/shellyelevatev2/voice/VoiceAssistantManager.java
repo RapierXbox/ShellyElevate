@@ -145,6 +145,8 @@ public class VoiceAssistantManager {
         return wakeDetector != null ? wakeDetector.getModelStatus() : WakeWordDetector.ModelStatus.NOT_LOADED;
     }
 
+    public String getLoadedModelName()    { return loadedModelName; }
+
     public String getWakeModelDirectory() {
         if (wakeDetector != null) return wakeDetector.getModelDirectory();
         return new java.io.File(mApplicationContext.getFilesDir(), "wakewords").getAbsolutePath();

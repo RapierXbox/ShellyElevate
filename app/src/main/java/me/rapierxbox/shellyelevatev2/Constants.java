@@ -55,6 +55,7 @@ public class Constants {
     public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 50 is default sens
     public static final String SP_VOICE_SCORE_BAR_ENABLED   = "voiceScoreBarEnabled";
     public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
+    public static final String SP_VOICE_WAKE_EXPERIMENTAL_MODELS = "voiceWakeExperimentalModels";
 
     //MQTT SP Keys
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
