@@ -272,7 +272,7 @@ public class MQTTServer {
                 
                 // Batch relay publishes to reduce lambda allocations
                 scheduler.schedule(() -> {
-                    for (int num = 0; num < DeviceModel.getReportedDevice().inputs; num++) {
+                    for (int num = 0; num < DeviceModel.getReportedDevice().relays; num++) {
                         publishRelay(num, mDeviceHelper.getRelay(num));
                     }
                 }, 100, TimeUnit.MILLISECONDS);

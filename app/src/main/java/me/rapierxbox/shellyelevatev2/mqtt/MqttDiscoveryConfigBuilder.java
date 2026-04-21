@@ -93,7 +93,7 @@ class MqttDiscoveryConfigBuilder {
     }
 
     private void addRelayAndSwitchComponents(JSONObject components) throws JSONException {
-        for (int num = 0; num < device.inputs; num++) {
+        for (int num = 0; num < device.relays; num++) {
             String suffix = num > 0 ? "_" + num : "";
             String nameTrailer = num > 0 ? " " + num : "";
 
@@ -106,6 +106,11 @@ class MqttDiscoveryConfigBuilder {
             relay.put("unique_id", clientId + "_relay" + suffix);
             relay.put("object_id", "shelly_walldisplay_" + clientId + "_relay" + suffix);
             components.put(clientId + "_relay" + suffix, relay);
+        }
+
+        for (int num = 0; num < device.inputs; num++) {
+            String suffix = num > 0 ? "_" + num : "";
+            String nameTrailer = num > 0 ? " " + num : "";
 
             JSONObject sw = new JSONObject();
             sw.put("p", "button");
