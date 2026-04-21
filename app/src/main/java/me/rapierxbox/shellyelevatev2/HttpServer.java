@@ -402,23 +402,31 @@ public class HttpServer extends NanoHTTPD {
                             if (line.startsWith("Mem:")) {
                                 // Split by whitespace; \\s+ handles multiple spaces
                                 String[] tokens = line.split("\\s+");
-
-                                long totalMemory = Long.parseLong(tokens[1]);
-                                long availableMemory = Long.parseLong(tokens[3]);
-
-                                jsonResponse.put("success", true);
-                                jsonResponse.put("Mem total memory", totalMemory + "MiB");
-                                jsonResponse.put("Mem free memory", availableMemory + "MiB");
+                                if (tokens.length >= 4) {
+                                    try {
+                                        long totalMemory = Long.parseLong(tokens[1]);
+                                        long availableMemory = Long.parseLong(tokens[3]);
+                                        jsonResponse.put("success", true);
+                                        jsonResponse.put("Mem total memory", totalMemory + "MiB");
+                                        jsonResponse.put("Mem free memory", availableMemory + "MiB");
+                                    } catch (NumberFormatException e) {
+                                        Log.w("HttpServer", "Unparseable Mem line: " + line);
+                                    }
+                                }
                             }
                             if (line.startsWith("Swap:")) {
                                 String[] tokens = line.split("\\s+");
-
-                                long totalMemory = Long.parseLong(tokens[1]);
-                                long availableMemory = Long.parseLong(tokens[3]);
-
-                                jsonResponse.put("success", true);
-                                jsonResponse.put("Swap total memory", totalMemory + "MiB");
-                                jsonResponse.put("Swap free memory", availableMemory + "MiB");
+                                if (tokens.length >= 4) {
+                                    try {
+                                        long totalMemory = Long.parseLong(tokens[1]);
+                                        long availableMemory = Long.parseLong(tokens[3]);
+                                        jsonResponse.put("success", true);
+                                        jsonResponse.put("Swap total memory", totalMemory + "MiB");
+                                        jsonResponse.put("Swap free memory", availableMemory + "MiB");
+                                    } catch (NumberFormatException e) {
+                                        Log.w("HttpServer", "Unparseable Swap line: " + line);
+                                    }
+                                }
                             }
                         }
                         process.waitFor();
