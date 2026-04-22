@@ -9,16 +9,16 @@ import java.util.Locale;
 
 public enum DeviceModel {
     //V1
-    STARGATE("Stargate", "Shelly Wall Display", "SAWD-0A1XX10EU1", false, false, -2.7d, 7.0d, 0, 1, 1), // Old One
-    ATLANTIS("Atlantis", "Shelly Wall Display 2", "SAWD-1A1XX10EU1", true, false, -1.1d, 3.0d, 0, 1, 1), // New One
-    PEGASUS("Pegasus",  "Shelly Wall Display X2", "SAWD-2A1XX10EU1", true, false, -2.6d, 8.0d, 0, 1, 2),
+    STARGATE("Stargate", "Shelly Wall Display", "SAWD-0A1XX10EU1", false, false, -2.7d, 7.0d, 0, 1, 1, false), // Old One
+    ATLANTIS("Atlantis", "Shelly Wall Display 2", "SAWD-1A1XX10EU1", true, false, -1.1d, 3.0d, 0, 1, 1, false), // New One
+    PEGASUS("Pegasus",  "Shelly Wall Display X2", "SAWD-2A1XX10EU1", true, false, -2.6d, 8.0d, 0, 1, 2, false),
 
     //V2
-    BLAKE("Blake", "Shelly Wall Display XL","SAWD-3A1XE10EU2", true, true, -1.2d, 7.0d, 4, 1, 2),
-    MAVERICK("Maverick", "Shelly Wall Display U1", "SAWD-4A1XE10US0", true, true, 0d, 0.0d, 0, 1, 1), // TODO: not yet available
-    JENNA("Jenna", "Shelly Wall Display X2i", "SAWD-5A1XX10EU0", true, true, 0d, 0.0d, 0, 1, 2), // TODO: not yet available
-    CALLY("Cally","Shelly Wall Display XLi", "SAWD-6A1XX10EU0", true, true, 0d, 0.0d, 4, 1, 2), // TODO: not yet available
-    DAYNA("Dayna", "Shelly Wall Display D1", "SAWD-6A0XX0EU0", true, true, 0d, 0.0d, 0, 0 /* this is confirmed */, 0 /* didnt check the decompiled version for it jet */), // TODO: not yet available
+    BLAKE("Blake", "Shelly Wall Display XL","SAWD-3A1XE10EU2", true, true, -1.2d, 7.0d, 4, 1, 2, true),
+    MAVERICK("Maverick", "Shelly Wall Display U1", "SAWD-4A1XE10US0", true, true, 0d, 0.0d, 0, 1, 1, false), // TODO: not yet available
+    JENNA("Jenna", "Shelly Wall Display X2i", "SAWD-5A1XX10EU0", true, true, 0d, 0.0d, 0, 1, 2, false), // TODO: not yet available
+    CALLY("Cally","Shelly Wall Display XLi", "SAWD-6A1XX10EU0", true, true, 0d, 0.0d, 4, 1, 2, false), // TODO: not yet available
+    DAYNA("Dayna", "Shelly Wall Display D1", "SAWD-6A0XX0EU0", true, true, 0d, 0.0d, 0, 0 /* this is confirmed */, 0 /* didnt check the decompiled version for it jet */, false), // TODO: not yet available
     ;
 
     private final String model;
@@ -31,8 +31,9 @@ public enum DeviceModel {
     public final int buttons;
     public final int inputs;
     public final int relays;
+    public final boolean invertRelay;
 
-    DeviceModel(String model, String friendlyName, String modelName, boolean hasProximitySensor, boolean hasPowerButton, double temperatureOffset, double humidityOffset, int buttons, int inputs, int relays) {
+    DeviceModel(String model, String friendlyName, String modelName, boolean hasProximitySensor, boolean hasPowerButton, double temperatureOffset, double humidityOffset, int buttons, int inputs, int relays, boolean invertRelay) {
         this.model = model;
         this.modelName = modelName;
         this.friendlyName = friendlyName;
@@ -43,6 +44,7 @@ public enum DeviceModel {
         this.buttons = buttons;
         this.inputs = inputs;
         this.relays = relays;
+        this.invertRelay = invertRelay;
     }
 
     public static DeviceModel getReportedDevice(){

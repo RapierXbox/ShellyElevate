@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
+import static android.content.Context.DEVICE_ID_DEFAULT;
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
@@ -40,10 +41,12 @@ public class DeviceHelper {
     private String screenBrightnessFile;
     private boolean screenOn = true;
     private int lastScreenBrightness;
+    private final DeviceModel deviceModel;
 
     private static final String TAG = "DeviceHelper";
 
     public DeviceHelper() {
+        this.deviceModel = DeviceModel.getReportedDevice();
         for (String brightnessFile : screenBrightnessFiles) {
             if (new File(brightnessFile).exists()) {
                 screenBrightnessFile = brightnessFile;
@@ -108,10 +111,11 @@ public class DeviceHelper {
     }
 
     public boolean getRelay(int num) {
-        return Objects.requireNonNull(readFileContent(getRelayFile(num))).contains("1");
+        return Objects.requireNonNull(readFileContent(getRelayFile(num))).contains("1") ^ deviceModel.invertRelay;
     }
 
     public void setRelay(int num, boolean state) {
+        state ^= deviceModel.invertRelay;
         writeFileContent(getRelayFile(num), state ? "1" : "0");
 
         if (mMQTTServer.shouldSend()) {
