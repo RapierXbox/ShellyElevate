@@ -22,11 +22,11 @@ public class DeviceHelper {
 
     private static final String[][] possibleRelayFiles = {
             {
-                    "/sys/devices/platform/leds/green_enable",
+                    "/sys/devices/platform/leds/red_enable",
                     "/sys/class/strelay/relay1"
             },
             {
-                    "/sys/devices/platform/leds/red_enable",
+                    "/sys/devices/platform/leds/green_enable",
                     "/sys/class/strelay/relay2"
             }
     };
@@ -108,32 +108,27 @@ public class DeviceHelper {
     }
 
     public boolean getRelay(int num) {
-        boolean relayState = false;
-
-        // Safety check
-        if (num < 0 || num >= possibleRelayFiles.length) return false;
-
-        for (String relayFile : possibleRelayFiles[num]) {
-            String content = readFileContent(relayFile);
-            if (content != null) {
-                relayState |= content.contains("1");
-            }
-        }
-
-        return relayState;
+        return Objects.requireNonNull(readFileContent(getRelayFile(num))).contains("1");
     }
 
     public void setRelay(int num, boolean state) {
-        // Safety check
-        if (num < 0 || num >= possibleRelayFiles.length) return;
-
-        for (String relayFile : possibleRelayFiles[num]) {
-            writeFileContent(relayFile, state ? "1" : "0");
-        }
+        writeFileContent(getRelayFile(num), state ? "1" : "0");
 
         if (mMQTTServer.shouldSend()) {
             mMQTTServer.publishRelay(num, state);
         }
+    }
+
+    public static String getRelayFile(int i) {
+        if (0 <= i && i < possibleRelayFiles.length) {
+            for (String str : possibleRelayFiles[i]) {
+                if (new File(str).exists()) {
+                    return str;
+                }
+            }
+            return "";
+        }
+        return "";
     }
 
     public double getTemperature() {
@@ -182,19 +177,7 @@ public class DeviceHelper {
         }
     }
 
-    public static boolean fileExists(String filePath) {
-        try {
-            File file = new File(filePath);
-            return file.exists() && file.isFile();
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
     private static String readFileContent(String filePath) {
-        if (!fileExists(filePath))
-            return null;
-
         StringBuilder content = new StringBuilder();
         try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
             String line;
