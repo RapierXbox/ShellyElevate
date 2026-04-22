@@ -48,9 +48,9 @@ class MqttDiscoveryConfigBuilder {
     private JSONObject buildDevice() throws JSONException {
         JSONObject d = new JSONObject();
         d.put("ids", clientId);
-        d.put("name", device.friendlyName + " (" + clientId + ")");
+        d.put("name", device.displayName + " (" + clientId + ")");
         d.put("mf", "Shelly");
-        d.put("mdl", device.modelName);
+        d.put("mdl", device.sku);
         d.put("sw", BuildConfig.VERSION_NAME);
         return d;
     }

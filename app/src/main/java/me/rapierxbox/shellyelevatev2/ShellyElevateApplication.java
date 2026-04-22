@@ -92,7 +92,7 @@ public class ShellyElevateApplication extends Application {
             mSharedPreferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
 
             var deviceModel = DeviceModel.getReportedDevice();
-            Log.i("ShellyElevateApplication", "Device: " + deviceModel.modelName);
+            Log.i("ShellyElevateApplication", "Device: " + deviceModel.sku);
 
             mDeviceHelper = new DeviceHelper();
             mScreenSaverManager = new ScreenSaverManager(this);

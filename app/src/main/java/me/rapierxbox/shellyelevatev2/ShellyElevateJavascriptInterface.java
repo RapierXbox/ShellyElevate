@@ -33,7 +33,7 @@ public class ShellyElevateJavascriptInterface {
         return mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false);
     }
 
-    public String getDevice() {return DeviceModel.getReportedDevice().modelName;}
+    public String getDevice() {return DeviceModel.getReportedDevice().sku;}
 
     // ========= GETTERS =========
     @JavascriptInterface public boolean getRelay(int num) {
