@@ -36,6 +36,7 @@ import java.io.InputStreamReader;
 import fi.iki.elonen.NanoHTTPD;
 public class HttpServer extends NanoHTTPD {
     final SettingsParser mSettingsParser = new SettingsParser();
+    private static final String TAG = "HttpServer";
 
     public HttpServer() {
         super(8080);
@@ -48,7 +49,7 @@ public class HttpServer extends NanoHTTPD {
                     try {
                         start();
                     } catch (IOException e) {
-                        Log.d("HttpServer", "Failed to start http server: " + e);
+                        Log.d(TAG, "Failed to start http server: " + e);
                     }
                 } else if (!mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true) && isAlive()) {
                     stop();
@@ -111,13 +112,13 @@ public class HttpServer extends NanoHTTPD {
                     json.put("numOfButtons", device.buttons);
                     json.put("numOfInputs", device.inputs);
                 } catch (JSONException e) {
-                    Log.e("MQTT", "Error publishing hello", e);
+                    Log.e(TAG, "Error responding with device details!", e);
                 }
 
                 return newFixedLengthResponse(Response.Status.OK, "application/json", json.toString());
             }
         } catch (JSONException | ResponseException | IOException | InterruptedException e) {
-            Log.e("HttpServer", "Error handling request", e);
+            Log.e(TAG, "Error handling request", e);
         }
 
         return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", jsonResponse.toString());
@@ -282,7 +283,7 @@ public class HttpServer extends NanoHTTPD {
                     //params.putAll(session.getParms()); getParams() is deprecated!
                     params.putAll(session.getParameters());
                 } catch (IOException | ResponseException e) {
-                    Log.e("HttpServer", "Invalid parameters", e);
+                    Log.e(TAG, "Invalid parameters", e);
                 }
                 if (method.equals(Method.GET)) {
                     int num = GetNumParameter(params, 0);
@@ -376,7 +377,7 @@ public class HttpServer extends NanoHTTPD {
                             try {
                                 Runtime.getRuntime().exec("reboot");
                             } catch (IOException e) {
-                                Log.e("HttpServer", "Error rebooting:", e);
+                                Log.e(TAG, "Error rebooting:", e);
                             }
                         }, "reboot-exec").start();
                         jsonResponse.put("success", true);
@@ -410,7 +411,7 @@ public class HttpServer extends NanoHTTPD {
                                         jsonResponse.put("Mem total memory", totalMemory + "MiB");
                                         jsonResponse.put("Mem free memory", availableMemory + "MiB");
                                     } catch (NumberFormatException e) {
-                                        Log.w("HttpServer", "Unparseable Mem line: " + line);
+                                        Log.w(TAG, "Unparseable Mem line: " + line);
                                     }
                                 }
                             }
@@ -424,14 +425,14 @@ public class HttpServer extends NanoHTTPD {
                                         jsonResponse.put("Swap total memory", totalMemory + "MiB");
                                         jsonResponse.put("Swap free memory", availableMemory + "MiB");
                                     } catch (NumberFormatException e) {
-                                        Log.w("HttpServer", "Unparseable Swap line: " + line);
+                                        Log.w(TAG, "Unparseable Swap line: " + line);
                                     }
                                 }
                             }
                         }
                         process.waitFor();
                     } catch (IOException e) {
-                        Log.e("HttpServer", "Error free command request", e);
+                        Log.e(TAG, "Error free command request", e);
                     }
                 }
                 break;
