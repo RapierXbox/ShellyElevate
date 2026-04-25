@@ -63,7 +63,15 @@ class FloatTextPref(
     private val default: Float
 ) : PrefBinding {
     override fun load(prefs: SharedPreferences) {
-        view.setText(prefs.getFloat(key, default).toString())
+        // Guard against ClassCastException: a whole-number float value may have been
+        // stored as Integer (e.g. via the HTTP settings API). Fall back to reading the
+        // raw value via getAll() and coercing it to Float in that case.
+        val value = try {
+            prefs.getFloat(key, default)
+        } catch (_: ClassCastException) {
+            (prefs.all[key] as? Number)?.toFloat() ?: default
+        }
+        view.setText(value.toString())
     }
     override fun save(editor: SharedPreferences.Editor) {
         editor.putFloat(key, view.text.toString().toFloatOrNull() ?: default)

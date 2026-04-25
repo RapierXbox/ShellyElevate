@@ -43,6 +43,8 @@ public class SettingsParser {
 
     public void setSettings(JSONObject settings) throws JSONException {
         SharedPreferences.Editor editor = mSharedPreferences.edit();
+        // Cache existing prefs once to preserve type information for numeric values.
+        Map<String, ?> existingPrefs = mSharedPreferences.getAll();
         for (Iterator<String> it = settings.keys(); it.hasNext(); ) {
             String key = it.next();
             Object value = settings.get(key);
@@ -79,16 +81,23 @@ public class SettingsParser {
             } else if (value instanceof Number) {
                 Number num = (Number) value;
                 double d = num.doubleValue();
-                boolean isWhole = Math.floor(d) == d && !Double.isInfinite(d) && !Double.isNaN(d);
-                if (!isWhole) {
-                    // Fractional -> store as float (SharedPreferences supports float)
+                // If the existing value is a Float, preserve that type to avoid
+                // ClassCastException when other components call getFloat() on the key.
+                Object existingValue = existingPrefs.get(key);
+                if (existingValue instanceof Float) {
                     editor.putFloat(key, (float) d);
                 } else {
-                    // Whole number: choose int if within range, otherwise long
-                    if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
-                        editor.putInt(key, (int) d);
+                    boolean isWhole = Math.floor(d) == d && !Double.isInfinite(d) && !Double.isNaN(d);
+                    if (!isWhole) {
+                        // Fractional -> store as float (SharedPreferences supports float)
+                        editor.putFloat(key, (float) d);
                     } else {
-                        editor.putLong(key, (long) d);
+                        // Whole number: choose int if within range, otherwise long
+                        if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
+                            editor.putInt(key, (int) d);
+                        } else {
+                            editor.putLong(key, (long) d);
+                        }
                     }
                 }
             }
