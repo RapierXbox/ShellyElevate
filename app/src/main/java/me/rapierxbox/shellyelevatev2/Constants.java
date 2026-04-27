@@ -136,4 +136,14 @@ public class Constants {
     public static final String BUTTON_PRESS_TYPE_LONG = "long";
     public static final String BUTTON_PRESS_TYPE_DOUBLE = "double";
     public static final String BUTTON_PRESS_TYPE_TRIPLE = "triple";
+
+    //Dimmer MQTT Topics
+    public static final String MQTT_TOPIC_DIMMER_STATE   = "shellyelevatev2/%s/dimmer";
+    public static final String MQTT_TOPIC_DIMMER_COMMAND = "shellyelevatev2/%s/dimmer_set";
+    public static final String MQTT_TOPIC_DIMMER_BRI     = "shellyelevatev2/%s/dimmer_bri";
+    public static final String MQTT_TOPIC_DIMMER_POWER   = "shellyelevatev2/%s/dimmer_power";
+
+    //Dimmer SP Keys
+    public static final String SP_DIMMER_LAST_BRIGHTNESS = "dimmerLastBrightness";
+    public static final String SP_DIMMER_LAST_STATE      = "dimmerLastState";
 }

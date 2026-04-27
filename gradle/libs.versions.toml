@@ -13,6 +13,7 @@ nanohttpd = "2.3.1"
 okhttp = "5.0.0-alpha.14"
 webkit = "1.11.0"
 tensorflowLite = "2.9.0"
+serialport = "2.1.1"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }

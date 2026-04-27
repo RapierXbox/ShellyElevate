@@ -34,9 +34,10 @@ import java.util.concurrent.TimeUnit;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
+import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 public class MQTTServer {
-
+    private static final String TAG = "MQTTServer";
     private MqttClient mMqttClient;
     private final MemoryPersistence mMemoryPersistence;
     private final ShellyElevateMQTTCallback mShellyElevateMQTTCallback;
@@ -89,7 +90,7 @@ public class MQTTServer {
         BroadcastReceiver settingsChangedBroadcastReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                Log.d("MQTT", "Settings changed - reconnecting with new config");
+                Log.d(TAG, "Settings changed - reconnecting with new config");
                 // Disconnect existing connection before reconnecting with new settings
                 reconnectWithNewSettings();
             }
@@ -107,19 +108,19 @@ public class MQTTServer {
             try {
                 // Disconnect existing client if connected
                 if (mMqttClient != null && mMqttClient.isConnected()) {
-                    Log.d("MQTT", "Disconnecting old MQTT connection before applying new settings");
+                    Log.d(TAG, "Disconnecting old MQTT connection before applying new settings");
                     try {
                         mMqttClient.disconnect();
                         mMqttClient.close();
                     } catch (MqttException e) {
-                        Log.w("MQTT", "Error disconnecting during settings change", e);
+                        Log.w(TAG, "Error disconnecting during settings change", e);
                     }
                     mMqttClient = null;
                 }
                 
                 // Update clientId from settings (mqttDeviceId)
                 setupClientId();
-                Log.d("MQTT", "Updated MQTT client ID to: " + clientId);
+                Log.d(TAG, "Updated MQTT client ID to: " + clientId);
                 
                 // Small delay to ensure clean disconnection
                 Thread.sleep(500);
@@ -138,6 +139,10 @@ public class MQTTServer {
         scheduler.scheduleWithFixedDelay(() -> {
             publishTempAndHum();
             publishThermalZones();
+            if (mDeviceHelper.isDimmerAttached()) {
+                StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10));
+                StesProtocolHandler.getPowerMeter(p -> publishDimmerPower(p.powerW, p.voltageV, p.currentA));
+            }
         }, 0, 30, TimeUnit.SECONDS);
         periodicScheduled = true;
     }
@@ -146,7 +151,7 @@ public class MQTTServer {
         if (!isEnabled()) {
             // If MQTT is disabled in settings, disconnect if connected
             if (mMqttClient != null && mMqttClient.isConnected()) {
-                Log.d("MQTT", "MQTT disabled in settings - disconnecting");
+                Log.d(TAG, "MQTT disabled in settings - disconnecting");
                 disconnect();
             }
             return;
@@ -158,7 +163,7 @@ public class MQTTServer {
                         !mSharedPreferences.getString(SP_MQTT_BROKER, "").isEmpty();
 
         if (!validForConnection) {
-            Log.w("MQTT", "Invalid connection credentials - broker, username, or password missing");
+            Log.w(TAG, "Invalid connection credentials - broker, username, or password missing");
             return;
         }
 
@@ -194,14 +199,14 @@ public class MQTTServer {
             mMqttClient.setCallback(new MqttCallback() {
                 @Override
                 public void connectComplete(boolean reconnect, String serverURI) {
-                    Log.i("MQTT", "Connected to " + serverURI + ", reconnect: " + reconnect);
+                    Log.i(TAG, "Connected to " + serverURI + ", reconnect: " + reconnect);
                     connecting = false;
                     safeOnConnected();
                 }
 
                 @Override
                 public void disconnected(MqttDisconnectResponse disconnectResponse) {
-                    Log.w("MQTT", "Disconnected: " + disconnectResponse.getReasonString());
+                    Log.w(TAG, "Disconnected: " + disconnectResponse.getReasonString());
                     connecting = false;
                     if (!scheduler.isShutdown() && isEnabled() && validForConnection) {
                         scheduler.schedule(MQTTServer.this::connect, 5, TimeUnit.SECONDS);
@@ -210,7 +215,7 @@ public class MQTTServer {
 
                 @Override
                 public void mqttErrorOccurred(MqttException exception) {
-                    Log.e("MQTT", "MQTT error occurred", exception);
+                    Log.e(TAG, "MQTT error occurred", exception);
                 }
 
                 @Override
@@ -233,7 +238,7 @@ public class MQTTServer {
 
             mMqttClient.connect(mMqttConnectionsOptions);
         } catch (MqttException e) {
-            Log.e("MQTT", "Connect failed, scheduling retry in 60s: ", e);
+            Log.e(TAG, "Connect failed, scheduling retry in 60s: ", e);
             connecting = false;
             scheduler.schedule(this::connect, 60, TimeUnit.SECONDS);
         }
@@ -249,7 +254,7 @@ public class MQTTServer {
 
                     publishStatus();
                 } catch (Exception e) {
-                    Log.e("MQTT", "onConnected error", e);
+                    Log.e(TAG, "onConnected error", e);
                 }
             }
         }, 150, TimeUnit.MILLISECONDS);
@@ -291,21 +296,27 @@ public class MQTTServer {
 
                 scheduler.schedule(this::publishThermalZones, 2, TimeUnit.SECONDS);
 
+                if (mDeviceHelper.isDimmerAttached()) {
+                    scheduler.schedule(() ->
+                        StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10)),
+                        200, TimeUnit.MILLISECONDS);
+                }
+
             } catch (Exception e) {
-                Log.e("MQTT", "publishStatus failed", e);
+                Log.e(TAG, "publishStatus failed", e);
             }
         });
     }
 
     public void disconnect() {
-        Log.d("MQTT", "Disconnecting");
+        Log.d(TAG, "Disconnecting");
         if (mMqttClient != null && mMqttClient.isConnected()) {
             try {
                 deleteConfig();
                 mMqttClient.publish(parseTopic(MQTT_TOPIC_STATUS), "offline".getBytes(), 1, true);
                 mMqttClient.disconnect();
             } catch (MqttException e) {
-                Log.e("MQTT", "Error disconnecting MQTT client", e);
+                Log.e(TAG, "Error disconnecting MQTT client", e);
             }
         }
     }
@@ -333,7 +344,7 @@ public class MQTTServer {
                     scheduler.schedule(this::flushPendingPublishes, COALESCE_WINDOW_MS, TimeUnit.MILLISECONDS);
                 } catch (java.util.concurrent.RejectedExecutionException e) {
                     flushScheduled = false;
-                    Log.w("MQTT", "Coalesce flush rejected; scheduler shutting down");
+                    Log.w(TAG, "Coalesce flush rejected; scheduler shutting down");
                 }
             }
         }
@@ -358,7 +369,7 @@ public class MQTTServer {
 
     private void publishInternalSync(String topic, String payload, int qos, boolean retained) {
         if (!shouldSend()) {
-            Log.w("MQTT", "publishInternal skipped — client not connected: " + topic);
+            Log.w(TAG, "publishInternal skipped — client not connected: " + topic);
             return;
         }
         try {
@@ -367,7 +378,7 @@ public class MQTTServer {
             message.setRetained(retained);
             mMqttClient.publish(topic, message);
         } catch (MqttException e) {
-            Log.e("MQTT", "Failed to publish to " + topic, e);
+            Log.e(TAG, "Failed to publish to " + topic, e);
         }
     }
 
@@ -414,6 +425,16 @@ public class MQTTServer {
         publishInternalCoalesced(parseTopic(MQTT_TOPIC_RELAY_STATE) + mqttSuffix, state ? "ON" : "OFF", 1, false);
     }
 
+    public void publishDimmer(boolean on, int brightness0to100) {
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_STATE), on ? "ON" : "OFF", 1, false);
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_BRI), String.valueOf(brightness0to100), 1, false);
+    }
+
+    public void publishDimmerPower(float watts, int volts, float amps) {
+        String json = "{\"power\":" + watts + ",\"voltage\":" + volts + ",\"current\":" + amps + "}";
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_POWER), json, 1, false);
+    }
+
     public void publishSwitch(int num, boolean state) {
         var mqttSuffix = (num >0 ? ("_" + num): "");
         publishInternalCoalesced(parseTopic(MQTT_TOPIC_BUTTON_STATE) + mqttSuffix, state?"PRESS":"RELEASE", 1, false);
@@ -436,7 +457,7 @@ public class MQTTServer {
             // Add event_type for Home Assistant MQTT event standard
             json.put("event_type", pressType);
         } catch (Exception e) {
-            Log.e("MQTT", "Error creating button JSON", e);
+            Log.e(TAG, "Error creating button JSON", e);
         }
 
         String topic;
@@ -485,14 +506,18 @@ public class MQTTServer {
 
             publishInternal(parseTopic(MQTT_TOPIC_HELLO), json.toString(), 1, false);
         } catch (JSONException e) {
-            Log.e("MQTT", "Error publishing hello", e);
+            Log.e(TAG, "Error publishing hello", e);
         }
     }
 
     private void publishConfig() throws JSONException, MqttException {
         JSONObject payload = new MqttDiscoveryConfigBuilder(
                 clientId, DeviceModel.getReportedDevice(), mSharedPreferences).build();
-        mMqttClient.publish(parseTopic(MQTT_TOPIC_CONFIG_DEVICE), payload.toString().getBytes(), 1, true);
+        String topic = parseTopic(MQTT_TOPIC_CONFIG_DEVICE);
+        byte[] bytes = payload.toString().getBytes();
+        Log.i(TAG, "publishConfig: topic=" + topic + " bytes=" + bytes.length
+                + " components=" + payload.optJSONObject("cmps").length());
+        mMqttClient.publish(topic, bytes, 1, true);
     }
 
     private void publishThermalZones() {

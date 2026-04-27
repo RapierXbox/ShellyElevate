@@ -96,6 +96,21 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
                     mVoiceAssistantManager.trigger();
                 }
                 break;
+            case MQTT_TOPIC_DIMMER_COMMAND:
+                if (mDeviceHelper.isDimmerAttached()) {
+                    String dimmerPayload = new String(message.getPayload(), StandardCharsets.UTF_8).trim();
+                    if ("ON".equalsIgnoreCase(dimmerPayload)) {
+                        mDeviceHelper.setDimmerOn(true);
+                    } else if ("OFF".equalsIgnoreCase(dimmerPayload)) {
+                        mDeviceHelper.setDimmerOn(false);
+                    } else {
+                        try {
+                            int bri = Integer.parseInt(dimmerPayload);
+                            mDeviceHelper.setDimmerBrightness(Math.max(0, Math.min(100, bri)), null);
+                        } catch (NumberFormatException ignored) {}
+                    }
+                }
+                break;
         }
     }
 

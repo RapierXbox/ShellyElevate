@@ -386,6 +386,50 @@ public class HttpServer extends NanoHTTPD {
                     }
                 }
                 break;
+            case "dimmer":
+                if (!mDeviceHelper.isDimmerAttached()) {
+                    return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"success\":false,\"error\":\"Dimmer not attached\"}");
+                }
+                if (method.equals(Method.GET)) {
+                    jsonResponse.put("success", true);
+                    me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler.DimmerStatus ds = mDeviceHelper.getDimmerStatus();
+                    me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler.DimmerPower dp = mDeviceHelper.getDimmerPower();
+                    if (ds != null) {
+                        jsonResponse.put("on", ds.on);
+                        jsonResponse.put("brightness", ds.actualBrightness / 10);
+                        jsonResponse.put("not_dimmable", ds.notDimmable);
+                        jsonResponse.put("not_calibrated", ds.notCalibrated);
+                        jsonResponse.put("overheat", ds.overheat);
+                        jsonResponse.put("overcurrent", ds.overcurrent);
+                    }
+                    if (dp != null) {
+                        jsonResponse.put("power", dp.powerW);
+                        jsonResponse.put("voltage", dp.voltageV);
+                        jsonResponse.put("current", dp.currentA);
+                    }
+                } else if (method.equals(Method.POST)) {
+                    Map<String, String> dimmerFiles = new HashMap<>();
+                    try {
+                        session.parseBody(dimmerFiles);
+                    } catch (ResponseException e) {
+                        Log.e(TAG, "Error parsing request: ", e);
+                    }
+
+                    String postData = dimmerFiles.get("postData");
+                    if (postData != null && !postData.isEmpty()) {
+                        JSONObject body = new JSONObject(postData);
+                        if (body.has("brightness")) {
+                            mDeviceHelper.setDimmerBrightness(body.getInt("brightness"), null);
+                        } else if (body.has("on")) {
+                            mDeviceHelper.setDimmerOn(body.getBoolean("on"));
+                        }
+                        jsonResponse.put("success", true);
+                    }
+                } else {
+                    jsonResponse.put("success", false);
+                    jsonResponse.put("error", "Invalid request method");
+                }
+                break;
             case "free":
                 jsonResponse.put("success", false);
                 if (method.equals(Method.GET)) {

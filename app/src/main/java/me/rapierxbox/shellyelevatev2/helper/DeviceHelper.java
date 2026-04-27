@@ -18,6 +18,7 @@ import java.util.Objects;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
+import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 public class DeviceHelper {
 
@@ -139,7 +140,7 @@ public class DeviceHelper {
         try
         {
             var content = readFileContent(tempAndHumFile);
-            if (content == null || content.isEmpty()) return -999;
+            if (content.isEmpty()) return -999;
 
             String[] tempSplit = content.split(":");
             double temp = (Double.parseDouble(tempSplit[1]) * 175.0 / 65535.0) - 45.0;
@@ -167,7 +168,7 @@ public class DeviceHelper {
     public double getHumidity() {
         try {
             var content = readFileContent(tempAndHumFile);
-            if (content == null || content.isEmpty()) return -999;
+            if (content.isEmpty()) return -999;
 
             String[] humiditySplit = content.split(":");
             double humidity = Double.parseDouble(humiditySplit[0]) * 100.0 / 65535.0;
@@ -192,6 +193,42 @@ public class DeviceHelper {
             Log.e(TAG, "Error when reading file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
         }
         return content.toString();
+    }
+
+    public boolean isDimmerAttached() {
+        return StesProtocolHandler.isOperational();
+    }
+
+    public void setDimmerBrightness(int percent0to100, Runnable onComplete) {
+        int stes = Math.round(percent0to100 * 10.0f);
+        StesProtocolHandler.setDimmer(stes, new StesProtocolHandler.OnDimmerListener() {
+            @Override public void onResult(StesProtocolHandler.DimmerStatus s) {
+                mSharedPreferences.edit()
+                    .putInt(SP_DIMMER_LAST_BRIGHTNESS, percent0to100)
+                    .putBoolean(SP_DIMMER_LAST_STATE, percent0to100 > 0)
+                    .apply();
+                if (mMQTTServer.shouldSend()) {
+                    mMQTTServer.publishDimmer(percent0to100 > 0, percent0to100);
+                }
+                if (onComplete != null) onComplete.run();
+            }
+            @Override public void onError(String e) {
+                if (onComplete != null) onComplete.run();
+            }
+        });
+    }
+
+    public void setDimmerOn(boolean on) {
+        int lastBri = mSharedPreferences.getInt(SP_DIMMER_LAST_BRIGHTNESS, 100);
+        setDimmerBrightness(on ? lastBri : 0, null);
+    }
+
+    public StesProtocolHandler.DimmerStatus getDimmerStatus() {
+        return StesProtocolHandler.lastStatus;
+    }
+
+    public StesProtocolHandler.DimmerPower getDimmerPower() {
+        return StesProtocolHandler.lastPower;
     }
 
     private static String sanitizeString(String input) {

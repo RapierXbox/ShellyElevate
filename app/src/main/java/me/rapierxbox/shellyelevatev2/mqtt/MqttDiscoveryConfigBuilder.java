@@ -3,6 +3,7 @@ package me.rapierxbox.shellyelevatev2.mqtt;
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 
 import android.content.SharedPreferences;
+import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -11,8 +12,10 @@ import org.json.JSONObject;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
+import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 class MqttDiscoveryConfigBuilder {
+    private static final String TAG = "MqttDiscoveryConfigBuilder";
     private final String clientId;
     private final DeviceModel device;
     private final SharedPreferences prefs;
@@ -32,12 +35,13 @@ class MqttDiscoveryConfigBuilder {
         addSensorComponents(components);
         addButtonComponents(components);
         addRelayAndSwitchComponents(components);
+        addDimmerComponents(components);
         addControlButtonComponents(components);
         addMiscComponents(components);
         addThermalComponents(components);
 
         payload.put("cmps", components);
-        payload.put("state_topic", MQTT_TOPIC_STATUS);
+        payload.put("state_topic", parseTopic(MQTT_TOPIC_STATUS));
         return payload;
     }
 
@@ -153,6 +157,21 @@ class MqttDiscoveryConfigBuilder {
         components.put(clientId + "_sleeping", sleeping);
     }
 
+    private void addDimmerComponents(JSONObject components) throws JSONException {
+        if (!StesProtocolHandler.isOperational()) return;
+        JSONObject dimmer = new JSONObject();
+        dimmer.put("p", "light");
+        dimmer.put("name", "Dimmer");
+        dimmer.put("state_topic",              parseTopic(MQTT_TOPIC_DIMMER_STATE));
+        dimmer.put("command_topic",            parseTopic(MQTT_TOPIC_DIMMER_COMMAND));
+        dimmer.put("brightness_state_topic",   parseTopic(MQTT_TOPIC_DIMMER_BRI));
+        dimmer.put("brightness_command_topic", parseTopic(MQTT_TOPIC_DIMMER_COMMAND));
+        dimmer.put("brightness_scale",         100);
+        dimmer.put("on_command_type",          "brightness");
+        dimmer.put("unique_id",                clientId + "_dimmer");
+        dimmer.put("object_id",                "shelly_walldisplay_" + clientId + "_dimmer");
+        components.put(clientId + "_dimmer",   dimmer);
+    }
     private void addThermalComponents(JSONObject components) throws JSONException {
         if (!prefs.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)) return;
         for (ThermalZoneReader.Zone zone : ThermalZoneReader.discoverZones()) {

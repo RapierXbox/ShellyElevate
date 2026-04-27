@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit;
 
 import fi.iki.elonen.NanoHTTPD;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
+import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager;
@@ -95,6 +96,7 @@ public class ShellyElevateApplication extends Application {
             Log.i("ShellyElevateApplication", "Device: " + deviceModel.sku);
 
             mDeviceHelper = new DeviceHelper();
+            StesProtocolHandler.init();
             mScreenSaverManager = new ScreenSaverManager(this);
             mScreenManager = new ScreenManager(this);
 
@@ -224,6 +226,7 @@ public class ShellyElevateApplication extends Application {
         mScreenManager.onDestroy();
 
         mMQTTServer.onDestroy();
+        StesProtocolHandler.close();
         if (mVoiceAssistantManager != null) mVoiceAssistantManager.onDestroy();
         if (mBluetoothProxyManager != null) mBluetoothProxyManager.onDestroy();
         if (mMediaHelper != null) mMediaHelper.onDestroy();

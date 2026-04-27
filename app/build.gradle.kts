@@ -81,6 +81,7 @@ dependencies {
     implementation(libs.org.eclipse.paho.mqttv5.client)
     implementation(libs.webkit)
     implementation(libs.tensorflow.lite)
+    implementation(libs.serialport)
 
     implementation(platform(libs.okhttpbom))
     implementation(libs.okhttp)
