@@ -99,6 +99,8 @@
     <string name="voice_wake_model_imported">Model \'%1$s\' imported</string>
     <string name="voice_wake_model_import_failed">Import failed... select a valid .tflite file</string>
     <string name="voice_wake_model_none_selected">None</string>
+    <string name="voice_wake_vad_download_failed">Could not download the VAD model from GitHub. Wake word detection needs it to filter out false triggers. Check your connection and try enabling wake word again.</string>
+    <string name="voice_wake_vad_download_failed_title">VAD model download failed</string>
     <string name="voice_wake_model_choose">Choose</string>
     <string name="voice_wake_model_custom_title">Custom model</string>
     <string name="voice_wake_model_custom_message">Enter the full path to the .tflite file on this device. A .json with the same name in the same folder will also be copied.</string>

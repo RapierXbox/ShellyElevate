@@ -29,6 +29,7 @@ okhttpbom = { group = "com.squareup.okhttp3", name = "okhttp-bom", version.ref =
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp" }
 webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
+serialport = { group = "io.github.xmaihh", name = "serialport", version.ref = "serialport" }
 
 
 [plugins]

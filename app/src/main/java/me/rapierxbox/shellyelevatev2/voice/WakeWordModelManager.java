@@ -38,13 +38,41 @@ public class WakeWordModelManager {
     // Raw downloads don't count against the API rate limit and don't need auth
     private static final String RAW_URL   = "https://raw.githubusercontent.com/%s/HEAD/%s";
 
+    // Official esphome VAD model, required to gate wake detections on voice activity.
+    // Lives next to the wake-word model in /data/data/<pkg>/files/wakewords/vad.{tflite,json}.
+    private static final String VAD_TFLITE_URL = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.tflite";
+    private static final String VAD_JSON_URL   = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.json";
+
     private WakeWordModelManager() {}
 
     public interface ProgressCallback {
         void onProgress(int percent);
     }
 
-    // ─────────────── Local models ───────────────
+    public enum VadResult { ALREADY_PRESENT, DOWNLOADED, FAILED }
+
+    public static boolean isVadPresent(File wakewordsDir) {
+        return new File(wakewordsDir, "vad.tflite").exists()
+            && new File(wakewordsDir, "vad.json").exists();
+    }
+
+    public static VadResult ensureVadDownloaded(OkHttpClient client, File wakewordsDir) {
+        File tflite = new File(wakewordsDir, "vad.tflite");
+        File json   = new File(wakewordsDir, "vad.json");
+        if (tflite.exists() && json.exists()) return VadResult.ALREADY_PRESENT;
+
+        try {
+            if (!tflite.exists()) downloadFile(client, VAD_TFLITE_URL, tflite, p -> {});
+            if (!json.exists())   downloadFile(client, VAD_JSON_URL,   json,   p -> {});
+            return VadResult.DOWNLOADED;
+        } catch (Exception e) {
+            Log.w(TAG, "VAD download failed: " + e.getMessage());
+            if (tflite.exists() && !json.exists()) tflite.delete();
+            if (json.exists() && !tflite.exists()) json.delete();
+            return VadResult.FAILED;
+        }
+    }
+
 
     public static List<WakeWordModel.Installed> getInstalledModels(File wakewordsDir) {
         if (!wakewordsDir.exists()) return Collections.emptyList();
@@ -53,13 +81,12 @@ public class WakeWordModelManager {
         List<WakeWordModel.Installed> result = new ArrayList<>();
         for (File f : files) {
             String stem = f.getName().substring(0, f.getName().length() - 7);
+            if ("vad".equals(stem)) continue;
             result.add(new WakeWordModel.Installed(stem));
         }
         result.sort(Comparator.comparing(WakeWordModel.Installed::getName));
         return result;
     }
-
-    // ─────────────── GitHub fetch ───────────────
 
     public static List<WakeWordModel.Downloadable> fetchOfficialModels(OkHttpClient client) throws IOException {
         List<RawModel> raw = fetchModelsFromRepo(client, OFFICIAL_REPO);
@@ -119,6 +146,9 @@ public class WakeWordModelManager {
             String filename = lastSlash >= 0 ? tflitePath.substring(lastSlash + 1) : tflitePath;
             String stem    = filename.substring(0, filename.length() - 7); // strip .tflite
 
+            // vad is a helper model downloaded automatically, don't expose as a wake pick
+            if ("vad".equals(stem)) continue;
+
             String tfliteUrl = String.format(RAW_URL, repo, tflitePath);
 
             String jsonPath = folder.isEmpty() ? stem + ".json" : folder + "/" + stem + ".json";
@@ -167,8 +197,6 @@ public class WakeWordModelManager {
         }
     }
 
-    // ─────────────── Download ───────────────
-
     public static void downloadFile(OkHttpClient client, String url, File destFile, ProgressCallback onProgress) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
@@ -197,8 +225,6 @@ public class WakeWordModelManager {
         }
         onProgress.onProgress(100);
     }
-
-    // ─────────────── Custom import ───────────────
 
     public static String importCustomModel(Context context, Uri tfliteUri, File wakewordsDir) throws IOException {
         String stem = resolveStem(context, tfliteUri);

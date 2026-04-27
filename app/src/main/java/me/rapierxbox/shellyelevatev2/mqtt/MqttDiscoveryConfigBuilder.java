@@ -39,6 +39,7 @@ class MqttDiscoveryConfigBuilder {
         addControlButtonComponents(components);
         addMiscComponents(components);
         addThermalComponents(components);
+        addVoiceComponents(components);
 
         payload.put("cmps", components);
         payload.put("state_topic", parseTopic(MQTT_TOPIC_STATUS));
@@ -172,6 +173,53 @@ class MqttDiscoveryConfigBuilder {
         dimmer.put("object_id",                "shelly_walldisplay_" + clientId + "_dimmer");
         components.put(clientId + "_dimmer",   dimmer);
     }
+    // voice assistant entities... only exposed when assist is enabled
+    private void addVoiceComponents(JSONObject components) throws JSONException {
+        boolean enabled = prefs.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false);
+        Log.i(TAG, "addVoiceComponents: SP_VOICE_ASSISTANT_ENABLED=" + enabled);
+        if (!enabled) return;
+
+        String statusId = clientId + "_voice_status";
+        JSONObject status = new JSONObject();
+        status.put("p", "sensor");
+        status.put("name", "Voice Assistant");
+        status.put("state_topic", parseTopic(MQTT_TOPIC_VOICE_STATUS));
+        status.put("device_class", "enum");
+        JSONArray options = new JSONArray()
+                .put(VOICE_STATUS_READY)
+                .put(VOICE_STATUS_MUTED)
+                .put(VOICE_STATUS_LISTENING)
+                .put(VOICE_STATUS_ANSWERING);
+        status.put("options", options);
+        status.put("icon", "mdi:microphone-message");
+        status.put("unique_id", statusId);
+        status.put("object_id", "shelly_walldisplay_" + statusId);
+        components.put(statusId, status);
+
+        String muteId = clientId + "_voice_mute";
+        JSONObject mute = new JSONObject();
+        mute.put("p", "switch");
+        mute.put("name", "Voice Assistant Mute");
+        mute.put("state_topic",   parseTopic(MQTT_TOPIC_VOICE_MUTE_STATE));
+        mute.put("command_topic", parseTopic(MQTT_TOPIC_VOICE_MUTE_COMMAND));
+        mute.put("payload_on",  "ON");
+        mute.put("payload_off", "OFF");
+        mute.put("icon", "mdi:microphone-off");
+        mute.put("unique_id", muteId);
+        mute.put("object_id", "shelly_walldisplay_" + muteId);
+        components.put(muteId, mute);
+
+        String triggerId = clientId + "_voice_trigger";
+        JSONObject trigger = new JSONObject();
+        trigger.put("p", "button");
+        trigger.put("name", "Voice Assistant Listen");
+        trigger.put("command_topic", parseTopic(MQTT_TOPIC_VOICE_TRIGGER));
+        trigger.put("icon", "mdi:microphone");
+        trigger.put("unique_id", triggerId);
+        trigger.put("object_id", "shelly_walldisplay_" + triggerId);
+        components.put(triggerId, trigger);
+    }
+
     private void addThermalComponents(JSONObject components) throws JSONException {
         if (!prefs.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)) return;
         for (ThermalZoneReader.Zone zone : ThermalZoneReader.discoverZones()) {

@@ -97,6 +97,13 @@ public class MQTTServer {
         };
         LocalBroadcastManager.getInstance(mApplicationContext)
                 .registerReceiver(settingsChangedBroadcastReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
+
+        BroadcastReceiver voiceStateReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) { publishVoiceState(); }
+        };
+        LocalBroadcastManager.getInstance(mApplicationContext)
+                .registerReceiver(voiceStateReceiver, new IntentFilter(INTENT_VOICE_STATE_CHANGED));
     }
 
     /**
@@ -296,6 +303,8 @@ public class MQTTServer {
 
                 scheduler.schedule(this::publishThermalZones, 2, TimeUnit.SECONDS);
 
+                scheduler.schedule(this::publishVoiceState, 250, TimeUnit.MILLISECONDS);
+
                 if (mDeviceHelper.isDimmerAttached()) {
                     scheduler.schedule(() ->
                         StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10)),
@@ -478,6 +487,15 @@ public class MQTTServer {
     @Deprecated
     public void publishButton(int number) {
         publishButton(number, BUTTON_PRESS_TYPE_SHORT);
+    }
+
+    public void publishVoiceState() {
+        if (mVoiceAssistantManager == null) return;
+        if (!mVoiceAssistantManager.isEnabled() && !mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)) return;
+        publishInternal(parseTopic(MQTT_TOPIC_VOICE_STATUS),
+                mVoiceAssistantManager.getPublishedStatus(), 1, true);
+        publishInternal(parseTopic(MQTT_TOPIC_VOICE_MUTE_STATE),
+                mVoiceAssistantManager.isMuted() ? "ON" : "OFF", 1, true);
     }
 
     public void publishSwipeEvent() {

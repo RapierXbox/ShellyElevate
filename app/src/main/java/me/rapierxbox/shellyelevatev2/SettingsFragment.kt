@@ -391,6 +391,34 @@ class SettingsFragment : Fragment() {
         binding.voiceWakeExperimentalModels.setOnCheckedChangeListener { _, _ ->
             fetchAndMergeRemoteModels(wakewordsDir)
         }
+
+        // vad model is required by the detector to supress false triggers... fetch it instantly
+        binding.voiceWakeEnabled.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !WakeWordModelManager.isVadPresent(wakewordsDir)) {
+                ensureVadDownloaded(wakewordsDir)
+            }
+        }
+        if (binding.voiceWakeEnabled.isChecked && !WakeWordModelManager.isVadPresent(wakewordsDir)) {
+            ensureVadDownloaded(wakewordsDir)
+        }
+    }
+
+    private fun ensureVadDownloaded(wakewordsDir: File) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                WakeWordModelManager.ensureVadDownloaded(okHttpClient, wakewordsDir)
+            }
+            if (result == WakeWordModelManager.VadResult.FAILED && isAdded) {
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.voice_wake_vad_download_failed_title)
+                    .setMessage(R.string.voice_wake_vad_download_failed)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            } else if (result == WakeWordModelManager.VadResult.DOWNLOADED) {
+                // force detector to reload so vad is picked up alongside the wake model
+                mVoiceAssistantManager?.invalidateLoadedModel()
+            }
+        }
     }
 
     private fun rebuildModelList(

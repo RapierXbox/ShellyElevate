@@ -96,6 +96,12 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
                     mVoiceAssistantManager.trigger();
                 }
                 break;
+            case MQTT_TOPIC_VOICE_MUTE_COMMAND:
+                if (mVoiceAssistantManager != null) {
+                    String mutePayload = new String(message.getPayload(), StandardCharsets.UTF_8).trim();
+                    mVoiceAssistantManager.setMuted("ON".equalsIgnoreCase(mutePayload));
+                }
+                break;
             case MQTT_TOPIC_DIMMER_COMMAND:
                 if (mDeviceHelper.isDimmerAttached()) {
                     String dimmerPayload = new String(message.getPayload(), StandardCharsets.UTF_8).trim();

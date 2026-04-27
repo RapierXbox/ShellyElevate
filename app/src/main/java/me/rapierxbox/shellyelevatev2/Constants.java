@@ -56,6 +56,7 @@ public class Constants {
     public static final String SP_VOICE_SCORE_BAR_ENABLED   = "voiceScoreBarEnabled";
     public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
     public static final String SP_VOICE_WAKE_EXPERIMENTAL_MODELS = "voiceWakeExperimentalModels";
+    public static final String SP_VOICE_ASSISTANT_MUTED = "voiceAssistantMuted";
 
     //MQTT SP Keys
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
@@ -128,8 +129,16 @@ public class Constants {
     public static final String INTENT_VOICE_THRESHOLD_KEY = "wakeThreshold";
 
     //Voice MQTT Topics
-    public static final String MQTT_TOPIC_VOICE_TRIGGER = "shellyelevatev2/%s/voice_trigger";
-    public static final String MQTT_TOPIC_VOICE_STATUS  = "shellyelevatev2/%s/voice_status";
+    public static final String MQTT_TOPIC_VOICE_STATUS       = "shellyelevatev2/%s/voice/status";
+    public static final String MQTT_TOPIC_VOICE_TRIGGER      = "shellyelevatev2/%s/voice/trigger";
+    public static final String MQTT_TOPIC_VOICE_MUTE_STATE   = "shellyelevatev2/%s/voice/mute";
+    public static final String MQTT_TOPIC_VOICE_MUTE_COMMAND = "shellyelevatev2/%s/voice/mute_set";
+
+    //Voice status sensor values
+    public static final String VOICE_STATUS_READY     = "ready";
+    public static final String VOICE_STATUS_MUTED     = "muted";
+    public static final String VOICE_STATUS_LISTENING = "listening";
+    public static final String VOICE_STATUS_ANSWERING = "answering";
 
     //Button Press Types
     public static final String BUTTON_PRESS_TYPE_SHORT = "short";
