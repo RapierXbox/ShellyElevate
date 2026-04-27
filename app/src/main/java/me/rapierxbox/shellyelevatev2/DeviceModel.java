@@ -19,15 +19,22 @@ public enum DeviceModel {
 
     // V2
     BLAKE   (new Config("Blake",    "Shelly Wall Display XL",  "SAWD-3A1XE10EU2")
-            .proximity().powerButton().offsets(-1.2, 7.0).io(4, 1, 2).invertRelay()),
+            .proximity().powerButton().offsets(-1.2, 7.0).io(4, 1, 2).invertRelay()
+            .initRelay("cloud.shelly.blake.relay")
+            .inputEvents("/dev/input/event3", "/dev/input/event5", "/dev/input/event0", "/dev/input/event4")),
     MAVERICK(new Config("Maverick", "Shelly Wall Display U1",  "SAWD-4A1XE10US0")
-            .proximity().powerButton().io(0, 1, 1)), // TODO: not yet available
+            .proximity().powerButton().io(0, 1, 1)
+            .initRelay("cloud.shelly.maverick.relay1", "cloud.shelly.maverick.relay2")),
     JENNA   (new Config("Jenna",    "Shelly Wall Display X2i", "SAWD-5A1XX10EU0")
-            .proximity().powerButton().io(0, 1, 2)), // TODO: not yet available
+            .proximity().powerButton().io(0, 1, 2)
+            .initRelay("cloud.shelly.jenna.relay1", "cloud.shelly.jenna.relay2")
+            .inputEvents("/dev/input/event5", "/dev/input/event7")),
     CALLY   (new Config("Cally",    "Shelly Wall Display XLi", "SAWD-6A1XX10EU0")
-            .proximity().powerButton().io(4, 1, 2)), // TODO: not yet available
+            .proximity().powerButton().io(4, 1, 2)
+            .initRelay("cloud.shelly.cally.relay1", "cloud.shelly.cally.relay2")
+            .inputEvents("/dev/input/event3", "/dev/input/event5")),
     DAYNA   (new Config("Dayna",    "Shelly Wall Display D1",  "SAWD-6A0XX0EU0")
-            .proximity().powerButton().io(0, 0, 0)), // TODO: not yet available
+            .proximity().powerButton().io(0, 0, 0)),
     ;
 
     public final String  displayName;
@@ -40,6 +47,8 @@ public enum DeviceModel {
     public final int     inputs;
     public final int     relays;
     public final boolean invertRelay;
+    public final String[] initRelayScripts;
+    public final String[] inputEventPaths;
 
     private final String codename;
 
@@ -55,6 +64,12 @@ public enum DeviceModel {
         this.inputs             = c.inputs;
         this.relays             = c.relays;
         this.invertRelay        = c.invertRelay;
+        this.initRelayScripts   = c.initRelayScripts;
+        this.inputEventPaths    = c.inputEventPaths;
+    }
+
+    public boolean usesInitScriptRelay() {
+        return initRelayScripts != null && initRelayScripts.length > 0;
     }
 
     public static DeviceModel getReportedDevice() {
@@ -81,9 +96,14 @@ public enum DeviceModel {
         return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
     }
 
-    /** Returns the /dev/input/event* path for GPIO-based proximity, or null if via SensorManager. */
+    public String[] getInputEventPaths() {
+        return inputEventPaths != null ? inputEventPaths : new String[0];
+    }
+
+    /** @deprecated use getInputEventPaths() */
+    @Deprecated
     public String getGpioProximityEventPath() {
-        return this == JENNA ? "/dev/input/event4" : null;
+        return inputEventPaths != null && inputEventPaths.length > 0 ? inputEventPaths[0] : null;
     }
 
     @NonNull @Override
@@ -96,6 +116,8 @@ public enum DeviceModel {
         boolean hasProximitySensor, hasPowerButton, invertRelay;
         double  temperatureOffset, humidityOffset;
         int     buttons, inputs, relays;
+        String[] initRelayScripts;
+        String[] inputEventPaths;
 
         Config(String codename, String displayName, String sku) {
             this.codename    = codename;
@@ -108,5 +130,7 @@ public enum DeviceModel {
         Config invertRelay()                           { invertRelay = true;        return this; }
         Config offsets(double temp, double humidity)   { temperatureOffset = temp; humidityOffset = humidity; return this; }
         Config io(int buttons, int inputs, int relays) { this.buttons = buttons; this.inputs = inputs; this.relays = relays; return this; }
+        Config initRelay(String... scripts)            { this.initRelayScripts = scripts; return this; }
+        Config inputEvents(String... paths)            { this.inputEventPaths = paths;    return this; }
     }
 }

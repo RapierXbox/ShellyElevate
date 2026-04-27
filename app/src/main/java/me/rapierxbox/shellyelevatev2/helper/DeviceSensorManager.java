@@ -49,9 +49,9 @@ public class DeviceSensorManager implements SensorEventListener {
     private volatile boolean usingGpioKeysProximity = false;
 
     private float maxProximitySensorValue = 1.0f;
-    // Stores the SensorManager proximity max range; -1 means no hardware sensor was registered.
     private float fallbackProximityMaxRange = -1f;
-    private final String proximityEventDevice;
+    private final String[] inputEventPaths;
+    private InputMonitor mInputMonitor;
     private ExecutorService proximityFallbackExecutor;
     private volatile Process proximityFallbackProcess;
 
@@ -70,11 +70,8 @@ public class DeviceSensorManager implements SensorEventListener {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
 
-        // Resolve the gpio_keys event device path for this hardware model (null = use SensorManager)
-        proximityEventDevice = DeviceModel.getReportedDevice().getGpioProximityEventPath();
+        inputEventPaths = DeviceModel.getReportedDevice().getInputEventPaths();
 
-        // Always register the SensorManager proximity sensor when present so it can serve as a
-        // live fallback if the gpio_keys reader fails or terminates unexpectedly.
         Sensor proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         if (proximitySensor != null) {
             sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
@@ -82,13 +79,17 @@ public class DeviceSensorManager implements SensorEventListener {
             Log.i(TAG, "SensorManager proximity sensor registered (max range " + fallbackProximityMaxRange + ")");
         }
 
-        // Prefer gpio_keys proximity when the device supports it; onSensorChanged will ignore
-        // SensorManager proximity events while usingGpioKeysProximity is true.
-        usingGpioKeysProximity = startProximityKeyFallback();
+        // prefer native jni monitor when available... then getevent process... then SensorManager
+        if (inputEventPaths.length > 0 && InputMonitor.isAvailable()) {
+            usingGpioKeysProximity = startNativeInputMonitor();
+        }
+        if (!usingGpioKeysProximity && inputEventPaths.length > 0) {
+            usingGpioKeysProximity = startProximityKeyFallback();
+        }
         if (usingGpioKeysProximity) {
             maxProximitySensorValue = 1f;
-            Log.i(TAG, "Using gpio_keys proximity from " + proximityEventDevice);
             proximitySensorAvailable = true;
+            Log.i(TAG, "GPIO input active via " + (mInputMonitor != null ? "JNI" : "getevent"));
         } else {
             applyProximityFallback();
         }
@@ -151,18 +152,43 @@ public class DeviceSensorManager implements SensorEventListener {
         }
     }
 
-    private boolean startProximityKeyFallback() {
-        if (proximityEventDevice == null) {
+    private boolean startNativeInputMonitor() {
+        java.util.List<String> paths = new java.util.ArrayList<>();
+        for (String p : inputEventPaths) {
+            if (new File(p).exists()) paths.add(p);
+        }
+        if (paths.isEmpty()) return false;
+        try {
+            mInputMonitor = new InputMonitor();
+            mInputMonitor.start(this::handleNativeKeyEvent, paths);
+            return true;
+        } catch (Throwable t) {
+            Log.w(TAG, "Native input monitor failed: " + t.getMessage());
+            mInputMonitor = null;
             return false;
         }
-        File eventDevice = new File(proximityEventDevice);
-        if (!eventDevice.exists() || !eventDevice.canRead()) {
-            return false;
-        }
+    }
 
+    private void handleNativeKeyEvent(int keyCode, int action, int repeatCount) {
+        // KEY_F5 = 63 (near), KEY_F6 = 64 (far)
+        if (action == 1) { // DOWN
+            if (keyCode == 63) publishProximity(0f);
+            else if (keyCode == 64) publishProximity(1f);
+        }
+    }
+
+    private boolean startProximityKeyFallback() {
+        if (inputEventPaths.length == 0) return false;
+        // use the first existing path for the getevent fallback
+        String firstPath = null;
+        for (String p : inputEventPaths) {
+            if (new File(p).exists()) { firstPath = p; break; }
+        }
+        if (firstPath == null) return false;
+        final String eventDevice = firstPath;
         try {
             proximityFallbackExecutor = Executors.newSingleThreadExecutor();
-            proximityFallbackExecutor.execute(this::runProximityKeyReader);
+            proximityFallbackExecutor.execute(() -> runProximityKeyReader(eventDevice));
             return true;
         } catch (Throwable t) {
             Log.w(TAG, "Unable to start proximity key reader", t);
@@ -170,10 +196,10 @@ public class DeviceSensorManager implements SensorEventListener {
         }
     }
 
-    private void runProximityKeyReader() {
+    private void runProximityKeyReader(String eventDevice) {
         Process process = null;
         try {
-            process = new ProcessBuilder("getevent", "-l", proximityEventDevice)
+            process = new ProcessBuilder("getevent", "-l", eventDevice)
                     .redirectErrorStream(true)
                     .start();
             proximityFallbackProcess = process;
@@ -245,6 +271,10 @@ public class DeviceSensorManager implements SensorEventListener {
 
     public void onDestroy() {
         ((SensorManager) context.getSystemService(Context.SENSOR_SERVICE)).unregisterListener(this);
+        if (mInputMonitor != null) {
+            mInputMonitor.stop();
+            mInputMonitor = null;
+        }
         if (proximityFallbackProcess != null) {
             proximityFallbackProcess.destroy();
             proximityFallbackProcess = null;

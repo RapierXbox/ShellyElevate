@@ -117,10 +117,30 @@ public class DeviceHelper {
 
     public void setRelay(int num, boolean state) {
         state ^= deviceModel.invertRelay;
-        writeFileContent(getRelayFile(num), state ? "1" : "0");
-
+        if (deviceModel.usesInitScriptRelay()) {
+            triggerInitRelay(num, state);
+        } else {
+            writeFileContent(getRelayFile(num), state ? "1" : "0");
+        }
         if (mMQTTServer.shouldSend()) {
             mMQTTServer.publishRelay(num, state);
+        }
+    }
+
+    private void triggerInitRelay(int num, boolean state) {
+        String[] scripts = deviceModel.initRelayScripts;
+        if (scripts == null || num >= scripts.length) return;
+        String scriptName = scripts[num];
+        try {
+            // write desired state to a property the init script reads... then pulse the service
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            java.lang.reflect.Method set = sp.getMethod("set", String.class, String.class);
+            set.invoke(null, "shelly.relay." + num + ".state", state ? "1" : "0");
+            set.invoke(null, "ctl.start", scriptName);
+        } catch (Exception e) {
+            // system property access failed... fall back to sysfs
+            Log.w(TAG, "Init relay failed for " + scriptName + ", falling back to sysfs: " + e.getMessage());
+            writeFileContent(getRelayFile(num), state ? "1" : "0");
         }
     }
 
