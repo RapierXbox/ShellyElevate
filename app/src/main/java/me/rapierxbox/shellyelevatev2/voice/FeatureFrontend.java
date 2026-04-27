@@ -1,6 +1,8 @@
 package me.rapierxbox.shellyelevatev2.voice;
 
-// mel feature frontend contract. implemented by nativefeaturefrontend which wraps the jni tflm microfrontend. emits 40 mel bin rows in the [0, NativeMelExtractor.OUTMAX] float range
+// Mel-feature frontend contract used by the wake-word and VAD detectors.
+// Implementations emit one row of 40 mel bins per 10 ms hop, in the
+// [0, NativeMelExtractor.OUT_MAX] float range.
 public interface FeatureFrontend {
     interface FrameCallback { void onFrame(float[] mel); }
 

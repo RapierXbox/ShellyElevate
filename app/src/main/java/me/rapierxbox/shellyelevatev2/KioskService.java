@@ -28,20 +28,18 @@ public class KioskService extends Service {
 		Log.i("KioskService", "Foreground service created");
 		startForeground(1, buildNotification());
 
-		// Kick off watchdog loop
 		startWatchdog();
 	}
 
 	@Override
 	public int onStartCommand(Intent intent, int flags, int startId) {
-		return START_STICKY; // restart if killed
+		return START_STICKY;
 	}
 
 	@Override
 	public IBinder onBind(Intent intent) { return null; }
 
 	private Notification buildNotification() {
-		// On Android 8+, you must create a channel first
 		return new NotificationCompat.Builder(this, "kiosk_channel")
 				.setContentTitle("Kiosk running")
 				.setContentText("Foreground anchor active")
@@ -56,7 +54,7 @@ public class KioskService extends Service {
 
 		NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
 		if (manager == null) {
-			return; // Avoid crashing if the service is unavailable
+			return;
 		}
 
 		NotificationChannel channel = new NotificationChannel(
@@ -85,10 +83,10 @@ public class KioskService extends Service {
 					activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 					startActivity(activityIntent);
 				}
-				handler.postDelayed(this, 30000); // check every 30s (increased from 10s)
+				handler.postDelayed(this, 30000);
 			}
 		};
-		handler.postDelayed(checkTask, 30000); // initial delay 30s
+		handler.postDelayed(checkTask, 30000);
 	}
 
 	private boolean isLiteModeEnabled() {

@@ -12,11 +12,10 @@ import kotlin.system.exitProcess
 
 class CrashHandler(private val context: Context) : Thread.UncaughtExceptionHandler {
 
-    private val maxBytes = 512 * 1024 // 512 KB cap to prevent unbounded growth
+    private val maxBytes = 512 * 1024
 
     override fun uncaughtException(thread: Thread, throwable: Throwable) {
         try {
-            // Log to file
             val logFile = File(context.filesDir, "crash_log.txt")
             val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(Date())
             val entry = "\n=== Crash @ $timestamp ===\n${Log.getStackTraceString(throwable)}\n"
@@ -25,7 +24,8 @@ class CrashHandler(private val context: Context) : Thread.UncaughtExceptionHandl
 
             Log.e("CrashHandler", "App crashed", throwable)
 
-            // Restart app in 2 seconds
+            // Schedule a relaunch in 2s; we can't startActivity directly because
+            // the process is about to die.
             val restartIntent = Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
             }
@@ -48,7 +48,7 @@ class CrashHandler(private val context: Context) : Thread.UncaughtExceptionHandl
     }
 
     private fun ensureCapacity(logFile: File, incomingBytes: Int) {
-        // Rotate when size would exceed cap; keep a single backup for reference.
+        // Rotate to a single .prev backup when the next entry would exceed maxBytes.
         val currentSize = if (logFile.exists()) logFile.length() else 0L
         if (currentSize + incomingBytes <= maxBytes) return
 

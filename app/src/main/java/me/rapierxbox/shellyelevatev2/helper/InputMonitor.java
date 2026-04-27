@@ -10,7 +10,7 @@ public class InputMonitor {
     private static boolean sLibraryLoaded = false;
 
     public interface KeyCallback {
-        // action: 0=UP, 1=DOWN, 2=REPEAT
+        /** action: 0=UP, 1=DOWN, 2=REPEAT (matches Linux input event values). */
         void onHardwareKey(int keyCode, int action, int repeatCount);
     }
 

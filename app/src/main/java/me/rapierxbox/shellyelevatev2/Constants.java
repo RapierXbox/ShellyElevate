@@ -52,7 +52,7 @@ public class Constants {
     public static final String SP_VOICE_WAKE_ENABLED = "voiceWakeEnabled";
     public static final String SP_VOICE_WAKE_MODEL_NAME = "voiceWakeModelName";
     public static final String SP_VOICE_WAKE_SOUND_ENABLED = "voiceWakeSoundEnabled";
-    public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 50 is default sens
+    public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 0..100, 50 = model's published cutoff
     public static final String SP_VOICE_SCORE_BAR_ENABLED   = "voiceScoreBarEnabled";
     public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
     public static final String SP_VOICE_WAKE_EXPERIMENTAL_MODELS = "voiceWakeExperimentalModels";

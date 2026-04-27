@@ -51,7 +51,8 @@ public class MQTTServer {
     private volatile long lastBrightnessSentAtMs = 0L;
     private static final long MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS = 500;
 
-    // Lightweight coalescing for bursty publishes (switches/buttons/relays)
+    // Bursty topics (relays/switches/buttons) are coalesced over this window so
+    // that flipping a relay rapidly doesn't queue many duplicate publishes.
     private static final long COALESCE_WINDOW_MS = 40L;
     private final Object coalesceLock = new Object();
     private java.util.HashMap<String, Pending> pending = new java.util.HashMap<>();
@@ -91,7 +92,6 @@ public class MQTTServer {
             @Override
             public void onReceive(Context context, Intent intent) {
                 Log.d(TAG, "Settings changed - reconnecting with new config");
-                // Disconnect existing connection before reconnecting with new settings
                 reconnectWithNewSettings();
             }
         };
@@ -106,14 +106,9 @@ public class MQTTServer {
                 .registerReceiver(voiceStateReceiver, new IntentFilter(INTENT_VOICE_STATE_CHANGED));
     }
 
-    /**
-     * Disconnect and reconnect with new settings.
-     * Called when settings are changed via HTTP API or settings UI.
-     */
     private void reconnectWithNewSettings() {
         scheduler.execute(() -> {
             try {
-                // Disconnect existing client if connected
                 if (mMqttClient != null && mMqttClient.isConnected()) {
                     Log.d(TAG, "Disconnecting old MQTT connection before applying new settings");
                     try {
@@ -124,15 +119,14 @@ public class MQTTServer {
                     }
                     mMqttClient = null;
                 }
-                
-                // Update clientId from settings (mqttDeviceId)
+
                 setupClientId();
                 Log.d(TAG, "Updated MQTT client ID to: " + clientId);
-                
-                // Small delay to ensure clean disconnection
+
+                // Give the broker a moment to drop the old session before we reconnect
+                // with potentially the same client id.
                 Thread.sleep(500);
-                
-                // Now check credentials and connect with new settings
+
                 checkCredsAndConnect();
             } catch (InterruptedException e) {
                 Log.e("MQTT", "Interrupted during reconnect", e);
@@ -156,7 +150,6 @@ public class MQTTServer {
 
     public void checkCredsAndConnect() {
         if (!isEnabled()) {
-            // If MQTT is disabled in settings, disconnect if connected
             if (mMqttClient != null && mMqttClient.isConnected()) {
                 Log.d(TAG, "MQTT disabled in settings - disconnecting");
                 disconnect();
@@ -202,7 +195,6 @@ public class MQTTServer {
                 clientId, mMemoryPersistence
             );
 
-            // Set callback only once
             mMqttClient.setCallback(new MqttCallback() {
                 @Override
                 public void connectComplete(boolean reconnect, String serverURI) {
@@ -237,7 +229,7 @@ public class MQTTServer {
                 public void authPacketArrived(int reasonCode, MqttProperties properties) {}
             });
 
-            // LWT
+            // Last-will: broker publishes "offline" if we drop without a clean disconnect.
             MqttMessage lwtMessage = new MqttMessage("offline".getBytes());
             lwtMessage.setQos(1);
             lwtMessage.setRetained(true);
@@ -252,10 +244,12 @@ public class MQTTServer {
     }
 
     private void safeOnConnected() {
+        // Small delay so the broker finishes session setup before we start
+        // publishing/subscribing. Some brokers reject SUBSCRIBE if it arrives in
+        // the same TCP write as CONNACK.
         scheduler.schedule(() -> {
             if (mMqttClient != null && mMqttClient.isConnected()) {
                 try {
-                    // Subscriptions
                     mMqttClient.subscribe("shellyelevatev2/#", 1);
                     mMqttClient.subscribe(MQTT_TOPIC_HOME_ASSISTANT_STATUS, 1);
 
@@ -272,26 +266,20 @@ public class MQTTServer {
 
         scheduler.execute(() -> {
             try {
-                // Publish hello info
                 publishHello();
-
-                // Publish config
                 publishConfig();
-
-                // Publish online status last
                 publishInternal(parseTopic(MQTT_TOPIC_STATUS), "online", 1, true);
 
-                // Stagger sensor publishes; consolidate Runnable allocations
+                // Stagger publishes so the initial discovery burst doesn't overwhelm
+                // a slow broker or starve other tasks on the single-thread scheduler.
                 scheduler.schedule(this::publishTempAndHum, 50, TimeUnit.MILLISECONDS);
-                
-                // Batch relay publishes to reduce lambda allocations
+
                 scheduler.schedule(() -> {
                     for (int num = 0; num < DeviceModel.getReportedDevice().relays; num++) {
                         publishRelay(num, mDeviceHelper.getRelay(num));
                     }
                 }, 100, TimeUnit.MILLISECONDS);
-                
-                // Batch remaining sensor publishes
+
                 scheduler.schedule(() -> {
                     publishLux(mDeviceSensorManager.getLastMeasuredLux());
                     publishScreenBrightness(mDeviceHelper.getScreenBrightness());
@@ -343,6 +331,9 @@ public class MQTTServer {
         scheduler.execute(() -> publishInternalSync(topic, payload, qos, retained));
     }
 
+    // Last-write-wins per topic: a fast-toggling relay produces only one publish
+    // per COALESCE_WINDOW_MS. The first call into the window arms a single flush;
+    // subsequent calls just overwrite the pending entry.
     private void publishInternalCoalesced(String topic, String payload, int qos, boolean retained) {
         if (scheduler.isShutdown()) return;
         synchronized (coalesceLock) {
@@ -378,7 +369,7 @@ public class MQTTServer {
 
     private void publishInternalSync(String topic, String payload, int qos, boolean retained) {
         if (!shouldSend()) {
-            Log.w(TAG, "publishInternal skipped — client not connected: " + topic);
+            Log.w(TAG, "publishInternal skipped, client not connected: " + topic);
             return;
         }
         try {
@@ -415,6 +406,8 @@ public class MQTTServer {
     public void publishScreenBrightness(int brightness) {
         long now = SystemClock.elapsedRealtime();
 
+        // Rate-limit identical brightness republishes; the fade animator can
+        // call us many times per second with the same final value.
         synchronized (this) {
             if (brightness == lastPublishedBrightness && (now - lastBrightnessSentAtMs) < MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS) {
                 return;
@@ -453,37 +446,26 @@ public class MQTTServer {
         publishInternal(parseTopic(MQTT_TOPIC_SLEEPING_BINARY_SENSOR), state ? "ON" : "OFF", 1, false);
     }
 
-    /**
-     * Publish a button press event with press type (short, long, double, triple).
-     * For power button (ID 140), publishes to MQTT_TOPIC_POWER_BUTTON; for others to MQTT_TOPIC_BUTTON_STATE.
-     */
+    // Button id 140 is the dedicated power button; 0..3 are the regular touch buttons.
     public void publishButton(int number, String pressType) {
         long epochMillis = System.currentTimeMillis();
         JSONObject json = new JSONObject();
         try {
             json.put("last_update", epochMillis);
             json.put("press_type", pressType);
-            // Add event_type for Home Assistant MQTT event standard
+            // event_type is the field Home Assistant's MQTT Event entity reads.
             json.put("event_type", pressType);
         } catch (Exception e) {
             Log.e(TAG, "Error creating button JSON", e);
         }
 
-        String topic;
-        if (number == 140) {
-            // Power button has its own dedicated topic
-            topic = parseTopic(MQTT_TOPIC_POWER_BUTTON);
-        } else {
-            // Regular buttons (0-3)
-            topic = parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
-        }
+        String topic = (number == 140)
+                ? parseTopic(MQTT_TOPIC_POWER_BUTTON)
+                : parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
 
         publishInternalCoalesced(topic, json.toString(), 1, false);
     }
 
-    /**
-     * Legacy method for backward compatibility - assumes short press type.
-     */
     @Deprecated
     public void publishButton(int number) {
         publishButton(number, BUTTON_PRESS_TYPE_SHORT);

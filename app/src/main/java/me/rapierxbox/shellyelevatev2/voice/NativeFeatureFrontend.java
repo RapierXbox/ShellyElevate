@@ -1,10 +1,13 @@
 package me.rapierxbox.shellyelevatev2.voice;
 
-// native backed feature frontend uses the tflm microfontend c lib to extract int8 features, then dequantizes each row to float in the rage expectet by downstream model quant code
+// Wraps the TFLM microfrontend JNI (NativeMelExtractor) and dequantises each
+// emitted int8 row into a float buffer in the range expected by downstream
+// quantisation code (WakeWordDetector.quantizeMel).
 public final class NativeFeatureFrontend implements FeatureFrontend {
-    // int8 -> float: (int8 + 128) / 255 x 26, precomputed coefficient
+    // int8 -> float: ((int8 + 128) / 255) * OUT_MAX, precomputed.
     private static final float DEQUANT = NativeMelExtractor.OUT_MAX / 255f;
-    private static final int MAX_CHUNK_BYTES = 8192; // 256ms at 16kHz int16... some headroom
+    // 8 KiB ~= 256 ms at 16 kHz mono int16, well above the 100 ms chunks fed in.
+    private static final int MAX_CHUNK_BYTES = 8192;
 
     private final NativeMelExtractor native_;
     private final float[] row = new float[NativeMelExtractor.N_MELS];
@@ -16,7 +19,7 @@ public final class NativeFeatureFrontend implements FeatureFrontend {
     @Override public void feed(byte[] pcm, int length, FrameCallback cb) {
         native_.feedInt8(pcm, length, (buf, off, len) -> {
             for (int i = 0; i < len; i++) {
-                int v = buf[off + i] + 128; // int8 back to [0, 255]
+                int v = buf[off + i] + 128;
                 row[i] = v * DEQUANT;
             }
             cb.onFrame(row);

@@ -62,7 +62,7 @@ public class ShellyElevateApplication extends Application {
         super.onCreate();
         Thread.setDefaultUncaughtExceptionHandler(new CrashHandler(this));
 
-        // Enable StrictMode in debug builds to surface main-thread stalls that can trigger ANRs.
+        // Surface main-thread stalls that could trigger ANRs in debug builds.
         if (BuildConfig.DEBUG) {
             StrictMode.setThreadPolicy(
                 new StrictMode.ThreadPolicy.Builder()
@@ -80,7 +80,9 @@ public class ShellyElevateApplication extends Application {
 
         applicationStartTime = System.currentTimeMillis();
 
-        // Temporary bootstrap window: allow disk I/O while initializing singletons
+        // Singleton bootstrap reads SharedPreferences and sysfs nodes from the main thread;
+        // relax StrictMode for the duration of init so debug builds don't penalty-log every
+        // legitimate startup read.
         StrictMode.ThreadPolicy prevPolicy = StrictMode.getThreadPolicy();
         StrictMode.setThreadPolicy(
             new StrictMode.ThreadPolicy.Builder(prevPolicy)
@@ -99,12 +101,8 @@ public class ShellyElevateApplication extends Application {
             StesProtocolHandler.init();
             mScreenSaverManager = new ScreenSaverManager(this);
             mScreenManager = new ScreenManager(this);
-
-            // Sensors Init
             mDeviceSensorManager = new DeviceSensorManager(this);
-
             mSwipeHelper = new SwipeHelper();
-
             mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
 
             if (mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false)) {
@@ -112,14 +110,9 @@ public class ShellyElevateApplication extends Application {
             }
 
             mMQTTServer = new MQTTServer();
-
-            // Voice Assistant
             mVoiceAssistantManager = new VoiceAssistantManager();
-
-            // Bluetooth Proxy
             mBluetoothProxyManager = new BluetoothProxyManager();
 
-            // HTTP Server
             mHttpServer = new HttpServer();
             httpWatchdog = Executors.newSingleThreadScheduledExecutor();
             if (mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)) {
@@ -127,14 +120,12 @@ public class ShellyElevateApplication extends Application {
                 scheduleHttpWatchdog();
             }
 
-            // restore screen status
             mScreenManager.setScreenOn(true);
             mScreenSaverManager.stopScreenSaver();
         } finally {
             StrictMode.setThreadPolicy(prevPolicy);
         }
 
-        // React to settings changes to start/stop HTTP server and watchdog
         httpSettingsReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -179,19 +170,20 @@ public class ShellyElevateApplication extends Application {
             if (mHttpServer == null) {
                 mHttpServer = new HttpServer();
             } else if (mHttpServer.isAlive()) {
-                return; // already running
+                return;
             } else {
                 try {
                     mHttpServer.stop();
                     mHttpServer.closeAllConnections();
                 } catch (Throwable ignored) {}
-                mHttpServer = new HttpServer(); // fresh instance to avoid stuck socket
+                // NanoHTTPD doesn't always release the listen socket cleanly on stop();
+                // recreate the instance to avoid binding errors on restart.
+                mHttpServer = new HttpServer();
             }
 
             mHttpServer.start(SOCKET_READ_TIMEOUT, false);
             Log.i("ShellyElevateV2", "HTTP server started on port 8080");
 
-            // Reset exponential backoff delay
             retryDelaySeconds = 5;
         } catch (IOException e) {
             Log.e("ShellyElevateV2", "Failed to start HTTP server. Retrying in " + retryDelaySeconds + "s...", e);
@@ -205,7 +197,7 @@ public class ShellyElevateApplication extends Application {
             mHttpServer = null;
 
             int delay = retryDelaySeconds;
-            retryDelaySeconds = Math.min(retryDelaySeconds * 2, 60); // Cap at 60s
+            retryDelaySeconds = Math.min(retryDelaySeconds * 2, 60);
 
             httpWatchdog.schedule(this::tryStartHttpServer, delay, TimeUnit.SECONDS);
         }

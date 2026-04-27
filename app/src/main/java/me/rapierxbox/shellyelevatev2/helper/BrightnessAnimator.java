@@ -8,29 +8,23 @@ import android.os.SystemClock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.IntConsumer;
 
-/**
- * Thread-safe brightness animator.
- * - Skips redundant updates (from == to)
- * - Coalesces rapid calls
- * - Only updates when value actually changes
- */
+// Thread-safe brightness animator. Coalesces rapid calls and throttles sysfs writes.
 public class BrightnessAnimator {
 
 	private final ReentrantLock lock = new ReentrantLock();
 	private ValueAnimator animator;
-	private int currentBrightness = -1; // initial unknown value
+	private int currentBrightness = -1;
 	private boolean running = false;
 	private long lastFrameAtMs = 0L;
-	private static final long FRAME_THROTTLE_MS = 50L; // cap writes to ~20fps to reduce sysfs churn
-	private static final int MIN_ANIMATION_STEP = 2; // skip animating tiny deltas
+	// Cap sysfs writes to ~20 fps; the LCD backlight node is slow and doesn't
+	// benefit from finer-grained updates.
+	private static final long FRAME_THROTTLE_MS = 50L;
+	private static final int MIN_ANIMATION_STEP = 2;
 
-	/**
-	 * Animate brightness from current value to target.
-	 */
 	public void animateTo(int target, IntConsumer onUpdate) {
 		lock.lock();
 		try {
-			if (target == currentBrightness) return; // skip redundant animation
+			if (target == currentBrightness) return;
 
 			int start = (animator != null && animator.isRunning()) ? currentBrightness : currentBrightness;
 			animate(start, target, onUpdate);
@@ -40,7 +34,7 @@ public class BrightnessAnimator {
 	}
 
 	public void animate(int from, int to, IntConsumer onUpdate) {
-		if (from == to) return; // no need to animate
+		if (from == to) return;
 
 		if (Math.abs(to - from) < MIN_ANIMATION_STEP) {
 			currentBrightness = to;
@@ -48,7 +42,6 @@ public class BrightnessAnimator {
 			return;
 		}
 
-		// Cancel previous animation
 		cancel();
 
 		animator = ValueAnimator.ofInt(from, to);
@@ -106,7 +99,6 @@ public class BrightnessAnimator {
 		animator.start();
 	}
 
-	/** Cancel current animation if any */
 	public void cancel() {
 		lock.lock();
 		try {
@@ -120,7 +112,6 @@ public class BrightnessAnimator {
 		}
 	}
 
-	/** Check if animation is currently running */
 	public boolean isRunning() {
 		lock.lock();
 		try {
@@ -130,7 +121,6 @@ public class BrightnessAnimator {
 		}
 	}
 
-	/** Get the current brightness value */
 	public int getCurrentBrightness() {
 		lock.lock();
 		try {

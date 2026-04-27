@@ -48,14 +48,15 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
 	            mMQTTServer.publishStatus();
 	            break;
             case MQTT_TOPIC_HOME_ASSISTANT_STATUS:
-                // Republish discovery config when Home Assistant comes online
+                // Re-publish discovery config so HA picks us up after a restart.
                 String payload = new String(message.getPayload(), StandardCharsets.UTF_8);
                 if ("online".equals(payload)) {
                     Log.i("MQTT", "Home Assistant online, republishing discovery");
                     mMQTTServer.publishStatus();
                 }
                 break;
-                // IMPRV: new logic to handle infinite relays
+            // TODO: replace these per-channel cases with a single regex/prefix match
+            // so we don't need to add a case per relay index.
             case MQTT_TOPIC_RELAY_COMMAND:
                 mDeviceHelper.setRelay(0, new String(message.getPayload(), StandardCharsets.UTF_8).contains("ON"));
                 break;
@@ -86,9 +87,8 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
                 }
                 break;
             case MQTT_TOPIC_POWER_BUTTON:
-                // Power button commands from Home Assistant
-                // Payload is JSON with press_type field. No default action on incoming power button;
-                // power button behavior is configured on the device (auto-reboot on long press).
+                // Logged for visibility only; power-button actions (e.g. auto-reboot
+                // on long press) are handled locally on the device, not via MQTT.
                 Log.i("MQTT", "Power button event received from HA: " + new String(message.getPayload(), StandardCharsets.UTF_8));
                 break;
             case MQTT_TOPIC_VOICE_TRIGGER:

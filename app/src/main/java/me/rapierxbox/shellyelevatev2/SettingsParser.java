@@ -25,14 +25,13 @@ public class SettingsParser {
             String key = entry.getKey();
             Object value = entry.getValue();
             if (value instanceof Set) {
-                // Explicitly convert String sets to JSON arrays for consistency
                 JSONArray arr = new JSONArray();
                 for (Object o : (Set<?>) value) {
                     if (o != null) arr.put(String.valueOf(o));
                 }
                 settings.put(key, arr);
             } else if (value instanceof Float) {
-                // JSON numbers are doubles; preserve precision as double
+                // JSON numbers are doubles; widen here so precision survives the round trip.
                 settings.put(key, ((Float) value).doubleValue());
             } else {
                 settings.put(key, value);
@@ -47,7 +46,7 @@ public class SettingsParser {
             String key = it.next();
             Object value = settings.get(key);
 
-            // Support removal via explicit null
+            // Explicit JSON null removes the key.
             if (value == JSONObject.NULL) {
                 editor.remove(key);
                 continue;
@@ -58,7 +57,6 @@ public class SettingsParser {
             } else if (value instanceof Boolean) {
                 editor.putBoolean(key, (Boolean) value);
             } else if (value instanceof JSONArray) {
-                // Only accept arrays of strings as StringSet
                 JSONArray arr = (JSONArray) value;
                 Set<String> set = new LinkedHashSet<>();
                 boolean allStrings = true;
@@ -75,28 +73,22 @@ public class SettingsParser {
                 if (allStrings) {
                     editor.putStringSet(key, set);
                 }
-                // If not all strings, ignore this key to avoid corrupting prefs
+                // Mixed-type arrays are dropped: SharedPreferences only stores StringSet.
             } else if (value instanceof Number) {
                 Number num = (Number) value;
                 double d = num.doubleValue();
                 boolean isWhole = Math.floor(d) == d && !Double.isInfinite(d) && !Double.isNaN(d);
                 if (!isWhole) {
-                    // Fractional -> store as float (SharedPreferences supports float)
                     editor.putFloat(key, (float) d);
+                } else if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
+                    editor.putInt(key, (int) d);
                 } else {
-                    // Whole number: choose int if within range, otherwise long
-                    if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
-                        editor.putInt(key, (int) d);
-                    } else {
-                        editor.putLong(key, (long) d);
-                    }
+                    editor.putLong(key, (long) d);
                 }
             }
-            // Unknown types are ignored to maintain prefs integrity
         }
         editor.apply();
 
-        // Notify listeners that settings changed (keeps components in sync)
         LocalBroadcastManager.getInstance(mApplicationContext)
                 .sendBroadcast(new Intent(Constants.INTENT_SETTINGS_CHANGED));
     }

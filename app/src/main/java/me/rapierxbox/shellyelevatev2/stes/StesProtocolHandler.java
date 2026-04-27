@@ -13,11 +13,12 @@ import me.rapierxbox.shellyelevatev2.helper.UartHelper;
 public class StesProtocolHandler {
 
     private static final String TAG = "STES";
+    // STES UART frame: AA 55 [len] [cmd] [payload...] [checksum]
     private static final byte HEADER_0 = (byte) 0xAA;
     private static final byte HEADER_1 = (byte) 0x55;
     private static final int DEFAULT_GAMMA = 50;
 
-    // calibration modes (SC_CMD_CALIBRATE payload byte)
+    // CALIBRATE payload byte values.
     public static final byte CALIB_CLEAR = 0;
     public static final byte CALIB_FULL  = 1;
     public static final byte CALIB_SHORT = 2;
@@ -66,7 +67,7 @@ public class StesProtocolHandler {
     public static void init() {
         String path = UartHelper.findTtyPath();
         if (path == null) {
-            Log.i(TAG, "No UART device found... dimmer not available");
+            Log.i(TAG, "No UART device found, dimmer not available");
             return;
         }
         sUart = new UartHelper();
@@ -74,10 +75,10 @@ public class StesProtocolHandler {
             sUart = null;
             return;
         }
-        // wall display exposes uart node without stes backplate
-        // probe mcu before declaring present
+        // The UART node exists on every wall display, even without a STES backplate
+        // attached, so we probe the MCU before declaring the dimmer present.
         if (!probeBackplate()) {
-            Log.i(TAG, "STES backplate not responding on " + path + "... dimmer disabled");
+            Log.i(TAG, "STES backplate not responding on " + path + ", dimmer disabled");
             sUart.close();
             sUart = null;
             return;
@@ -243,7 +244,7 @@ public class StesProtocolHandler {
         }, e -> { if (cb != null) cb.onError(e); });
     }
 
-    // bootloader ota
+    // STES MCU firmware update via the STM32 UART bootloader (AN3155).
     public interface BootloaderUpdateListener {
         void onConnected(int deviceId);
         void onProgress(int pagesWritten, int totalPages);
@@ -268,7 +269,7 @@ public class StesProtocolHandler {
 
     public static boolean isFirmwareUpdateInProgress() { return fwUpdateInProgress; }
 
-    // internal stes frame helpers
+    // ----- frame encode/decode -----
 
     private interface DataCallback { void onData(byte[] resp); }
 
@@ -290,6 +291,7 @@ public class StesProtocolHandler {
     }
 
     static byte[] buildFrame(StesCommand cmd, byte[] payload) {
+        // len byte counts cmd+payload only (not the AA 55 header or checksum).
         byte len = (byte)(payload.length + 1);
         byte[] frame = new byte[payload.length + 5];
         frame[0] = HEADER_0;
@@ -297,6 +299,7 @@ public class StesProtocolHandler {
         frame[2] = len;
         frame[3] = cmd.value;
         System.arraycopy(payload, 0, frame, 4, payload.length);
+        // Checksum covers cmd + payload, matching the response side in parseResponse.
         byte[] checksumInput = new byte[len];
         checksumInput[0] = cmd.value;
         System.arraycopy(payload, 0, checksumInput, 1, payload.length);
@@ -317,12 +320,16 @@ public class StesProtocolHandler {
         return payload;
     }
 
+    // ~(sum_of_bytes + length - 1) mod 256. Matches the firmware's verifier.
     static byte checksum(byte[] data) {
         int sum = data.length;
         for (byte b : data) sum += (b & 0xFF);
         return (byte)(((sum - 1) ^ 0xFF) & 0xFF);
     }
 
+    // Status payload (after stripping AA 55 [len] [cmd]):
+    //   [0..1] reserved | [2] on flag | [3] warning bitmap
+    //   [4..5] target brightness (BE) | [6..7] actual brightness (BE)
     private static DimmerStatus parseStatus(byte[] resp) {
         DimmerStatus s = new DimmerStatus();
         if (resp.length < 8) return s;
@@ -341,6 +348,7 @@ public class StesProtocolHandler {
         return s;
     }
 
+    // Power-meter scaling: power in 0.1 W, voltage in V, current in mA.
     private static DimmerPower parsePowerMeter(byte[] resp) {
         DimmerPower p = new DimmerPower();
         p.powerW   = toShort(resp[3], resp[4]) / 10.0f;
@@ -353,10 +361,9 @@ public class StesProtocolHandler {
         return ((hi & 0xFF) << 8) | (lo & 0xFF);
     }
 
-    // STM2 bootloader inner implementation
-
+    // STM32 UART bootloader (AN3155) sequence used to flash the STES MCU.
+    // Layout: SYNCHRO -> GET_ID -> WRITE_UNPROTECT -> EXTENDED_ERASE -> WRITE_MEMORY (chunked).
     private static final class Bootloader {
-        // STM32 UART bootloader protocol (AN3155)
         private static final byte BL_SYNCHRO          = 0x7F;
         private static final byte BL_ACK              = 0x79;
         private static final byte BL_NAK              = 0x1F;
@@ -384,31 +391,26 @@ public class StesProtocolHandler {
                     return;
                 }
 
-                // 1. reset mcu into bootloader mode via stes
                 Log.i(TAG, "BL: resetting MCU into bootloader");
                 resetMcu(null);
                 Thread.sleep(500);
 
-                // 2. sync
                 if (!syncBootloader()) { listener.onError("BL sync failed"); return; }
 
-                // 3. GET_ID
                 int deviceId = getDeviceId();
                 if (deviceId < 0) { listener.onError("BL GET_ID failed"); return; }
                 listener.onConnected(deviceId);
                 Log.i(TAG, "BL: device ID = 0x" + Integer.toHexString(deviceId));
 
-                // 4. Write unprotect
                 if (!writeUnprotect()) { listener.onError("BL write-unprotect failed"); return; }
+                // The STM32 reboots after WRITE_UNPROTECT, so re-sync before continuing.
                 Thread.sleep(200);
                 if (!syncBootloader()) { listener.onError("BL re-sync failed"); return; }
 
-                // 5. Erase application pages
                 int totalPages = (int)Math.ceil((double)firmware.length / BL_PAGE_SIZE);
                 totalPages = Math.min(totalPages, BL_MAX_PAGES);
                 if (!extendedErase(BL_FIRST_APP_PAGE, totalPages)) { listener.onError("BL erase failed"); return; }
 
-                // 6. Write firmware in 256b chunks
                 int pagesWritten = 0;
                 int offset = 0;
                 while (offset < firmware.length) {
@@ -472,7 +474,7 @@ public class StesProtocolHandler {
 
         private static boolean writeMemory(int address, byte[] chunk) throws InterruptedException {
             if (!sendCommand(BL_CMD_WRITE_MEMORY)) return false;
-            // send address + xor checksum
+            // Address frame: 4 big-endian bytes + XOR checksum.
             byte[] addrBytes = {
                 (byte)(address >> 24), (byte)(address >> 16),
                 (byte)(address >> 8),  (byte)(address)
@@ -482,7 +484,7 @@ public class StesProtocolHandler {
             addrFrame[4] = blXor(addrBytes, 0, 4);
             byte[] ackAddr = sendBlocking(addrFrame, TIMEOUT_NORMAL);
             if (ackAddr == null || ackAddr.length == 0 || ackAddr[0] != BL_ACK) return false;
-            // send data: [n-1, data..., xor of all]
+            // Data frame: [n-1][bytes...][XOR over all preceding bytes].
             byte[] dataFrame = new byte[1 + chunk.length + 1];
             dataFrame[0] = (byte)(chunk.length - 1);
             System.arraycopy(chunk, 0, dataFrame, 1, chunk.length);
@@ -491,14 +493,14 @@ public class StesProtocolHandler {
             return ackData != null && ackData.length > 0 && ackData[0] == BL_ACK;
         }
 
-        // send [cmd, ~cmd], expect ACK
+        /** Send the [cmd, ~cmd] header and expect an ACK. */
         private static boolean sendCommand(byte cmd) throws InterruptedException {
             byte[] frame = {cmd, (byte)(~cmd & 0xFF)};
             byte[] resp = sendBlocking(frame, TIMEOUT_NORMAL);
             return resp != null && resp.length > 0 && resp[0] == BL_ACK;
         }
 
-        // synchronous send+receive via UartHelper with locking
+        /** Blocks until UartHelper's listener fires or times out. */
         private static byte[] sendBlocking(byte[] data, long timeoutMs) throws InterruptedException {
             final byte[][] result = {null};
             final Object lock = new Object();

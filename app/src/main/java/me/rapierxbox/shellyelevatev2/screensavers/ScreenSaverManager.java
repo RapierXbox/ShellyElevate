@@ -21,9 +21,7 @@ import java.util.concurrent.TimeUnit;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication;
 
-/**
- * Handles automatic screensaver start/stop logic and proximity-based wake.
- */
+// Idle timer for the screensaver, plus proximity-based wake handling.
 public class ScreenSaverManager extends BroadcastReceiver {
 
     private static final String TAG = "ScreenSaverManager";
@@ -161,7 +159,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
         var mqtt = ShellyElevateApplication.mMQTTServer;
         if (mqtt != null && mqtt.shouldSend()) mqtt.publishSleeping(true);
 
-        // Defer non-critical broadcast to reduce main-thread pressure
+        // Broadcasts are observed by ScreenManager and friends; pushing them off
+        // the main thread keeps the saver activity responsive on slow devices.
         scheduler.execute(() -> LocalBroadcastManager.getInstance(appContext)
                 .sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STARTED)));
     }
@@ -173,7 +172,6 @@ public class ScreenSaverManager extends BroadcastReceiver {
         ScreenSaver saver = getCurrentScreenSaver();
         saver.onEnd(appContext);
 
-        // Defer non-critical broadcasts to reduce main-thread pressure
         scheduler.execute(() -> {
             appContext.sendBroadcast(new Intent(INTENT_END_SCREENSAVER));
             LocalBroadcastManager.getInstance(appContext)
@@ -202,8 +200,9 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (BuildConfig.DEBUG) Log.i(TAG, "Proximity event: " + proximity + " - Value: " + proximity);
 
         long now = System.currentTimeMillis();
+        // Debounce: gpio_keys can fire multiple events for a single physical move.
         if (now - lastProximityEventTime < 350L) {
-            return; // debounce rapid proximity updates
+            return;
         }
         lastProximityEventTime = now;
 
@@ -219,19 +218,19 @@ public class ScreenSaverManager extends BroadcastReceiver {
         float threshold = maxProximitySensorValue <= 1.5f ? 0.5f : Math.max(0.5f, maxProximitySensorValue * 0.1f);
         boolean isNear = proximity < maxProximitySensorValue - threshold;
 
-        // Skip duplicate near/far state updates to avoid spammy wake handling.
+        // Only act on near/far transitions, not on each repeated event.
         if (lastNearState != null && lastNearState == isNear) {
             return;
         }
         lastNearState = isNear;
 
         if (screenSaverRunning && isNear) {
-            // Wake even if the pref is off to avoid being stuck at brightness 0.
+            // Force a wake even when SP_WAKE_ON_PROXIMITY is off, otherwise the
+            // user would be left with a black screen they can't recover from.
             stopScreenSaver();
             lastProximityWakeTime = now;
             keepAwakeAfterProximity(now, keepAwakeMs);
         } else if (wakeOnProximity && isNear) {
-            // Ignore repeated near edges that happen too quickly due to noisy sensors.
             if (now - lastProximityWakeTime < 1000L) return;
             lastProximityWakeTime = now;
             keepAwakeAfterProximity(now, keepAwakeMs);

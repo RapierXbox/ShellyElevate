@@ -173,7 +173,7 @@ class MqttDiscoveryConfigBuilder {
         dimmer.put("object_id",                "shelly_walldisplay_" + clientId + "_dimmer");
         components.put(clientId + "_dimmer",   dimmer);
     }
-    // voice assistant entities... only exposed when assist is enabled
+    // Voice entities are only exposed when the Assist pipeline is enabled in settings.
     private void addVoiceComponents(JSONObject components) throws JSONException {
         boolean enabled = prefs.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false);
         Log.i(TAG, "addVoiceComponents: SP_VOICE_ASSISTANT_ENABLED=" + enabled);

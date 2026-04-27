@@ -32,22 +32,25 @@ import java.util.concurrent.atomic.AtomicInteger;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import okhttp3.OkHttpClient;
 
-// state machine: diabled -> idle -> listening -> processing -> speaking -> idle
+// State machine: DISABLED -> IDLE -> LISTENING -> PROCESSING -> SPEAKING -> IDLE.
 public class VoiceAssistantManager {
     private static final String TAG = "VoiceAssistant";
 
     private static final int SAMPLE_RATE = 16000;
     private static final int CHANNEL_CFG = AudioFormat.CHANNEL_IN_MONO;
     private static final int AUDIO_FMT = AudioFormat.ENCODING_PCM_16BIT;
-    private static final int CHUNK_BYTES = 3200; // 100ms at 16khz 16bit
+    private static final int CHUNK_BYTES = 3200; // 100 ms at 16 kHz / 16-bit / mono
 
-    // vad parameters as fallback
-    private static final int VAD_NOISE_FRAMES = 8;    // noisefloor gets measured for baseline
-    private static final float VAD_SPEECH_RATIO = 3.5f; // speech threshold = noiseFloor × ratio
-    private static final float VAD_SPEECH_MIN = 0.006f; // abs floor for speech threshold
-    private static final int VAD_MIN_SPEECH_FRAMES = 3; // min speech frames before VAD activates
-    private static final int VAD_STOP_FRAMES = 10;   // silent frames needed to stop
-    private static final float VAD_NOISE_ALPHA = 0.15f; // ema weight for noise floor update
+    // RMS-based VAD constants used as a fallback when the StreamingVad model
+    // isn't installed. End-of-speech is declared after VAD_STOP_FRAMES of RMS
+    // below `noiseFloor * VAD_SPEECH_RATIO` (with VAD_SPEECH_MIN as an absolute
+    // floor so a perfectly quiet mic doesn't get stuck open).
+    private static final int VAD_NOISE_FRAMES = 8;
+    private static final float VAD_SPEECH_RATIO = 3.5f;
+    private static final float VAD_SPEECH_MIN = 0.006f;
+    private static final int VAD_MIN_SPEECH_FRAMES = 3;
+    private static final int VAD_STOP_FRAMES = 10;
+    private static final float VAD_NOISE_ALPHA = 0.15f;
 
     private static final long ML_VAD_END_SILENCE_MS = 1_000L;
 
@@ -164,11 +167,9 @@ public class VoiceAssistantManager {
 
     private void onWakeDetected() {
         if (!enabled || state != State.IDLE) return;
-        Log.i(TAG, "wake detected... starting session");
+        Log.i(TAG, "wake detected, starting session");
         if (wakeDetector != null) wakeDetector.stop();
-        mainHandler.post(() -> {
-            mScreenSaverManager.stopScreenSaver();
-        });
+        mainHandler.post(() -> mScreenSaverManager.stopScreenSaver());
         if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) tonePlayer.playWake();
         if (enabled && state == State.IDLE) trigger();
     }
@@ -184,7 +185,7 @@ public class VoiceAssistantManager {
             @Override public void onConnected() {}
 
             @Override public void onAuthOk() {
-                Log.i(TAG, "authenticated... ready");
+                Log.i(TAG, "authenticated, ready");
                 reconnectDelaySec.set(5);
                 state = State.IDLE;
                 broadcastState(state);
@@ -271,7 +272,9 @@ public class VoiceAssistantManager {
         broadcastState(State.IDLE);
         mainHandler.postDelayed(() -> broadcastText(""), 3_000);
         final WakeWordDetector detSnapshot = wakeDetector;
-        if (detSnapshot != null) { // delay (could also be fixed by just sending clear spectogram into model instead of reusing old one)
+        if (detSnapshot != null) {
+            // Restart the detector after a short delay so leftover spectrogram state
+            // from this session doesn't immediately re-trigger the wake word.
             scheduler.schedule(() -> {
                 if (enabled && state == State.IDLE
                         && mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
@@ -386,7 +389,9 @@ public class VoiceAssistantManager {
                                 }
                                 break;
                             }
-                            // track rms frames so fallback silentcounter stays meaningful as sanity check
+                            // Track RMS frames as a sanity-check signal even when the
+                            // ML VAD is driving end-of-speech, so the fallback counters
+                            // stay meaningful if we ever flip back to RMS-only mode.
                             if (rms < speechThreshold) speechFrames = 0;
                             else speechFrames++;
                         } else {
@@ -461,7 +466,7 @@ public class VoiceAssistantManager {
         state = State.DISABLED;
         mainHandler.post(this::releaseTtsPlayer);
         if (wakeDetector != null) {
-            wakeDetector.stopAndWait(); // should be safe here
+            wakeDetector.stopAndWait();
             wakeDetector.onDestroy();
             wakeDetector = null;
         }

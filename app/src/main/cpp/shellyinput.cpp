@@ -45,7 +45,7 @@ static void* monitorLoop(void* arg) {
             ssize_t n = read(pfds[i].fd, &ev, sizeof(ev));
             if (n != (ssize_t)sizeof(ev)) continue;
             if (ev.type != EV_KEY) continue;
-            // ev.value: 0=UP, 1=DOWN, 2=REPEAT
+            // ev.value: 0=UP, 1=DOWN, 2=REPEAT (matches Android KeyEvent action values)
             env->CallVoidMethod(args->callback, args->method,
                                 (jint)ev.code, (jint)ev.value, (jint)0);
         }
@@ -62,7 +62,7 @@ extern "C" JNIEXPORT void JNICALL
 Java_me_rapierxbox_shellyelevatev2_helper_InputMonitor_nativeStart(
         JNIEnv* env, jobject /*thiz*/, jobject callback, jobjectArray paths) {
 
-    // stop any previous monitor
+    // Stop any previous monitor before starting a new one.
     g_running = false;
     if (g_thread) {
         pthread_join(g_thread, nullptr);

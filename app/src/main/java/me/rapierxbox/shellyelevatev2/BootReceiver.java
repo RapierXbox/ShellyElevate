@@ -24,10 +24,8 @@ public class BootReceiver extends BroadcastReceiver {
         if (Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
             Log.i("BootReceiver", "Starting... (If not already started)");
 
-            // Start KioskService as foreground service
             ServiceHelper.ensureKioskService(context);
 
-            // Decide whether to start MainActivity
             SharedPreferences prefs = context.getSharedPreferences(SHARED_PREFERENCES_NAME, Context.MODE_PRIVATE);
             boolean liteMode = prefs.getBoolean(SP_LITE_MODE, false);
 

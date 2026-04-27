@@ -20,10 +20,10 @@ public class MediaHelper {
     private MediaPlayer mediaPlayerEffects;
     private MediaPlayer mediaPlayerMusic;
     private final AudioManager audioManager;
-    private boolean enabled = true; // flag to control audio
+    private boolean enabled = true;
 
     public MediaHelper() {
-        this.enabled = mSharedPreferences.getBoolean(Constants.SP_MEDIA_ENABLED, false); // default false
+        this.enabled = mSharedPreferences.getBoolean(Constants.SP_MEDIA_ENABLED, false);
 
         audioManager = (AudioManager) mApplicationContext.getSystemService(Context.AUDIO_SERVICE);
 

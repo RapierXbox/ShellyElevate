@@ -2,15 +2,15 @@ package me.rapierxbox.shellyelevatev2.voice;
 
 import android.util.Log;
 
-// java side bridge to the jni tflm microfrontend
-// not thread safe
+// Java-side bridge to the JNI TFLM microfrontend. Not thread-safe; one instance
+// per audio capture thread.
 public final class NativeMelExtractor {
     private static final String TAG = "NativeMelExtractor";
 
     public static final int N_MELS = 40;
     public static final int SAMPLE_RATE = 16000;
-    public static final int HOP_SAMPLES = 160; // 10ms step
-    // upper bound of the float feature range emiited by forntend
+    public static final int HOP_SAMPLES = 160; // 10 ms step at 16 kHz
+    /** Upper bound of the float feature range emitted by the frontend. */
     public static final float OUT_MAX = 26.0f;
 
     private static boolean sLibraryLoaded;
@@ -38,7 +38,8 @@ public final class NativeMelExtractor {
         if (!sLibraryAvailable) throw new IllegalStateException("native mel frontend not loaded");
         handle = nativeCreate();
         if (handle == 0L) throw new IllegalStateException("nativeCreate failed");
-        // worst case: ceil(maxChunkBytes/2 / HOP_SAMPLES) +1 feature rows per feed
+        // Upper bound on feature rows per feed(): ceil(samples / HOP_SAMPLES) + 1
+        // for partial windows still in the ringbuffer.
         int maxSamples = maxChunkBytes / 2;
         maxFeatureRows = (maxSamples / HOP_SAMPLES) + 2;
         outScratch = new byte[maxFeatureRows * N_MELS];

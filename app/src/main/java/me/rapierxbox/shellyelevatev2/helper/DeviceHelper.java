@@ -61,10 +61,8 @@ public class DeviceHelper {
     }
 
     public void setScreenOn(boolean on) {
+        // ScreenManager owns the brightness target; just track the boolean here.
         screenOn = on;
-
-        // Don't write brightness here; let ScreenManager control it via updateBrightness()
-        // Avoid redundant writes and let the brightness manager decide the target
     }
 
     public boolean getScreenOn() {
@@ -72,7 +70,6 @@ public class DeviceHelper {
     }
 
     public void setScreenBrightness(int brightness) {
-        // Skip redundant writes to avoid duplicate logs and I/O
         if (lastScreenBrightness == brightness) return;
 
         lastScreenBrightness = brightness;
@@ -89,9 +86,9 @@ public class DeviceHelper {
         brightness = Math.max(0, Math.min(brightness, 255));
         if (BuildConfig.DEBUG) Log.d(TAG, "Set brightness to: " + brightness);
 
-        // Check for WRITE_SETTINGS permission (requested in MainActivity.onCreate)
-        // Note: SELinux denials for sysfs access (avc: denied { write } for name="brightness")
-        // are expected and work in permissive mode on rooted Shelly devices
+        // SELinux denials for the sysfs write are expected and harmless on rooted
+        // Shelly devices running permissive mode. WRITE_SETTINGS is requested in
+        // MainActivity.onCreate so we can disable Android's automatic brightness.
         if (!Settings.System.canWrite(mApplicationContext)) {
             Log.i(TAG, "Please disable androids automatic brightness or give the app the change settings permission.");
         } else {
@@ -132,13 +129,13 @@ public class DeviceHelper {
         if (scripts == null || num >= scripts.length) return;
         String scriptName = scripts[num];
         try {
-            // write desired state to a property the init script reads... then pulse the service
+            // Newer models expose relays via init.rc scripts: write the desired state to
+            // a system property and pulse `ctl.start` to run the script.
             Class<?> sp = Class.forName("android.os.SystemProperties");
             java.lang.reflect.Method set = sp.getMethod("set", String.class, String.class);
             set.invoke(null, "shelly.relay." + num + ".state", state ? "1" : "0");
             set.invoke(null, "ctl.start", scriptName);
         } catch (Exception e) {
-            // system property access failed... fall back to sysfs
             Log.w(TAG, "Init relay failed for " + scriptName + ", falling back to sysfs: " + e.getMessage());
             writeFileContent(getRelayFile(num), state ? "1" : "0");
         }
@@ -253,7 +250,7 @@ public class DeviceHelper {
 
     private static String sanitizeString(String input) {
         if (input == null) return "";
-        return input.replaceAll("[^0-9]", ""); // keep only digits
+        return input.replaceAll("[^0-9]", "");
     }
 
     private static void writeFileContent(String filePath, String content) {

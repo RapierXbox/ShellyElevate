@@ -275,12 +275,9 @@ public class HttpServer extends NanoHTTPD {
                 Map<String, String> files = new HashMap<>();
                 Map<String, List<String>> params = new HashMap<>();
                 try {
-                    /* cannot be called multiple times;
-                       session.parseBody() reads the POST request's body and calls HTTPSession's decodeParms() method,
-                       which sets the queryParameterString and parms field values to the POST's body */
+                    // parseBody() must be called before getParameters() to populate the
+                    // POST body into NanoHTTPD's params map; it cannot be called twice.
                     session.parseBody(files);
-
-                    //params.putAll(session.getParms()); getParams() is deprecated!
                     params.putAll(session.getParameters());
                 } catch (IOException | ResponseException e) {
                     Log.e(TAG, "Invalid parameters", e);
@@ -291,14 +288,13 @@ public class HttpServer extends NanoHTTPD {
                     jsonResponse.put("success", true);
                     jsonResponse.put("state", mDeviceHelper.getRelay(num));
                 } else if (method.equals(Method.POST)) {
-                    // get the POST body { "state", "true" }
                     String postData = files.get("postData");
                     assert postData != null;
                     JSONObject jsonObject = new JSONObject(postData);
 
                     int num = GetNumParameter(params, -1);
                     if (num == -999) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
-                    // num as json body
+                    // Fall back to the JSON body when ?num= isn't provided.
                     if (num == -1 && jsonObject.getInt("num")>=0)
                         num = jsonObject.getInt("num");
 
@@ -434,18 +430,15 @@ public class HttpServer extends NanoHTTPD {
                 jsonResponse.put("success", false);
                 if (method.equals(Method.GET)) {
                     try {
-                        // Execute 'free -m' to get memory info in mebibyte MiB
                         Process process = Runtime.getRuntime().exec("free -m");
                         BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
                         String line;
                         while ((line = reader.readLine()) != null) {
-                            /* free -m: (column "available" doesn't exist at Android)
-                                       total        used        free      shared     buffers
-                                Mem:     959         917          41           1          29
-                            */
+                            // Android's `free -m` lacks the "available" column, so we read
+                            // "free" (token[3]) instead of the more accurate "available".
+                            //   Mem:  total  used  free  shared  buffers
                             if (line.startsWith("Mem:")) {
-                                // Split by whitespace; \\s+ handles multiple spaces
                                 String[] tokens = line.split("\\s+");
                                 if (tokens.length >= 4) {
                                     try {
@@ -489,18 +482,15 @@ public class HttpServer extends NanoHTTPD {
         return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
     private static int GetNumParameter(Map<String, List<String>> params, int defaultValue) {
-        // Get the value of num
         List<String> numParam = params.get("num");
         if (!(numParam == null) && !numParam.isEmpty()) {
             try {
-                // first element of the list is the value
                 return Integer.parseInt(numParam.get(0));
             } catch (NumberFormatException e) {
-                // handle invalid number
                 return -999;
             }
         }
-        return defaultValue; // Default
+        return defaultValue;
     }
 
     public void onDestroy() {

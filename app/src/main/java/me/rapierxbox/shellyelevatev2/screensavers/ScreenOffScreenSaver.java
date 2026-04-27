@@ -10,17 +10,18 @@ import android.os.Looper;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+// Posts the broadcasts via the main Looper so the saver can return immediately;
+// LocalBroadcastManager.sendBroadcast can otherwise dispatch synchronously to
+// receivers on the calling thread.
 public class ScreenOffScreenSaver extends ScreenSaver {
     @Override
     public void onStart(Context context) {
-        // Defer broadcast to avoid blocking saver start
         new Handler(Looper.getMainLooper()).post(() ->
             LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent(INTENT_TURN_SCREEN_OFF)));
     }
 
     @Override
     public void onEnd(Context context) {
-        // Defer broadcast to avoid blocking saver stop
         new Handler(Looper.getMainLooper()).post(() ->
             LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent(INTENT_TURN_SCREEN_ON)));
     }

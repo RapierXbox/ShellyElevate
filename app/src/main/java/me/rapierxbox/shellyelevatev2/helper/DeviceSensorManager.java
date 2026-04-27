@@ -79,7 +79,8 @@ public class DeviceSensorManager implements SensorEventListener {
             Log.i(TAG, "SensorManager proximity sensor registered (max range " + fallbackProximityMaxRange + ")");
         }
 
-        // prefer native jni monitor when available... then getevent process... then SensorManager
+        // Preference order for proximity input: native JNI monitor, `getevent` fallback,
+        // then SensorManager. The two gpio_keys paths emit KEY_F5/KEY_F6 events.
         if (inputEventPaths.length > 0 && InputMonitor.isAvailable()) {
             usingGpioKeysProximity = startNativeInputMonitor();
         }
@@ -146,7 +147,6 @@ public class DeviceSensorManager implements SensorEventListener {
                 lastLuxBroadcastAtMs = now;
             }
         } else if (event.sensor.getType() == Sensor.TYPE_PROXIMITY && !usingGpioKeysProximity) {
-            // Handle proximity from SensorManager only if not using gpio_keys
             lastMeasuredDistance = event.values[0];
             publishProximity(lastMeasuredDistance);
         }
@@ -179,7 +179,7 @@ public class DeviceSensorManager implements SensorEventListener {
 
     private boolean startProximityKeyFallback() {
         if (inputEventPaths.length == 0) return false;
-        // use the first existing path for the getevent fallback
+        // `getevent` only takes one node; use the first that exists.
         String firstPath = null;
         for (String p : inputEventPaths) {
             if (new File(p).exists()) { firstPath = p; break; }
@@ -217,9 +217,9 @@ public class DeviceSensorManager implements SensorEventListener {
                 process.destroy();
             }
             proximityFallbackProcess = null;
-            // Clear gpio flags regardless of how the reader terminated (IOException, EOF, or
-            // non-zero exit). If a SensorManager proximity sensor was registered earlier it will
-            // automatically take over because onSensorChanged gates on !usingGpioKeysProximity.
+            // If the reader dies (EOF, IOException, non-zero exit), let
+            // SensorManager's proximity sensor take over by clearing the gpio
+            // flag; onSensorChanged gates on !usingGpioKeysProximity.
             if (usingGpioKeysProximity) {
                 usingGpioKeysProximity = false;
                 applyProximityFallback();
@@ -238,6 +238,10 @@ public class DeviceSensorManager implements SensorEventListener {
         }
     }
 
+    // Parses one line of `getevent -l` output, e.g.
+    //   "/dev/input/event3: EV_KEY KEY_F5 DOWN"
+    // We only care about the press edge; UP events come paired and would just
+    // toggle the value back.
     private void handleProximityKeyLine(String line) {
         String normalized = line.toUpperCase(Locale.US);
         if (!normalized.contains(" DOWN")) {
@@ -266,7 +270,6 @@ public class DeviceSensorManager implements SensorEventListener {
 
     @Override
     public void onAccuracyChanged(Sensor sensor, int accuracy) {
-        // Ignore
     }
 
     public void onDestroy() {

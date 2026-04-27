@@ -33,8 +33,10 @@ public class StreamingVad {
     private final int positiveOutputIdx;
     private final float threshold;
 
-    private final ByteBuffer inputBufferByte; // int8 fast path
-    private final ByteBuffer outputBufferByte; // int8 output
+    // Either the int8 buffers or the float[] tensors are populated, never both;
+    // which set is in use depends on the VAD model's declared input dtype.
+    private final ByteBuffer inputBufferByte;
+    private final ByteBuffer outputBufferByte;
     private final float[][][] input3dFloat;
     private final float[][][][] input4dFloat;
     private final float[][] outputBufFloat;
@@ -104,7 +106,7 @@ public class StreamingVad {
                 if (out8) outBuf = ByteBuffer.allocateDirect(outCols).order(ByteOrder.nativeOrder());
                 else      of = new float[1][outCols];
 
-                // parse companion json for threshold + window; fallbacks are the v2 defaults
+                // Companion JSON tunes threshold and window size; defaults match mWW v2.
                 File jsonFile = new File(new File(context.getFilesDir(), "wakewords"), VAD_MODEL_NAME + ".json");
                 if (jsonFile.exists()) {
                     try {
@@ -161,7 +163,8 @@ public class StreamingVad {
 
     public boolean hasModel() { return hasModel; }
 
-    // permissive when no model
+    /** When no model is installed we report speech as always active so callers
+     *  fall back to RMS-based VAD instead of cutting off legitimate audio. */
     public boolean isSpeechActive() { return !hasModel || speechActive; }
 
     public boolean everActive() { return !hasModel || everActive; }

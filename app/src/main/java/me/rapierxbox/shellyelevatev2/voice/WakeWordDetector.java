@@ -37,17 +37,19 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-// should be compatible with all microwakeword models... only tested with ok nabo
-// model goes winto filedir/wakewords/name.tflite including json
-// input shape should be [1, N, 40] op [1, N, 40, 1] f32 or i8
-// output is [1, 1] or [1, N-classes] scores in [0, 1] f32 or i8
+// Generic microWakeWord runner. Should accept any model that follows the mWW
+// tensor layout, though only "okay nabu" is exercised in CI.
+//
+// Models live in <filesDir>/wakewords/<name>.tflite plus an optional <name>.json.
+// Expected input  shape: [1, N, 40] or [1, N, 40, 1], dtype f32 or i8.
+// Expected output shape: [1, 1] or [1, num_classes], scores in [0, 1], dtype f32 or i8.
 public class WakeWordDetector {
     private static final String TAG = "WakeWordDetector";
 
     private static final int SAMPLE_RATE = NativeMelExtractor.SAMPLE_RATE;
     private static final int CHANNEL_CFG = AudioFormat.CHANNEL_IN_MONO;
     private static final int AUDIO_FMT = AudioFormat.ENCODING_PCM_16BIT;
-    private static final int CHUNK_BYTES = NativeMelExtractor.HOP_SAMPLES * 2 * 10; // 100ms = 10 mel hops
+    private static final int CHUNK_BYTES = NativeMelExtractor.HOP_SAMPLES * 2 * 10; // 100 ms = 10 mel hops
     private volatile float scoreThreshold = 0.5f;
     private volatile long cooldownMs = 5_000L;
     private volatile boolean scoreBroadcastEnabled = false;
@@ -72,7 +74,8 @@ public class WakeWordDetector {
 
     private volatile ModelStatus modelStatus = ModelStatus.NOT_LOADED;
     private Interpreter tflite;
-    private File modelFile; // remembered so we can rebuild the interpreter on start
+    // Remembered so we can rebuild the interpreter on start(); see listenLoop().
+    private File modelFile;
     private int nFrames;
     private boolean hasChannelDim;
     private float[][][] input3d;
@@ -93,16 +96,16 @@ public class WakeWordDetector {
     private float[][] frameRing;
     private int frameRingPos = 0;
     private int framesCollected = 0;
-    private int newFramesSinceInfer = 0; // new frames since last infer call
+    private int newFramesSinceInfer = 0;
     private volatile long lastTriggerAt = 0L;
 
 
-    // v2 json conf
+    // Loaded from the companion JSON if present; otherwise mWW v2 defaults.
     private float baseThreshold = 0.5f;
     private int slidingWindowSize = 10;
     private int positiveOutputIdx = 0;
 
-    // sliding window
+    // Score-smoothing window matching the mWW reference implementation.
     private float[] scoreWindow;
     private int scoreWindowPos = 0;
     private float scoreWindowSum = 0f;
@@ -187,7 +190,6 @@ public class WakeWordDetector {
             frameRing    = new float[nFrames][NativeMelExtractor.N_MELS];
             frameRingPos = 0; framesCollected = 0;
 
-            // detect tensor data types
             org.tensorflow.lite.DataType inType = tflite.getInputTensor(0).dataType();
             org.tensorflow.lite.DataType outType = tflite.getOutputTensor(0).dataType();
             inputIs8bit = inType == org.tensorflow.lite.DataType.INT8 || inType == org.tensorflow.lite.DataType.UINT8;
@@ -198,9 +200,9 @@ public class WakeWordDetector {
             inputZeroPoint = inputIs8bit ? tflite.getInputTensor(0).quantizationParams().getZeroPoint() : 0;
             outputScale = outputIs8bit ? tflite.getOutputTensor(0).quantizationParams().getScale(): 1f;
             outputZeroPoint = outputIs8bit ? tflite.getOutputTensor(0).quantizationParams().getZeroPoint() : 0;
-            // some models ship without in quant parmams
-            // val/of = inf -> rnd and maxint -> 127
-            // fallback to mWW v2 mapping
+            // Some models ship without input quantisation params (scale=0). Without
+            // a fallback, val/scale is inf and the result rounds to 127 for every
+            // bin. Use the mWW v2 mapping (zp=-128, scale = OUT_MAX / 255).
             if (inputIs8bit && inputScale == 0f) {
                 inputScale = NativeMelExtractor.OUT_MAX / 255f;
                 inputZeroPoint = -128;
@@ -225,7 +227,6 @@ public class WakeWordDetector {
                 outputBufferByte = null;
             }
 
-            // load v2 json
             loadJsonConfig(modelName.trim(), outCols);
 
             effectiveWinSize = slidingWindowSize;
@@ -398,7 +399,7 @@ public class WakeWordDetector {
             }
             JSONObject json = new JSONObject(sb.toString());
 
-            // tatertotterson models nest confog under micro... esphome models are flat
+            // TaterTotterson models nest config under "micro"; ESPHome models are flat.
             JSONObject cfg = json.has("micro") ? json.getJSONObject("micro") : json;
 
             if (cfg.has("sliding_window_size"))
@@ -408,10 +409,11 @@ public class WakeWordDetector {
 
             if (cfg.has("probability_cutoff")) {
                 baseThreshold = (float) cfg.getDouble("probability_cutoff");
-                scoreThreshold = baseThreshold; // will be overridden by setSensitivity if called
+                scoreThreshold = baseThreshold;
             }
 
-            // resolve idx for positive class (official format only... tate uses index 0)
+            // Resolve the positive-class index from class_mapping. TaterTotterson
+            // models lack the mapping and effectively use index 0.
             if (json.has("class_mapping") && json.has("positive_output_class")) {
                 String posClass = json.getString("positive_output_class");
                 JSONObject mapping = json.getJSONObject("class_mapping");
@@ -433,7 +435,12 @@ public class WakeWordDetector {
 
     public ModelStatus getModelStatus() { return modelStatus; }
     public String getModelDirectory()   { return new File(context.getFilesDir(), "wakewords").getAbsolutePath(); }
-    // 50 = default; 100 = defalt - 0.4 and vice versa
+
+    /**
+     * Map a 0..100 user-facing slider onto the score threshold around the
+     * model's published cutoff: 50 = baseThreshold, 100 = baseThreshold - 0.4
+     * (more sensitive), 0 = baseThreshold + 0.4 (less sensitive).
+     */
     public void setSensitivity(int sensitivity) {
         float delta = (50 - sensitivity) / 100f * 0.8f;
         scoreThreshold = Math.max(0.01f, Math.min(0.99f, baseThreshold + delta));
@@ -449,7 +456,7 @@ public class WakeWordDetector {
 
     public void start() {
         if (modelStatus != ModelStatus.LOADED) {
-            Log.w(TAG, "cant start: model not loaded (" + modelStatus + ")"); return;
+            Log.w(TAG, "can't start: model not loaded (" + modelStatus + ")"); return;
         }
         if (running.getAndSet(true)) return;
         shutdownLatch = new CountDownLatch(1);
@@ -457,10 +464,11 @@ public class WakeWordDetector {
         Log.i(TAG, "detector started");
     }
 
+    /** Blocks until the mic is released or SHUTDOWN_TIMEOUT_MS elapses. */
     public boolean stopAndWait() {
         if (!running.getAndSet(false)) return true;
         Log.i(TAG, "detector stopping (waiting for mic release)");
-        // unblock in progress recorder.read()
+        // recorder.stop() is required to unblock a pending read() on the loop.
         AudioRecord r = activeRecorder.get();
         if (r != null) { try { r.stop(); } catch (Exception ignored) {} }
         try {
@@ -473,7 +481,7 @@ public class WakeWordDetector {
         return false;
     }
 
-    // nonblocking
+    /** Non-blocking variant; the listen loop unwinds on the executor thread. */
     public void stop() {
         if (!running.getAndSet(false)) return;
         Log.i(TAG, "detector stopping (non blocking)");
@@ -516,9 +524,9 @@ public class WakeWordDetector {
             activeRecorder.set(recorder);
             recorder.startRecording();
             // resetVariableTensors() is unreliable for converted v2 streaming graphs:
-            // some models keep accumulating LSTM state across stop/start and gradually
-            // drift the score upward on pure silence until they false-fire.
-            // rebuilding the interpreter from the file guarantees fresh variable state.
+            // some models accumulate LSTM state across stop/start and gradually drift
+            // the score upward on pure silence until they false-fire. Rebuilding the
+            // interpreter from the file guarantees fresh variable state.
             if (modelFile != null) {
                 try {
                     if (tflite != null) { tflite.close(); tflite = null; }
@@ -590,14 +598,15 @@ public class WakeWordDetector {
             wakeIgnoreWindows = Math.min(wakeIgnoreWindows + 1, 0);
         }
 
-        // copy into ring (mel is a reused buffer)
+        // melFrame is reused by the extractor, so copy into our ring buffer.
         System.arraycopy(melFrame, 0, frameRing[frameRingPos % nFrames], 0, NativeMelExtractor.N_MELS);
         frameRingPos++;
         framesCollected++;
         newFramesSinceInfer++;
 
-        // esphome fills full stride size input sensor then invoces once
-        // running every frame with overlapping windows corrupts ltsm state for nframes > 1
+        // ESPHome fills a full stride-sized input then invokes once. Running on
+        // every incoming frame with overlapping windows corrupts the LSTM state
+        // for any model with nFrames > 1, so we mirror that batching here.
         if (framesCollected < nFrames || newFramesSinceInfer < nFrames) return;
         newFramesSinceInfer = 0;
 
@@ -639,14 +648,15 @@ public class WakeWordDetector {
 
     private void scoreAndMaybeDetect() {
         float rawScore;
-        int rawByte = -1; // for diag
+        int rawByte = -1;
         if (outputIs8bit) {
             int idx = Math.min(positiveOutputIdx, outputCols - 1);
             byte b = outputBufferByte.get(idx);
             float scale = outputScale;
             int zp = outputZeroPoint;
             if (scale == 0f) {
-                // No quant params — assume unsigned probability byte: [0,255] → [0,1]
+                // No quant params: assume the byte is an unsigned probability
+                // ([0, 255] -> [0, 1]).
                 scale = 1f / 255f;
                 rawByte = b & 0xFF;
                 zp = 0;
@@ -799,12 +809,13 @@ public class WakeWordDetector {
         vadDetected = avg >= vadThreshold;
     }
 
-    // Maps our [0, OUT_MAX] mel float -> INT8/UINT8, bypassing the mode's inputScale.
-    // Training pipelines differ: okay_nabu uses float [0,26] features (scale≈0.102),
-    // TaterTotterson uses uint16 [0,666] features (scale~=2.61). Both represent the same
-    // signal... just a 25.6× linear rescaling. By mapping directly to the full INT8 range
-    // using only the zero-point, we produce identical quantized values regardless of which
-    // float scale the model was trained on.
+    // Map our [0, OUT_MAX] mel float to INT8/UINT8 while ignoring the model's
+    // declared inputScale. Training pipelines disagree on the scale:
+    //   okay_nabu      uses float [0, 26]   features (scale ~= 0.102)
+    //   TaterTotterson uses uint16 [0, 666] features (scale ~= 2.61)
+    // Both represent the same signal up to a 25.6x linear rescale. Mapping
+    // directly to the full INT8 range using only the zero-point produces
+    // identical quantized values regardless of which scale the model expects.
     private static byte quantizeMel(float val, int zeroPoint, boolean unsigned) {
         float range = unsigned ? 255f : (127f - zeroPoint);
         int q = Math.round(val * range / NativeMelExtractor.OUT_MAX) + zeroPoint;

@@ -1,7 +1,6 @@
-// jni wrapper exposing the tflm microfrontend feature extractor to java
-// matches the parameters used by esphome mww component so should be bit exact
-
-// java side own a single long handle... native side keeps per instance frontendconf frontendstate pairs
+// JNI wrapper around the TFLM microfrontend feature extractor.
+// Parameters mirror ESPHome's micro_wake_word component so output is bit-exact.
+// Java holds one long handle per instance; native side owns the FrontendConfig/State pair.
 #include <jni.h>
 #include <android/log.h>
 #include <cstdint>
@@ -18,7 +17,7 @@ extern "C" {
 
 namespace {
 
-// should mirror esphome/components/micro_wake_word/preprocessor_settings.h
+// Mirrors esphome/components/micro_wake_word/preprocessor_settings.h
 constexpr uint8_t PREPROCESSOR_FEATURE_SIZE = 40;
 constexpr uint8_t FEATURE_DURATION_MS = 30;
 constexpr uint8_t FEATURE_STEP_MS = 10;
@@ -93,9 +92,9 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeReset(
     FrontendReset(&inst->state);
 }
 
-// feeds pcm16 little endian bytes to frontend
-// for each 10ms step of samples available, push one row of 40 int8 quant features into outInt9Buffer
-// int8 = clamp((uint16_value * 256 + 333) / 666 - 128, -128, 127) (matches esphome)
+// Feeds little-endian PCM16 bytes into the frontend. For each 10 ms step, writes one
+// row of 40 int8 quantised features to outInt8Buffer. Quantisation matches ESPHome:
+//   int8 = clamp((uint16_value * 256 + 333) / 666 - 128, -128, 127)
 extern "C" JNIEXPORT jint JNICALL
 Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedInt8(
         JNIEnv* env, jclass /*clazz*/, jlong handle,
@@ -107,12 +106,13 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedInt8(
     if (pcmByteLen <= 0 || (pcmByteLen & 1) != 0) return 0;
     const jsize sample_count = pcmByteLen / 2;
 
-    // copy pcm bytes into transient int16 buf. getbytearrayelements could avoid a copy for big arrays but getprimitivearraycritical with stack/heap int16 is simpler beacuse we need to reinterpret ayways
+    // Copy into a transient int16 buffer; we need reinterpretation anyway, so a heap
+    // vector is simpler than juggling GetByteArrayElements.
     std::vector<int16_t> samples(sample_count);
     env->GetByteArrayRegion(pcm, 0, pcmByteLen,
                             reinterpret_cast<jbyte*>(samples.data()));
 
-    // work directly on locked cricital pointer into the output byte array. the region writes happen in bulk at the end so we can release the ptr without holding it acress the jni bound
+    // Bulk-write into the output array under a critical region; released before returning.
     jbyte* out_ptr = static_cast<jbyte*>(env->GetPrimitiveArrayCritical(outInt8Buffer, nullptr));
     if (!out_ptr) return -1;
 
@@ -129,7 +129,6 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedInt8(
         if (out.size == 0 || out.values == nullptr) break;
 
         if ((rows_written + 1) * static_cast<int>(out.size) > outCapacityBytes) {
-            // out buffer full. caller should habe sized it correctly
             __android_log_print(ANDROID_LOG_WARN, TAG, "feature out buffer overflow: rows=%d size=%zu cap=%d",
                                 rows_written, out.size, outCapacityBytes);
             break;
@@ -151,7 +150,8 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedInt8(
     return rows_written;
 }
 
-// variant that writes raw uint16 features into a short[] output for callers that need pre quant values (not used but for diag im,portant)
+// Variant that writes raw uint16 features into a short[] output. Not used by the
+// detector; kept for diagnostics that need pre-quantisation values.
 extern "C" JNIEXPORT jint JNICALL
 Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedUint16(
         JNIEnv* env, jclass /*clazz*/, jlong handle,
