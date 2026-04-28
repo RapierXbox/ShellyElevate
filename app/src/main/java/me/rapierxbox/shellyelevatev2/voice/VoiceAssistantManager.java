@@ -32,28 +32,34 @@ import java.util.concurrent.atomic.AtomicInteger;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import okhttp3.OkHttpClient;
 
-// state machine: diabled -> idle -> listening -> processing -> speaking -> idle
+// State machine: DISABLED -> IDLE -> LISTENING -> PROCESSING -> SPEAKING -> IDLE.
 public class VoiceAssistantManager {
     private static final String TAG = "VoiceAssistant";
 
     private static final int SAMPLE_RATE = 16000;
     private static final int CHANNEL_CFG = AudioFormat.CHANNEL_IN_MONO;
     private static final int AUDIO_FMT = AudioFormat.ENCODING_PCM_16BIT;
-    private static final int CHUNK_BYTES = 3200; // 100ms at 16khz 16bit
+    private static final int CHUNK_BYTES = 3200; // 100 ms at 16 kHz / 16-bit / mono
 
-    // vad parameters
-    private static final int VAD_NOISE_FRAMES = 8;    // noisefloor gets measured for baseline
-    private static final float VAD_SPEECH_RATIO = 3.5f; // speech threshold = noiseFloor × ratio
-    private static final float VAD_SPEECH_MIN = 0.006f; // abs floor for speech threshold
-    private static final int VAD_MIN_SPEECH_FRAMES = 3; // min speech frames before VAD activates
-    private static final int VAD_STOP_FRAMES = 10;   // silent frames needed to stop
-    private static final float VAD_NOISE_ALPHA = 0.15f; // ema weight for noise floor update
+    // RMS-based VAD constants used as a fallback when the StreamingVad model
+    // isn't installed. End-of-speech is declared after VAD_STOP_FRAMES of RMS
+    // below `noiseFloor * VAD_SPEECH_RATIO` (with VAD_SPEECH_MIN as an absolute
+    // floor so a perfectly quiet mic doesn't get stuck open).
+    private static final int VAD_NOISE_FRAMES = 8;
+    private static final float VAD_SPEECH_RATIO = 3.5f;
+    private static final float VAD_SPEECH_MIN = 0.006f;
+    private static final int VAD_MIN_SPEECH_FRAMES = 3;
+    private static final int VAD_STOP_FRAMES = 10;
+    private static final float VAD_NOISE_ALPHA = 0.15f;
+
+    private static final long ML_VAD_END_SILENCE_MS = 1_000L;
 
     public enum State { DISABLED, IDLE, LISTENING, PROCESSING, SPEAKING }
 
     private volatile State state = State.DISABLED;
     private volatile boolean enabled = false;
     private volatile boolean manuallyDisabled = false;
+    private volatile boolean muted = false;
     private final AtomicInteger reconnectDelaySec = new AtomicInteger(5);
 
     private final OkHttpClient okHttpClient;
@@ -84,6 +90,7 @@ public class VoiceAssistantManager {
         LocalBroadcastManager.getInstance(mApplicationContext)
                 .registerReceiver(settingsReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
 
+        muted = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_MUTED, false);
         checkAndApplySettings();
     }
 
@@ -107,10 +114,16 @@ public class VoiceAssistantManager {
         }
     }
 
+    public void invalidateLoadedModel() {
+        loadedModelName = "";
+        LocalBroadcastManager.getInstance(mApplicationContext)
+                .sendBroadcast(new Intent(INTENT_SETTINGS_CHANGED));
+    }
+
     private void applyWakeDetectorSettings() {
         boolean wakeEnabled = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true);
 
-        if (!wakeEnabled) {
+        if (!wakeEnabled || muted) {
             if (wakeDetector != null) {
                 wakeDetector.stop(); wakeDetector.onDestroy();
                 wakeDetector = null; loadedModelName = "";
@@ -126,6 +139,7 @@ public class VoiceAssistantManager {
         }
 
         if (!modelName.equals(loadedModelName)) {
+            if (wakeDetector.isRunning()) wakeDetector.stopAndWait();
             loadedModelName = modelName;
             Log.i(TAG, "loading wake model \"" + modelName + "\" -> " + wakeDetector.loadModel(modelName));
         }
@@ -153,11 +167,9 @@ public class VoiceAssistantManager {
 
     private void onWakeDetected() {
         if (!enabled || state != State.IDLE) return;
-        Log.i(TAG, "wake detected... starting session");
+        Log.i(TAG, "wake detected, starting session");
         if (wakeDetector != null) wakeDetector.stop();
-        mainHandler.post(() -> {
-            mScreenSaverManager.stopScreenSaver();
-        });
+        mainHandler.post(() -> mScreenSaverManager.stopScreenSaver());
         if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) tonePlayer.playWake();
         if (enabled && state == State.IDLE) trigger();
     }
@@ -173,9 +185,10 @@ public class VoiceAssistantManager {
             @Override public void onConnected() {}
 
             @Override public void onAuthOk() {
-                Log.i(TAG, "authenticated... ready");
+                Log.i(TAG, "authenticated, ready");
                 reconnectDelaySec.set(5);
                 state = State.IDLE;
+                broadcastState(state);
                 applyWakeDetectorSettings();
             }
 
@@ -196,7 +209,7 @@ public class VoiceAssistantManager {
             }
 
             @Override public void onTtsUrl(String url) {
-                state = State.SPEAKING; playTts(url);
+                state = State.SPEAKING; broadcastState(state); playTts(url);
             }
 
             @Override public void onPipelineEnd() {
@@ -232,6 +245,7 @@ public class VoiceAssistantManager {
 
     public void trigger() {
         if (!enabled)                              { Log.d(TAG, "trigger ignored: disabled");       return; }
+        if (muted)                                 { Log.d(TAG, "trigger ignored: muted");          return; }
         if (state != State.IDLE)                   { Log.d(TAG, "trigger ignored: state=" + state); return; }
         if (pipeline == null || !pipeline.isAuthenticated()) { Log.w(TAG, "trigger: not authenticated"); return; }
 
@@ -258,7 +272,9 @@ public class VoiceAssistantManager {
         broadcastState(State.IDLE);
         mainHandler.postDelayed(() -> broadcastText(""), 3_000);
         final WakeWordDetector detSnapshot = wakeDetector;
-        if (detSnapshot != null) { // delay (could also be fixed by just sending clear spectogram into model instead of reusing old one)
+        if (detSnapshot != null) {
+            // Restart the detector after a short delay so leftover spectrogram state
+            // from this session doesn't immediately re-trigger the wake word.
             scheduler.schedule(() -> {
                 if (enabled && state == State.IDLE
                         && mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
@@ -273,6 +289,35 @@ public class VoiceAssistantManager {
 
     public State   getState()     { return state;   }
     public boolean isEnabled()    { return enabled;  }
+    public boolean isMuted()      { return muted;    }
+
+    public String getPublishedStatus() {
+        if (muted) return VOICE_STATUS_MUTED;
+        switch (state) {
+            case LISTENING:  return VOICE_STATUS_LISTENING;
+            case PROCESSING:
+            case SPEAKING:   return VOICE_STATUS_ANSWERING;
+            default:         return VOICE_STATUS_READY;
+        }
+    }
+
+    public void setMuted(boolean mute) {
+        if (muted == mute) return;
+        muted = mute;
+        mSharedPreferences.edit().putBoolean(SP_VOICE_ASSISTANT_MUTED, mute).apply();
+        Log.i(TAG, "mute -> " + mute);
+        if (mute) {
+            stopAudioCapture();
+            if (state == State.LISTENING || state == State.PROCESSING) onSessionEnded();
+            if (wakeDetector != null) {
+                wakeDetector.stop(); wakeDetector.onDestroy();
+                wakeDetector = null; loadedModelName = "";
+            }
+        } else {
+            applyWakeDetectorSettings();
+        }
+        broadcastState(state);
+    }
 
     private void broadcastState(State s) {
         Intent intent = new Intent(INTENT_VOICE_STATE_CHANGED).putExtra(INTENT_VOICE_STATE_KEY, s.name());
@@ -307,48 +352,70 @@ public class VoiceAssistantManager {
             byte[] buf = new byte[CHUNK_BYTES];
             boolean soundEnabled = mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true);
 
+            StreamingVad mlVad = new StreamingVad(mApplicationContext);
+            final boolean mlVadActive = mlVad.hasModel();
+
             float noiseFloor = VAD_SPEECH_MIN / VAD_SPEECH_RATIO;
             int noiseFrames = 0;
             int speechFrames = 0;
             int silentFrames = 0;
             boolean speechStarted = false;
 
-            while (audioStreaming.get() && state == State.LISTENING && !speechEnded.get()) {
-                int read;
-                try { read = recorder.read(buf, 0, CHUNK_BYTES); }
-                catch (IllegalStateException e) { Log.d(TAG, "read interrupted"); break; }
+            try {
+                while (audioStreaming.get() && state == State.LISTENING && !speechEnded.get()) {
+                    int read;
+                    try { read = recorder.read(buf, 0, CHUNK_BYTES); }
+                    catch (IllegalStateException e) { Log.d(TAG, "read interrupted"); break; }
 
-                if (read > 0) {
-                    if (pipeline != null) pipeline.sendAudio(buf, read);
+                    if (read > 0) {
+                        if (pipeline != null) pipeline.sendAudio(buf, read);
 
-                    float rms = WakeWordDetector.calculateRms(buf, read);
+                        mlVad.feed(buf, read);
 
-                    // build noise floor est
-                    if (noiseFrames < VAD_NOISE_FRAMES && rms < VAD_SPEECH_MIN * 3) {
-                        noiseFloor = noiseFrames == 0 ? rms
-                                : noiseFloor * (1f - VAD_NOISE_ALPHA) + rms * VAD_NOISE_ALPHA;
-                        noiseFrames++;
-                    }
-
-                    float speechThreshold = Math.max(VAD_SPEECH_MIN, noiseFloor * VAD_SPEECH_RATIO);
-
-                    if (rms >= speechThreshold) {
-                        silentFrames = 0;
-                        if (++speechFrames >= VAD_MIN_SPEECH_FRAMES) speechStarted = true;
-                    } else {
-                        speechFrames = 0;
-                        if (speechStarted && ++silentFrames >= VAD_STOP_FRAMES) {
-                            if (BuildConfig.DEBUG) {
-                                Log.d(TAG, "local VAD: silence after speech, ending capture"
-                                        + " (floor=" + String.format("%.4f", noiseFloor)
-                                        + " thr=" + String.format("%.4f", speechThreshold) + ")");
-                            }
-                            break;
+                        float rms = WakeWordDetector.calculateRms(buf, read);
+                        if (noiseFrames < VAD_NOISE_FRAMES && rms < VAD_SPEECH_MIN * 3) {
+                            noiseFloor = noiseFrames == 0 ? rms
+                                    : noiseFloor * (1f - VAD_NOISE_ALPHA) + rms * VAD_NOISE_ALPHA;
+                            noiseFrames++;
                         }
+                        float speechThreshold = Math.max(VAD_SPEECH_MIN, noiseFloor * VAD_SPEECH_RATIO);
+
+                        if (mlVadActive) {
+                            if (mlVad.everActive()) speechStarted = true;
+                            long silentMs = mlVad.silenceMsSinceSpeech();
+                            if (speechStarted && silentMs >= ML_VAD_END_SILENCE_MS) {
+                                if (BuildConfig.DEBUG) {
+                                    Log.d(TAG, "ML VAD: silence after speech (" + silentMs + "ms), ending capture");
+                                }
+                                break;
+                            }
+                            // Track RMS frames as a sanity-check signal even when the
+                            // ML VAD is driving end-of-speech, so the fallback counters
+                            // stay meaningful if we ever flip back to RMS-only mode.
+                            if (rms < speechThreshold) speechFrames = 0;
+                            else speechFrames++;
+                        } else {
+                            if (rms >= speechThreshold) {
+                                silentFrames = 0;
+                                if (++speechFrames >= VAD_MIN_SPEECH_FRAMES) speechStarted = true;
+                            } else {
+                                speechFrames = 0;
+                                if (speechStarted && ++silentFrames >= VAD_STOP_FRAMES) {
+                                    if (BuildConfig.DEBUG) {
+                                        Log.d(TAG, "RMS VAD: silence after speech, ending capture"
+                                                + " (floor=" + String.format("%.4f", noiseFloor)
+                                                + " thr=" + String.format("%.4f", speechThreshold) + ")");
+                                    }
+                                    break;
+                                }
+                            }
+                        }
+                    } else if (read < 0) {
+                        Log.e(TAG, "read error: " + read); break;
                     }
-                } else if (read < 0) {
-                    Log.e(TAG, "read error: " + read); break;
                 }
+            } finally {
+                mlVad.close();
             }
 
             try { recorder.stop(); } catch (Exception ignored) {}
@@ -360,7 +427,7 @@ public class VoiceAssistantManager {
             if (recorder != null) { try { recorder.release(); } catch (Exception ignored) {} }
             if (pipeline != null && state != State.DISABLED) {
                 pipeline.endAudio();
-                if (state == State.LISTENING) state = State.PROCESSING;
+                if (state == State.LISTENING) { state = State.PROCESSING; broadcastState(state); }
             }
         }
     }
@@ -399,7 +466,7 @@ public class VoiceAssistantManager {
         state = State.DISABLED;
         mainHandler.post(this::releaseTtsPlayer);
         if (wakeDetector != null) {
-            wakeDetector.stopAndWait(); // should be safe here
+            wakeDetector.stopAndWait();
             wakeDetector.onDestroy();
             wakeDetector = null;
         }

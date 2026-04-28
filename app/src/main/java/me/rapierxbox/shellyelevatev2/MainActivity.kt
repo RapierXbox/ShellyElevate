@@ -75,20 +75,19 @@ class MainActivity : ComponentActivity() {
     private var firstPaintDone = false
     private val pendingJs = mutableListOf<String>()
 
-    private lateinit var binding: MainActivityBinding // Declare the binding object
-    private lateinit var webView: WebView // Current WebView; may be replaced after a render-process crash
+    private lateinit var binding: MainActivityBinding
+    /** Current WebView; replaced wholesale after a render-process crash. */
+    private lateinit var webView: WebView
 
     private var clicksButtonRight: Int = 0
     private var clicksButtonLeft: Int = 0
 
-    // Button press detectors for regular buttons (0-3) and power button (140)
     private lateinit var buttonPressDetector0: ButtonPressDetector
     private lateinit var buttonPressDetector1: ButtonPressDetector
     private lateinit var buttonPressDetector2: ButtonPressDetector
     private lateinit var buttonPressDetector3: ButtonPressDetector
     private lateinit var powerButtonPressDetector: ButtonPressDetector
 
-    // === SETTINGS CHANGED RECEIVER ===
     private val settingsChangedBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             try {
@@ -102,7 +101,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // === WEBVIEW JS INJECTOR RECEIVER ===
     private val webviewJavascriptInjectorBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val javascriptCode = intent?.getStringExtra("javascript")?.trim() ?: return
@@ -192,7 +190,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    // === SCREEN STATE RECEIVER ===
     private val screenStateReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
@@ -213,10 +210,6 @@ class MainActivity : ComponentActivity() {
 
     var offlineFile = "file:///android_asset/offline.html"
 
-    /**
-     * Initialize button press detectors for all buttons that support press type detection.
-     * Each detector will invoke its callback when a press sequence is complete.
-     */
     private fun initializeButtonPressDetectors() {
         val pressCallback = ButtonPressDetector.Callback { buttonId, pressType ->
             onButtonPressTypeDetected(buttonId, pressType)
@@ -229,25 +222,16 @@ class MainActivity : ComponentActivity() {
         powerButtonPressDetector = ButtonPressDetector(140, pressCallback)
     }
 
-    /**
-     * Called when a button press type is detected (short, long, double, triple).
-     * For power button, may trigger reboot if auto-reboot is enabled.
-     */
     private fun onButtonPressTypeDetected(buttonId: Int, pressType: String) {
         Log.d("MainActivity", "Button $buttonId press type detected: $pressType")
 
         if (buttonId == 140) {
-            // Power button handling
             handlePowerButtonPress(pressType)
         } else {
-            // Regular button handling (0-3)
             publishButtonPress(buttonId, pressType)
         }
     }
 
-    /**
-     * Handle power button press with optional auto-reboot on long press.
-     */
     private fun handlePowerButtonPress(pressType: String) {
         publishButtonPress(140, pressType)
 
@@ -265,9 +249,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Publish a button press to MQTT and JavaScript interface.
-     */
     private fun publishButtonPress(buttonId: Int, pressType: String) {
         lifecycleScope.launch(Dispatchers.IO) {
             mMQTTServer.publishButton(buttonId, pressType)
@@ -320,7 +301,8 @@ class MainActivity : ComponentActivity() {
         @Suppress("DEPRECATION")
         webSettings.setRenderPriority(WebSettings.RenderPriority.NORMAL)
 
-        // Disable WebView-led darkening to avoid tone-mapped/desaturated colors
+        // Disable WebView-led darkening; the HA dashboard does its own theming
+        // and Chromium's auto-darken produces washed-out colors on this panel.
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
             WebSettingsCompat.setForceDark(webSettings, WebSettingsCompat.FORCE_DARK_OFF)
         }
@@ -328,11 +310,9 @@ class MainActivity : ComponentActivity() {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(webSettings, false)
         }
 
-        // Hint Chromium to preraster when appropriate (improves first paint)
         webSettings.offscreenPreRaster = true
 
         webView.apply {
-            // Ensure hardware acceleration stays enabled for proper color/gamut handling
             if (layerType != View.LAYER_TYPE_HARDWARE) {
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
@@ -344,7 +324,6 @@ class MainActivity : ComponentActivity() {
                     firstPaintDone = false
                 }
 
-                // Helper to know if we already show the offline page
                 private fun isOfflineUrl(url: String?): Boolean {
                     return url != null && url.contains("offline.html")
                 }
@@ -356,7 +335,6 @@ class MainActivity : ComponentActivity() {
                             handler?.proceed()
                         } else {
                             handler?.cancel()
-                            // show offline page if SSL blocks main frame
                             view?.post {
                                 if (!isOfflineUrl(offlineFile)) view.loadUrl(offlineFile)
                             }
@@ -366,7 +344,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Modern HTTP error (API 23+)
                 override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse?) {
                     try {
                         if (request.isForMainFrame) {
@@ -383,7 +360,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Legacy and generic network errors (covers timeouts, dns, connect)
                 @Deprecated("deprecated")
                 override fun onReceivedError(view: WebView, errorCode: Int, description: String?, failingUrl: String?) {
                     try {
@@ -394,7 +370,6 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                // Modern variant (API 23+)
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
                     try {
                         if (request.isForMainFrame) {
@@ -411,7 +386,6 @@ class MainActivity : ComponentActivity() {
 
                 override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
                     val url = request?.url?.toString().orEmpty()
-                    // Serve offline.html only when explicitly requested or when you want to map a failed host to offline
                     if (url.contains("offline.html")) {
                         return WebResourceResponse("text/html", "UTF-8", assets.open("offline.html"))
                     }
@@ -439,30 +413,28 @@ class MainActivity : ComponentActivity() {
                         val index = parent.indexOfChild(view)
                         val lp = view.layoutParams
 
-                        // Remove before destroy
+                        // Order matters: removeView before destroy to avoid touching
+                        // a view still attached to its parent.
                         parent.removeViewAt(index)
                         view.destroy()
 
-                        // Create and configure new WebView
                         val newWebView = WebView(this@MainActivity)
                         webView = newWebView
                         configureWebView()
 
-                        // Re‑insert at same position
                         parent.addView(newWebView, index, lp)
 
-                        // Guard against loops: only load offline if not already showing
+                        // Show offline.html unless we're already there, so a recurring
+                        // crash doesn't hot-loop on the failing URL.
                         if (newWebView.url?.contains("offline.html") != true) {
                             newWebView.post { newWebView.loadUrl(offlineFile) }
                         }
 
-                        // Breadcrumb logging for diagnostics
                         Log.i("MainActivity", "Recovered WebView after crash, showing offline page")
                     } catch (e: Exception) {
                         Log.e("MainActivity", "Failed to recover WebView", e)
                     }
 
-                    // We handled the crash
                     return true
                 }
 
@@ -479,23 +451,19 @@ class MainActivity : ComponentActivity() {
             webChromeClient = object : WebChromeClient() {
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
                     val message = consoleMessage.message()
-                    
-                    // Filter out PacProcessor ClassNotFoundException errors
-                    // This is a known compatibility issue with Google WebView v128+ on targetSdk 24:
-                    // The WebView provider tries to load android.webkit.PacProcessor which doesn't 
-                    // exist in API 24, but this is benign - WebView still initializes and works correctly.
-                    // These errors clutter logs without indicating actual problems.
+
+                    // Suppress benign PacProcessor ClassNotFoundException spam: Google
+                    // WebView v128+ probes android.webkit.PacProcessor, which doesn't
+                    // exist on API 24. WebView still initialises correctly.
                     if (message.contains("PacProcessor")) {
-                        return true // Suppress
+                        return true
                     }
-                    
-                    // Log other console messages normally
+
                     return super.onConsoleMessage(consoleMessage)
                 }
             }
             addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
-            
-            // Add touch listener for touch-to-wake support
+
             setOnTouchListener { _, event ->
                 val sm = ShellyElevateApplication.mScreenManager
                 val consumeForWake = sm?.shouldConsumeTouchForWake() == true
@@ -503,11 +471,9 @@ class MainActivity : ComponentActivity() {
                 mSwipeHelper?.onTouchEvent(event)
                 mScreenSaverManager.onTouchEvent(event)
                 sm?.onTouchEvent()
-                consumeForWake // true means we handled it for wake and don't pass to WebView
+                // Returning true consumes the event so it isn't delivered to the WebView.
+                consumeForWake
             }
-            
-            // Delay first load slightly to allow system services to settle after boot
-            //postDelayed({ loadUrl(ServiceHelper.getWebviewUrl()) }, 500)
         }
     }
 
@@ -556,7 +522,8 @@ class MainActivity : ComponentActivity() {
     private fun scheduleRetryOnlineAfterOffline(targetUrl: String) {
         cancelRetry()
         retryJob = lifecycleScope.launch(Dispatchers.Default) {
-            // Simple backoff: 2s, 4s, 8s, 16s (max 4 attempts)
+            // Exponential-ish backoff for the early window after boot, then settle
+            // into a slow 30s poll so we recover from a long Wi-Fi outage.
             val delays = listOf(2000L, 4000L, 8000L, 16000L)
             for (d in delays) {
                 kotlinx.coroutines.delay(d)
@@ -570,7 +537,6 @@ class MainActivity : ComponentActivity() {
                     return@launch
                 }
             }
-            // Optional: keep a final slow retry every 30s
             while (isActive) {
                 kotlinx.coroutines.delay(30000L)
                 val online = ServiceHelper.isNetworkReady(applicationContext)
@@ -595,12 +561,13 @@ class MainActivity : ComponentActivity() {
 
         setScreenOptions()
 
-        // In case screen is already on and app resumes
+        // Re-fire the JS lifecycle hooks on every resume so a webview that was
+        // suspended in the background can refresh its UI state.
         mShellyElevateJavascriptInterface.onScreenOn()
         mShellyElevateJavascriptInterface.onScreensaverOff()
 
         if (!initialLoadDone) {
-            safeInitialLoad() // does connectivity check and loads either URL or offline
+            safeInitialLoad()
             initialLoadDone = true
         }
     }
@@ -610,20 +577,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // Start KioskService as foreground service
         ServiceHelper.ensureKioskService(applicationContext)
 
-        // Request WRITE_SETTINGS permission for brightness control
         requestWriteSettingsPermission()
 
-        // handle screen options
         setScreenOptions()
 
-        binding = MainActivityBinding.inflate(layoutInflater) // Inflate the binding
-        setContentView(binding.root) // Set the content view using binding.root
+        binding = MainActivityBinding.inflate(layoutInflater)
+        setContentView(binding.root)
         webView = binding.myWebView
 
-        // Initialize button press detectors
         initializeButtonPressDetectors()
 
         configureWebView()
@@ -633,14 +596,14 @@ class MainActivity : ComponentActivity() {
         registerBroadcastReceivers()
         applyScoreBarSetting()
 
-        // Only show settings on first run, but not if launched from settings or if already in settings task
+        // First-run: pop the settings UI so the user can enter HA URL/token. Skip
+        // if we're being relaunched from a crash (isTaskRoot==false and Settings
+        // already on the task stack), otherwise we'd open it on every relaunch.
         if (!mSharedPreferences.getBoolean(SP_SETTINGS_EVER_SHOWN, false)) {
-            // Check if SettingsActivity is already in the task stack
             val settingsAlreadyRunning = isActivityInStack(SettingsActivity::class.java.name)
             if (!settingsAlreadyRunning && !isTaskRoot) {
                 startActivity(Intent(this, SettingsActivity::class.java))
             } else if (isTaskRoot) {
-                // Only start if this is the root activity (not being relaunched after crash)
                 startActivity(Intent(this, SettingsActivity::class.java))
             }
         }
@@ -648,29 +611,21 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupSwipeOverlay() {
-        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            false // touch handling lives on WebView listener to avoid duplicate gesture processing
-        }
+        // The WebView's own touch listener handles gestures; this overlay is only
+        // here for hit-testing on regions outside the web content.
+        binding.swipeDetectionOverlay.setOnTouchListener { _, _ -> false }
     }
 
     @SuppressLint("RestrictedApi")
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        // Log everything for debugging
-        //Log.d("MainActivity", "dispatchKeyEvent: $event")
-
         val handled = onKeyEventInternal(event.keyCode, event)
-
-        // Then always forward to WebView
-        // if (!handled) binding.myWebView.post { binding.myWebView.dispatchKeyEvent(event) }
-
-        // Return true if you handled it, otherwise let Activity super handle it
         return handled || super.dispatchKeyEvent(event)
     }
 
     private fun onKeyEventInternal(keyCode: Int, event: android.view.KeyEvent): Boolean {
         if (BuildConfig.DEBUG) Log.d("MainActivity", "Key pressed: $keyCode - Event: $event")
         when (keyCode) {
-            // Power button - use detector for press type (short/long/double/triple)
+            // Power button (140): supports short/long/double/triple press types.
             140 -> {
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> powerButtonPressDetector.onPressDown()
@@ -678,11 +633,11 @@ class MainActivity : ComponentActivity() {
                 }
                 return true
             }
-            // Switch inputs (treated as edge-triggered on ACTION_UP)
+            // 141/142: physical switch inputs, edge-triggered on release.
             141 -> { if (event.action == KeyEvent.ACTION_UP) switchInput(0, true); return true }
             142 -> { if (event.action == KeyEvent.ACTION_UP) switchInput(1, true); return true }
 
-            // Shelly input buttons - use detector for press type (short/long/double/triple)
+            // 131..134: capacitive Shelly buttons 0..3; same press-type handling as power.
             131 -> {
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> buttonPressDetector0.onPressDown()
@@ -712,16 +667,15 @@ class MainActivity : ComponentActivity() {
                 return true
             }
 
-            // Proximity
+            // 135 = near, 136 = mid; mapped to broadcastProximity values.
             135 -> { if (event.action == KeyEvent.ACTION_UP) { broadcastProximity(0f); return true }; return false }
             136 -> { if (event.action == KeyEvent.ACTION_UP) { broadcastProximity(0.5f); return true }; return false }
 
-            // Media keys
             KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> { if (event.action == KeyEvent.ACTION_UP) { mMediaHelper?.resumeOrPauseMusic(); return true }; return false }
             KeyEvent.KEYCODE_MEDIA_PLAY -> { if (event.action == KeyEvent.ACTION_UP) { mMediaHelper?.resumeMusic(); return true }; return false }
             KeyEvent.KEYCODE_MEDIA_PAUSE -> { if (event.action == KeyEvent.ACTION_UP) { mMediaHelper?.pauseMusic(); return true }; return false }
-            KeyEvent.KEYCODE_MEDIA_NEXT -> { if (event.action == KeyEvent.ACTION_UP) { /* next track */ return true }; return false }
-            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { if (event.action == KeyEvent.ACTION_UP) { /* prev track */ return true }; return false }
+            KeyEvent.KEYCODE_MEDIA_NEXT -> { if (event.action == KeyEvent.ACTION_UP) return true; return false }
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { if (event.action == KeyEvent.ACTION_UP) return true; return false }
 
             else -> return false
         }
@@ -734,10 +688,6 @@ class MainActivity : ComponentActivity() {
         mShellyElevateJavascriptInterface.onButtonPressed(100 + i)
     }
 
-    /**
-     * Toggle the relay mapped to the given button, if button-to-relay mapping is enabled
-     * and a relay is configured for this button.
-     */
     private fun toggleMappedRelay(buttonId: Int) {
         lifecycleScope.launch(Dispatchers.IO) {
             val relayEnabled = mSharedPreferences.getBoolean(Constants.SP_BUTTON_RELAY_ENABLED, false)
@@ -752,9 +702,10 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
-     * Request WRITE_SETTINGS permission for brightness control.
-     * This is a special permission that requires explicit user action via Settings.
-     * SELinux denials (sysfs access) are expected and work in permissive mode on rooted devices.
+     * Open the system Settings UI so the user can grant WRITE_SETTINGS, which
+     * we need to disable Android's automatic brightness. SELinux denials when
+     * writing to the sysfs backlight node are expected on rooted Shelly devices
+     * running permissive mode and don't actually block the write.
      */
     private fun requestWriteSettingsPermission() {
         if (!Settings.System.canWrite(this)) {
@@ -773,13 +724,10 @@ class MainActivity : ComponentActivity() {
 
     @Suppress("DEPRECATION")
     private fun setScreenOptions() {
-        // Full screen support
         enableEdgeToEdge()
 
-        // Prevent system from dimming or turning off the screen
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
-        // hide system bars
         window.decorView.systemUiVisibility = (
                 View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                         or View.SYSTEM_UI_FLAG_FULLSCREEN
@@ -803,9 +751,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
     }
 
-    /**
-     * Check if an activity with the given class name is already in the task stack
-     */
     private fun isActivityInStack(activityClassName: String): Boolean {
         val am = getSystemService(Context.ACTIVITY_SERVICE) as? android.app.ActivityManager ?: return false
         val tasks = am.getRunningTasks(10)

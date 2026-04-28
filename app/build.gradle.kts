@@ -40,6 +40,16 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        externalNativeBuild {
+            cmake { cppFlags("-std=c++17") }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     buildTypes {
@@ -81,6 +91,7 @@ dependencies {
     implementation(libs.org.eclipse.paho.mqttv5.client)
     implementation(libs.webkit)
     implementation(libs.tensorflow.lite)
+    implementation(libs.serialport)
 
     implementation(platform(libs.okhttpbom))
     implementation(libs.okhttp)

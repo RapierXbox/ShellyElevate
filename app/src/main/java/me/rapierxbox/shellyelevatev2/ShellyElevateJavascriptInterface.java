@@ -35,7 +35,6 @@ public class ShellyElevateJavascriptInterface {
 
     public String getDevice() {return DeviceModel.getReportedDevice().sku;}
 
-    // ========= GETTERS =========
     @JavascriptInterface public boolean getRelay(int num) {
         return mDeviceHelper.getRelay(num);
     }
@@ -84,8 +83,6 @@ public class ShellyElevateJavascriptInterface {
         return mDeviceSensorManager.getLastMeasuredDistance();
     }
 
-    // ========= SETTERS =========
-
     @JavascriptInterface public void setRelay(int num, boolean state) {
         mDeviceHelper.setRelay(num, state);
     }
@@ -114,7 +111,6 @@ public class ShellyElevateJavascriptInterface {
 		mScreenSaverManager.keepAlive(keepAlive);
 	}
 
-    // ========= EVENTS FUNCTION =========
     @JavascriptInterface
     public void bind(String eventName, String jsFunctionName) {
         Log.d("ShellyElevateV2", "JS EventName binding - " + eventName + " => " + jsFunctionName);
@@ -168,7 +164,7 @@ public class ShellyElevateJavascriptInterface {
     }
 
     public void onMotion() {
-        // Only emit if someone has bound to it to avoid noisy logs
+        // Only emit when bound; the proximity sensor fires often enough to spam logs.
         if (bindings.containsKey("onMotion")) {
             triggerEvent("onMotion");
         }

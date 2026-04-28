@@ -17,7 +17,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 
 class DigitalClockAndDateScreenSaverActivity : Activity() {
-    private var binding: DigitalClockAndDateScreenSaverBinding ?= null // Declare the binding object
+    private var binding: DigitalClockAndDateScreenSaverBinding ?= null
 
     private val timeFormatter = SimpleDateFormat.getTimeInstance(SimpleDateFormat.SHORT)
     private val dateFormatter = SimpleDateFormat.getDateInstance(SimpleDateFormat.MEDIUM)
@@ -50,8 +50,8 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
 
         showDate = intent.getBooleanExtra("date", false)
 
-        binding = DigitalClockAndDateScreenSaverBinding.inflate(layoutInflater) // Inflate the binding
-        setContentView(binding!!.root) // Set the content view using binding.root
+        binding = DigitalClockAndDateScreenSaverBinding.inflate(layoutInflater)
+        setContentView(binding!!.root)
 
         binding!!.dateText.isVisible = showDate
 

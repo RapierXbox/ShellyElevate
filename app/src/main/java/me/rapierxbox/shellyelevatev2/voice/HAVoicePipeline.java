@@ -17,17 +17,17 @@ import okhttp3.WebSocketListener;
 import okio.ByteString;
 
 /**
- * Manages a single WebSocket session with the Home Assistant Assist pipeline.
+ * Single WebSocket session against the Home Assistant Assist pipeline.
  *
  * Protocol summary:
  *  1. Connect to ws(s)://{host}:{port}/api/websocket
- *  2. Server sends {"type":"auth_required"} → we reply with access_token
+ *  2. Server sends {"type":"auth_required"}; we reply with access_token
  *  3. Server sends {"type":"auth_ok"}
  *  4. We send assist_pipeline/run with start_stage=stt, end_stage=tts
- *  5. Server sends run-start event containing stt_binary_handler_id
- *  6. We stream PCM audio as binary frames: [handler_id byte][pcm bytes...]
- *  7. To signal end of audio send a frame with just the handler_id byte
- *  8. Server processes and returns stt-end, intent-end, tts-end, run-end events
+ *  5. Server sends run-start containing stt_binary_handler_id
+ *  6. We stream PCM as binary frames: [handler_id byte][pcm bytes...]
+ *  7. End-of-audio is a frame containing only the handler_id byte
+ *  8. Server returns stt-end, intent-end, tts-end, run-end events
  */
 
 public class HAVoicePipeline {
@@ -36,11 +36,14 @@ public class HAVoicePipeline {
     public interface Callback {
         void onConnected();
         void onAuthOk();
-        void onListening(); // pipeline started
-        void onTranscript(String text); // stt from ha
+        /** Pipeline accepted the run request and is ready for audio. */
+        void onListening();
+        /** STT result from HA. */
+        void onTranscript(String text);
         void onResponse(String text);
         void onTtsUrl(String url);
-        void onSpeechEnd(); // ha vad detected end of speech
+        /** HA's server-side VAD detected end of speech; stop sending audio. */
+        void onSpeechEnd();
         void onPipelineEnd();
         void onError(String message);
         void onDisconnected();
@@ -77,7 +80,7 @@ public class HAVoicePipeline {
         String userInfo = uri.getEncodedUserInfo();
         String basePath = uri.getEncodedPath();
         if (basePath == null) basePath = "";
-        // strip trailing slash so we dont produce "//api/websocket"
+        // Strip trailing slash so we don't end up with "//api/websocket".
         if (basePath.endsWith("/")) basePath = basePath.substring(0, basePath.length() - 1);
         String wsUrl = scheme + "://"
                 + (userInfo != null && !userInfo.isEmpty() ? userInfo + "@" : "")
@@ -93,7 +96,7 @@ public class HAVoicePipeline {
             public void onOpen(WebSocket ws, Response response) {
                 Log.i(TAG, "WebSocket connected");
                 callback.onConnected();
-                // auth_required arrives from server momentaryly
+                // The server sends auth_required next; sendAuth() runs from handleTextMessage.
             }
 
             @Override
@@ -132,7 +135,7 @@ public class HAVoicePipeline {
                     break;
                 case "auth_invalid":
                     authState = AuthState.FAILED;
-                    callback.onError("Authentication failed... check your Long-Lived Access Token");
+                    callback.onError("Authentication failed, check your Long-Lived Access Token");
                     break;
                 case "event":
                     handlePipelineEvent(msg);
@@ -197,7 +200,7 @@ public class HAVoicePipeline {
                 if (ttsOut != null) {
                     String ttsPath = ttsOut.optString("url", "");
                     if (!ttsPath.isEmpty()) {
-                        // make absoluite if relative
+                        // HA returns either a full URL or a relative path; resolve against haBaseUrl.
                         String ttsUrl = ttsPath.startsWith("http") ? ttsPath
                                 : haBaseUrl + (ttsPath.startsWith("/") ? ttsPath : "/" + ttsPath);
                         callback.onTtsUrl(ttsUrl);
@@ -236,7 +239,7 @@ public class HAVoicePipeline {
 
     public void startPipeline(String pipelineId) {
         if (authState != AuthState.AUTHENTICATED || webSocket == null) {
-            callback.onError("Cannot start pipeline – not authenticated");
+            callback.onError("Cannot start pipeline, not authenticated");
             return;
         }
         sttBinaryHandlerId = -1;
@@ -259,7 +262,7 @@ public class HAVoicePipeline {
         }
     }
 
-    // 16khz 16bit little endian mono
+    /** Stream a PCM chunk (16 kHz, 16-bit little-endian, mono). */
     public boolean sendAudio(byte[] pcmData, int length) {
         if (webSocket == null || sttBinaryHandlerId < 0) return false;
         byte[] frame = new byte[length + 1];

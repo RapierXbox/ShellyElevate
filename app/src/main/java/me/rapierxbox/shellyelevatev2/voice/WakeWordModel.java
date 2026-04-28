@@ -11,9 +11,9 @@ public abstract class WakeWordModel {
     }
 
     public static class Downloadable extends WakeWordModel {
-        private final String name;       // unique save name, e.g. "okay_nabu_v2"
-        private final String stem;       // original filename stem, e.g. "okay_nabu"
-        private final String folderPath; // repo path to parent dir, e.g. "okay_nabu/v2"
+        private final String name;       // unique on-disk filename, e.g. "okay_nabu_v2"
+        private final String stem;       // upstream filename stem, e.g. "okay_nabu"
+        private final String folderPath; // path inside the repo, e.g. "okay_nabu/v2"
         private final String tfliteUrl;
         private final String jsonUrl;
 
@@ -33,9 +33,9 @@ public abstract class WakeWordModel {
     }
 
     public static class Experimental extends WakeWordModel {
-        private final String name;       // unique save name
-        private final String stem;       // original filename stem
-        private final String folderPath; // repo path to parent dir
+        private final String name;
+        private final String stem;
+        private final String folderPath;
         private final String tfliteUrl;
         private final String jsonUrl;
 

@@ -31,12 +31,19 @@ import okhttp3.ResponseBody;
 public class WakeWordModelManager {
     private static final String TAG = "WakeWordModelManager";
 
-    // One API call returns the full tree — avoids the 60 req/hour rate limit of the contents API
+    // One trees API call returns every blob in the repo, avoiding the 60 req/hour
+    // limit on the contents API.
     private static final String OFFICIAL_REPO     = "esphome/micro-wake-word-models";
     private static final String EXPERIMENTAL_REPO = "TaterTotterson/microWakeWords";
     private static final String TREES_URL = "https://api.github.com/repos/%s/git/trees/HEAD?recursive=1";
-    // Raw downloads don't count against the API rate limit and don't need auth
+    // raw.githubusercontent.com downloads are unauthenticated and don't count
+    // against the API rate limit.
     private static final String RAW_URL   = "https://raw.githubusercontent.com/%s/HEAD/%s";
+
+    // Official ESPHome VAD model. Required to gate wake detections on voice activity.
+    // Lives next to the wake-word model in /data/data/<pkg>/files/wakewords/vad.{tflite,json}.
+    private static final String VAD_TFLITE_URL = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.tflite";
+    private static final String VAD_JSON_URL   = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.json";
 
     private WakeWordModelManager() {}
 
@@ -44,7 +51,30 @@ public class WakeWordModelManager {
         void onProgress(int percent);
     }
 
-    // ─────────────── Local models ───────────────
+    public enum VadResult { ALREADY_PRESENT, DOWNLOADED, FAILED }
+
+    public static boolean isVadPresent(File wakewordsDir) {
+        return new File(wakewordsDir, "vad.tflite").exists()
+            && new File(wakewordsDir, "vad.json").exists();
+    }
+
+    public static VadResult ensureVadDownloaded(OkHttpClient client, File wakewordsDir) {
+        File tflite = new File(wakewordsDir, "vad.tflite");
+        File json   = new File(wakewordsDir, "vad.json");
+        if (tflite.exists() && json.exists()) return VadResult.ALREADY_PRESENT;
+
+        try {
+            if (!tflite.exists()) downloadFile(client, VAD_TFLITE_URL, tflite, p -> {});
+            if (!json.exists())   downloadFile(client, VAD_JSON_URL,   json,   p -> {});
+            return VadResult.DOWNLOADED;
+        } catch (Exception e) {
+            Log.w(TAG, "VAD download failed: " + e.getMessage());
+            if (tflite.exists() && !json.exists()) tflite.delete();
+            if (json.exists() && !tflite.exists()) json.delete();
+            return VadResult.FAILED;
+        }
+    }
+
 
     public static List<WakeWordModel.Installed> getInstalledModels(File wakewordsDir) {
         if (!wakewordsDir.exists()) return Collections.emptyList();
@@ -53,13 +83,12 @@ public class WakeWordModelManager {
         List<WakeWordModel.Installed> result = new ArrayList<>();
         for (File f : files) {
             String stem = f.getName().substring(0, f.getName().length() - 7);
+            if ("vad".equals(stem)) continue;
             result.add(new WakeWordModel.Installed(stem));
         }
         result.sort(Comparator.comparing(WakeWordModel.Installed::getName));
         return result;
     }
-
-    // ─────────────── GitHub fetch ───────────────
 
     public static List<WakeWordModel.Downloadable> fetchOfficialModels(OkHttpClient client) throws IOException {
         List<RawModel> raw = fetchModelsFromRepo(client, OFFICIAL_REPO);
@@ -78,9 +107,9 @@ public class WakeWordModelManager {
     }
 
     private static class RawModel {
-        final String stem;       // original filename stem, e.g. "okay_nabu"
-        final String saveName;   // unique filename for saving, e.g. "okay_nabu_v2"
-        final String folderPath; // path to parent dir in repo, e.g. "okay_nabu/v2"
+        final String stem;
+        final String saveName;
+        final String folderPath;
         final String tfliteUrl;
         final String jsonUrl;
         RawModel(String stem, String saveName, String folderPath, String tfliteUrl, String jsonUrl) {
@@ -89,7 +118,6 @@ public class WakeWordModelManager {
         }
     }
 
-    // Single API request gets the full recursive file tree — no BFS, no rate limit issues
     private static List<RawModel> fetchModelsFromRepo(OkHttpClient client, String repo) throws IOException {
         String treeUrl = String.format(TREES_URL, repo);
         JSONObject response = fetchJsonObject(client, treeUrl);
@@ -99,9 +127,8 @@ public class WakeWordModelManager {
         if (tree == null) return Collections.emptyList();
 
         if (response.optBoolean("truncated"))
-            Log.w(TAG, repo + " tree was truncated — some models may be missing");
+            Log.w(TAG, repo + " tree was truncated, some models may be missing");
 
-        // Collect all file paths for fast json lookup
         Set<String> allPaths = new HashSet<>();
         List<String> tflitePaths = new ArrayList<>();
         for (int i = 0; i < tree.length(); i++) {
@@ -117,7 +144,10 @@ public class WakeWordModelManager {
             int lastSlash  = tflitePath.lastIndexOf('/');
             String folder  = lastSlash >= 0 ? tflitePath.substring(0, lastSlash) : "";
             String filename = lastSlash >= 0 ? tflitePath.substring(lastSlash + 1) : tflitePath;
-            String stem    = filename.substring(0, filename.length() - 7); // strip .tflite
+            String stem    = filename.substring(0, filename.length() - 7); // strip ".tflite"
+
+            // vad is fetched automatically by ensureVadDownloaded; don't show it as a wake-word pick.
+            if ("vad".equals(stem)) continue;
 
             String tfliteUrl = String.format(RAW_URL, repo, tflitePath);
 
@@ -132,9 +162,10 @@ public class WakeWordModelManager {
         return results;
     }
 
-    // Builds a unique save name by appending path parts that differ from the stem.
-    // "okay_nabu/v2" + stem "okay_nabu" → "okay_nabu_v2"
-    // ""            + stem "okay_nabu" → "okay_nabu"
+    // Two repos can ship a model with the same stem (e.g. okay_nabu). Append the
+    // unique parts of the folder path to avoid filename collisions on disk:
+    //   "okay_nabu/v2" + stem "okay_nabu" -> "okay_nabu_v2"
+    //   ""             + stem "okay_nabu" -> "okay_nabu"
     private static String buildSaveName(String stem, String folderPath) {
         if (folderPath.isEmpty()) return stem;
         StringBuilder qualifier = new StringBuilder();
@@ -167,8 +198,6 @@ public class WakeWordModelManager {
         }
     }
 
-    // ─────────────── Download ───────────────
-
     public static void downloadFile(OkHttpClient client, String url, File destFile, ProgressCallback onProgress) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
@@ -197,8 +226,6 @@ public class WakeWordModelManager {
         }
         onProgress.onProgress(100);
     }
-
-    // ─────────────── Custom import ───────────────
 
     public static String importCustomModel(Context context, Uri tfliteUri, File wakewordsDir) throws IOException {
         String stem = resolveStem(context, tfliteUri);
@@ -239,7 +266,8 @@ public class WakeWordModelManager {
         return null;
     }
 
-    // Best-effort: detector handles missing json gracefully so failure here is fine
+    // Best-effort sibling import. The detector falls back to default thresholds
+    // when the .json is missing, so any failure here is silently tolerated.
     private static void tryImportSiblingJson(Context context, Uri tfliteUri, String stem, File wakewordsDir) {
         try {
             String docId     = DocumentsContract.getDocumentId(tfliteUri);
@@ -266,7 +294,7 @@ public class WakeWordModelManager {
                 }
             }
         } catch (Exception e) {
-            Log.d(TAG, "No sibling .json found for " + stem + " — proceeding without it");
+            Log.d(TAG, "No sibling .json found for " + stem + ", proceeding without it");
         }
     }
 }

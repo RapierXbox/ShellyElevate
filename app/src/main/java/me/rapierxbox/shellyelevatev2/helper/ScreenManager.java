@@ -37,28 +37,26 @@ import me.rapierxbox.shellyelevatev2.screensavers.ScreenOffScreenSaver;
 public class ScreenManager extends BroadcastReceiver {
 
     private static final String TAG = "ScreenManager";
-    private static final long HYSTERESIS_DELAY_MS = 3000L; // 3 seconds
+    // Wait this long after the desired brightness changes before actually animating,
+    // so a flickering lux sensor doesn't yo-yo the backlight.
+    private static final long HYSTERESIS_DELAY_MS = 3000L;
     public static final long FADE_DURATION_MS = 1000L;
     private static final int MIN_BRIGHTNESS_STEP = 3;
 
     public static final int MIN_BRIGHTNESS_DEFAULT = 48;
     public static final int DEFAULT_BRIGHTNESS = 255;
 
-    // sensor
     private float lastMeasuredLux = 0.0f;
 
-    // fade/state
     private long lastUpdateTime = 0L;
-    private volatile int currentBrightness = -1; // -1 = uninitialized
+    private volatile int currentBrightness = -1;
     private volatile int targetBrightness = -1;
     private volatile boolean inScreenSaver = false;
-    private volatile boolean screenOn = true; // explicit screen state separate from brightness
+    private volatile boolean screenOn = true;
 
-    // handler
     private final Handler fadeHandler = new Handler(Looper.getMainLooper());
     private final Runnable fadeRunnable = this::checkAndApplyBrightness;
 
-    // prefs cached
     private final SharedPreferences prefs;
     private volatile boolean cachedAutomaticBrightness = true;
     private volatile int cachedFixedBrightness = DEFAULT_BRIGHTNESS;
@@ -101,7 +99,8 @@ public class ScreenManager extends BroadcastReceiver {
 
         LocalBroadcastManager.getInstance(context).registerReceiver(this, intentFilter);
 
-        // Force screen on at boot so we never start at brightness 0; screensaver will handle dimming later
+        // Force the screen on at startup so we don't boot at brightness 0; the
+        // screensaver will dim later if it activates.
         setScreenOn(true);
         updateBrightness();
     }
@@ -122,34 +121,25 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     public void setScreenOn(boolean on) {
-        // keep explicit boolean for state; do not conflate with brightness
         screenOn = on;
         if (!on) {
-            // keep brightness state consistent with screen off
             currentBrightness = 0;
         }
-        // keep using existing mDeviceHelper (per request to avoid DI change)
         mDeviceHelper.setScreenOn(on);
-        // ensure device brightness is in sync
         if (!on) {
             applyBrightness(0, "screen off");
         }
     }
 
-    /**
-     * Handle touch events to wake screen if touch-to-wake is enabled.
-     * Call this from MainActivity when touch events are detected on the WebView.
-     */
+    /** Forwarded from MainActivity's WebView touch listener. */
     public void onTouchEvent() {
         if (BuildConfig.DEBUG) Log.d(TAG, "onTouchEvent called: screenOn=" + screenOn + ", cachedTouchToWake=" + cachedTouchToWake + ", currentBrightness=" + currentBrightness + ", inScreenSaver=" + inScreenSaver);
-        // If screensaver is active, stop it immediately on touch
         if (inScreenSaver) {
             Log.i(TAG, "Touch detected, exiting screensaver");
             mScreenSaverManager.stopScreenSaver();
             return;
         }
 
-        // If screen is off and touch-to-wake is enabled, turn screen back on
         if (!screenOn && cachedTouchToWake) {
             Log.i(TAG, "Touch detected, waking screen via touch-to-wake");
             setScreenOn(true);
@@ -157,9 +147,7 @@ public class ScreenManager extends BroadcastReceiver {
         }
     }
 
-    /**
-     * Determines if a touch should be consumed for waking instead of propagating to WebView.
-     */
+    /** True when a touch should wake the screen instead of being delivered to the WebView. */
     public boolean shouldConsumeTouchForWake() {
         return inScreenSaver || !screenOn || currentBrightness == 0;
     }
@@ -190,17 +178,15 @@ public class ScreenManager extends BroadcastReceiver {
                 break;
             case INTENT_TURN_SCREEN_OFF:
                 setScreenOn(false);
-                // When screen is turned off, reset brightness targets to 0 to avoid stale values
                 targetBrightness = 0;
                 currentBrightness = 0;
                 break;
             case INTENT_LIGHT_UPDATED:
                 float lux = intent.getFloatExtra(INTENT_LIGHT_KEY, 0.0f);
-                if (Float.isNaN(lux) || lux < 0f) lux = 0f; // sanitize
+                if (Float.isNaN(lux) || lux < 0f) lux = 0f;
                 lastMeasuredLux = lux;
 
-                // update brightness when lux changes only if automatic bri is enabled to prevent too many request
-                // TODO: implement some kind of debounce to prevent too many calls
+                // TODO: debounce when the lux sensor is noisy.
                 if (automaticBrightness())
                     updateBrightness();
 
@@ -211,7 +197,6 @@ public class ScreenManager extends BroadcastReceiver {
     private synchronized void updateBrightness() {
         int desiredBrightness = computeDesiredBrightness();
 
-        // Force brightness to 0 only when the screen is explicitly off or the active saver is "Screen Off"
         if (!screenOn || (inScreenSaver && isScreenOffSaverActive())) {
             targetBrightness = 0;
             applyBrightness(0, "screen off or screen-off screensaver");
@@ -222,13 +207,11 @@ public class ScreenManager extends BroadcastReceiver {
 
         if (desiredBrightness != targetBrightness) {
             if (targetBrightness >= 0 && Math.abs(desiredBrightness - targetBrightness) < MIN_BRIGHTNESS_STEP) {
-                return; // ignore tiny adjustments to reduce churn
+                return;
             }
             targetBrightness = desiredBrightness;
             lastUpdateTime = System.currentTimeMillis();
-            // cancel any pending fade to avoid race with outdated tasks
             fadeHandler.removeCallbacks(fadeRunnable);
-            // post hysteresis delayed task on main looper
             fadeHandler.postDelayed(fadeRunnable, HYSTERESIS_DELAY_MS);
             if (BuildConfig.DEBUG) Log.d(TAG, "Desired brightness: " + desiredBrightness + ", targetBrightness: " + targetBrightness + ", lastUpdateTime: " + lastUpdateTime + ", currentBrightness: " + currentBrightness);
         }
@@ -239,18 +222,16 @@ public class ScreenManager extends BroadcastReceiver {
             return 0;
         }
 
-        int desiredBrightness;
-        if (automaticBrightness()) {
-            desiredBrightness = getScreenBrightnessFromLux(lastMeasuredLux);
-        } else {
-            desiredBrightness = fixedBrightness();
-        }
+        int desiredBrightness = automaticBrightness()
+                ? getScreenBrightnessFromLux(lastMeasuredLux)
+                : fixedBrightness();
 
         return clamp(desiredBrightness, 0, 255);
     }
 
     private synchronized void checkAndApplyBrightness() {
-        // force in case of brightness 0 (ensure immediate apply to 0)
+        // Skip the hysteresis delay when we're heading to 0 so the screen turns
+        // off promptly.
         boolean force = currentBrightness != 0 && targetBrightness == 0;
         long now = System.currentTimeMillis();
 
@@ -263,7 +244,6 @@ public class ScreenManager extends BroadcastReceiver {
                 if (BuildConfig.DEBUG) Log.d(TAG, "No brightness change needed.");
             }
         } else {
-            // A possible in-flight update; re-schedule to ensure we eventually apply.
             fadeHandler.removeCallbacks(fadeRunnable);
             long delay = Math.max(0, HYSTERESIS_DELAY_MS - (now - lastUpdateTime));
             fadeHandler.postDelayed(fadeRunnable, delay);
@@ -271,24 +251,21 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     private void animateBrightnessTransition(int from, int to) {
-        // ensure bounds
         from = clamp(from, 0, 255);
         to = clamp(to, 0, 255);
 
-        // Use the existing animator class if available; fallback to ValueAnimator if needed.
         try {
-            brightnessAnimator.animate(from, to, value -> {
-                applyBrightness(value, "animate");
-            });
+            brightnessAnimator.animate(from, to, value -> applyBrightness(value, "animate"));
         } catch (Throwable t) {
-            // fallback safe path: immediate set (shouldn't happen often)
             if (BuildConfig.DEBUG) Log.d(TAG, "BrightnessAnimator failed, applying immediate value. " + t.getMessage());
             applyBrightness(to, "animate fallback");
         }
     }
 
+    // Linear ramp from cachedMinBrightness at 30 lux to 255 at 500 lux. Below/above
+    // those breakpoints we clamp to the endpoints so the screen never goes fully
+    // dark in a lit room and never gets stuck below max in bright sunlight.
     private int getScreenBrightnessFromLux(float lux) {
-        // sanitize input
         if (Float.isNaN(lux) || lux < 0f) lux = 0f;
 
         int minBrightness = inScreenSaver ? cachedScreenSaverMinBrightness : cachedMinBrightness;
@@ -302,6 +279,9 @@ public class ScreenManager extends BroadcastReceiver {
         return clamp((int) Math.round(computed), 0, 255);
     }
 
+    // Saver-active transitions intentionally bypass HYSTERESIS_DELAY_MS: dimming
+    // on screen-off is asymmetric (we want fast off, smooth-faded on, no jitter
+    // delay) so we drive brightness directly here instead of via updateBrightness.
     private synchronized void updateScreenSaverState(boolean newState) {
         this.inScreenSaver = newState;
         if (BuildConfig.DEBUG) {
@@ -310,7 +290,8 @@ public class ScreenManager extends BroadcastReceiver {
         if (newState) {
             updateBrightness();
             if (isScreenOffSaverActive()) {
-                // Force a second write shortly after entering screen-off saver to avoid hardware ignoring the first set
+                // Some panels swallow the first brightness=0 write right after
+                // entering the saver; repeating it ~300 ms later sticks reliably.
                 fadeHandler.postDelayed(() -> {
                     if (inScreenSaver && isScreenOffSaverActive()) {
                         applyBrightness(0, "screen-off screensaver second write");
@@ -318,8 +299,7 @@ public class ScreenManager extends BroadcastReceiver {
                 }, 300L);
             }
         } else {
-            // On wake from screensaver, raise brightness immediately (no 3s hysteresis)
-            // Ensure screen is marked on before computing brightness so we don't stick at 0
+            // Wake immediately; the hysteresis delay is only meant for lux jitter.
             setScreenOn(true);
 
             int desiredBrightness = computeDesiredBrightness();

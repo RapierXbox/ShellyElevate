@@ -50,6 +50,9 @@ public class TonePlayer {
         });
     }
 
+    // Renders a sine tone with a 5 ms linear attack and exponential decay.
+    // The attack ramp avoids the audible click an instant-on tone produces;
+    // the decay shapes the tail so wake/end cues feel distinct.
     private static short[] render(double freq, double durationSec, double decayConstant) {
         int numSamples = (int) (SAMPLE_RATE * durationSec);
         int attackSamples = SAMPLE_RATE / 200;
@@ -57,6 +60,7 @@ public class TonePlayer {
         for (int i = 0; i < numSamples; i++) {
             double attack = i < attackSamples ? (double) i / attackSamples : 1.0;
             double envelope = attack * Math.exp(-decayConstant * i / numSamples);
+            // 0.75 headroom keeps the peak below clipping after the envelope.
             buf[i] = (short) (Short.MAX_VALUE * 0.75 * envelope
                     * Math.sin(2.0 * Math.PI * freq * i / SAMPLE_RATE));
         }

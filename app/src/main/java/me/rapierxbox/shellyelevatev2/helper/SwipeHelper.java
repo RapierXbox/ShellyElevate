@@ -11,6 +11,8 @@ public class SwipeHelper{
     private float touchStartY = 0;
     private long touchStartEventTime = 0;
 
+    // Thresholds for "real swipe" vs. accidental drag. Velocity is px / ms;
+    // distance is raw pixels, so values are tied to display density.
     public float minVel = 2.5F;
     public float minDist = 250.0F;
 
@@ -26,7 +28,7 @@ public class SwipeHelper{
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
                 float deltaY = Math.abs(touchStartY - event.getY());
-                float deltaT = Math.max(1f, Math.abs(touchStartEventTime - event.getEventTime())); // avoid div0
+                float deltaT = Math.max(1f, Math.abs(touchStartEventTime - event.getEventTime()));
                 float velocity = deltaY / deltaT;
                 if (velocity > minVel && deltaY > minDist) {
                     var numRelay = 0;

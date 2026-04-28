@@ -61,7 +61,8 @@ class SettingsFragment : Fragment() {
 
     private var _binding: SettingsFragmentBinding? = null
     private val binding get() = _binding!!
-    private var savedBrightness = DEFAULT_BRIGHTNESS // Store previous brightness to restore on exit
+    // Restored in onDestroyView so leaving Settings doesn't leave the screen at 100%.
+    private var savedBrightness = DEFAULT_BRIGHTNESS
     private var hasProximitySensor = false
     private val sensorStatusHandler = Handler(Looper.getMainLooper())
     private val sensorStatusRunnable = object : Runnable {
@@ -72,8 +73,9 @@ class SettingsFragment : Fragment() {
     }
 
     private val okHttpClient by lazy {
-        //for now trust all certs (hmmm should be fine)
-        // android 7 doesnt seem to include sectigo which github uses
+        // Trust-all client used only for fetching wake-word model lists/files from
+        // GitHub. Android 7's CA store predates the Sectigo roots that github.com
+        // currently chains to, so a strict TrustManager would refuse the handshake.
         val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
             override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
             override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
@@ -97,7 +99,6 @@ class SettingsFragment : Fragment() {
         super.onDestroyView()
         downloadJob?.cancel()
         sensorStatusHandler.removeCallbacks(sensorStatusRunnable)
-        // Restore previous brightness when leaving settings
         mDeviceHelper?.setScreenBrightness(savedBrightness)
         _binding = null
     }
@@ -110,7 +111,8 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.settings)
 
-        // Save current brightness and set to max for settings visibility
+        // Force max brightness while the Settings UI is open; the previous value
+        // is restored in onDestroyView.
         savedBrightness = mScreenManager?.let { mSharedPreferences?.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS) ?: DEFAULT_BRIGHTNESS } ?: DEFAULT_BRIGHTNESS
         mScreenManager?.setScreenOn(true)
         mDeviceHelper?.setScreenBrightness(255)
@@ -378,7 +380,8 @@ class SettingsFragment : Fragment() {
     private fun setupModelChooser() {
         val wakewordsDir = File(requireContext().filesDir, "wakewords")
 
-        // Build list from disk immediately, then merge GitHub models in background
+        // Show installed models immediately so the picker isn't empty while we
+        // wait for GitHub; remote results are merged in once they arrive.
         rebuildModelList(WakeWordModelManager.getInstalledModels(wakewordsDir), emptyList(), emptyList())
         fetchAndMergeRemoteModels(wakewordsDir)
 
@@ -390,6 +393,35 @@ class SettingsFragment : Fragment() {
 
         binding.voiceWakeExperimentalModels.setOnCheckedChangeListener { _, _ ->
             fetchAndMergeRemoteModels(wakewordsDir)
+        }
+
+        // The VAD model is required to suppress false wake triggers, so fetch
+        // it as soon as wake-word detection is enabled.
+        binding.voiceWakeEnabled.setOnCheckedChangeListener { _, isChecked ->
+            if (isChecked && !WakeWordModelManager.isVadPresent(wakewordsDir)) {
+                ensureVadDownloaded(wakewordsDir)
+            }
+        }
+        if (binding.voiceWakeEnabled.isChecked && !WakeWordModelManager.isVadPresent(wakewordsDir)) {
+            ensureVadDownloaded(wakewordsDir)
+        }
+    }
+
+    private fun ensureVadDownloaded(wakewordsDir: File) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            val result = withContext(Dispatchers.IO) {
+                WakeWordModelManager.ensureVadDownloaded(okHttpClient, wakewordsDir)
+            }
+            if (result == WakeWordModelManager.VadResult.FAILED && isAdded) {
+                AlertDialog.Builder(requireContext())
+                    .setTitle(R.string.voice_wake_vad_download_failed_title)
+                    .setMessage(R.string.voice_wake_vad_download_failed)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
+            } else if (result == WakeWordModelManager.VadResult.DOWNLOADED) {
+                // Force a reload so the detector picks up the freshly fetched VAD.
+                mVoiceAssistantManager?.invalidateLoadedModel()
+            }
         }
     }
 

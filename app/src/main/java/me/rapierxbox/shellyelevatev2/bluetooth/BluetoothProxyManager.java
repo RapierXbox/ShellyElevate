@@ -44,14 +44,14 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
-// esphome server api
-// frame format: 0x00 payload_size msg_type payload
-// only one ha client
+// Implements just enough of the ESPHome native API for Home Assistant's
+// Bluetooth proxy integration to consume our BLE scan results.
+// Frame: [0x00][varint payload_size][varint msg_type][payload]
+// Single client at a time (HA only opens one connection per proxy).
 public class BluetoothProxyManager {
     private static final String TAG = "BtProxy";
     private static final int PORT = 6053;
 
-    // esphome message type ids
     private static final int MSG_HELLO_REQUEST        = 1;
     private static final int MSG_HELLO_RESPONSE       = 2;
     private static final int MSG_CONNECT_REQUEST      = 3;
@@ -64,20 +64,22 @@ public class BluetoothProxyManager {
     private static final int MSG_DEVICE_INFO_RESPONSE = 10;
     private static final int MSG_LIST_ENTITIES_REQUEST = 11;
     private static final int MSG_LIST_ENTITIES_DONE         = 19;
-    private static final int MSG_SUBSCRIBE_STATES           = 20; // no response (we dont have entities)
-    private static final int MSG_SUBSCRIBE_HA_STATES        = 34; // no response (we dont need ha states)
-    private static final int MSG_GET_TIME_RESPONSE          = 38; // ha pushes time.. ignore
+    // Subscribe/state messages from HA we acknowledge by ignoring; we expose no
+    // entities and don't need HA state pushes for proxy-only operation.
+    private static final int MSG_SUBSCRIBE_STATES           = 20;
+    private static final int MSG_SUBSCRIBE_HA_STATES        = 34;
+    private static final int MSG_GET_TIME_RESPONSE          = 38;
     private static final int MSG_SUBSCRIBE_BLE              = 66;
     private static final int MSG_BLE_AD_RESPONSE      = 67;
     private static final int MSG_UNSUBSCRIBE_BLE      = 87;
 
-    // bit 0 = FEATURE_PASSIVE_SCAN
-    private static final int BT_PROXY_FLAGS = 1;
-    // legacy version 2 = passive scan (no active connections), ha falls back if flags=0
+    private static final int BT_PROXY_FLAGS = 1; // bit 0 = FEATURE_PASSIVE_SCAN
+    // legacy_bluetooth_proxy_version=2: passive scan, no active connections.
+    // HA treats flags=0 as "legacy" and falls back to this field.
     private static final int BT_LEGACY_VERSION = 2;
 
 
-    private static final byte[] WRITE_QUEUE_SENTINEL = new byte[0]; // writeloop exit
+    private static final byte[] WRITE_QUEUE_SENTINEL = new byte[0];
 
     private volatile boolean      enabled = false;
     private final ExecutorService executor = Executors.newFixedThreadPool(4);
@@ -86,7 +88,9 @@ public class BluetoothProxyManager {
     private volatile BluetoothLeScanner bleScanner;
     private volatile ScanCallback        activeScanCb;
 
-    private final AtomicReference<ClientSession> scanTarget = new AtomicReference<>(); // routes ads to current session
+    // Routes scan callbacks to the currently-connected HA session so a reconnect
+    // doesn't have to restart the underlying BLE scan.
+    private final AtomicReference<ClientSession> scanTarget = new AtomicReference<>();
     private NsdManager                   nsdManager;
     private NsdManager.RegistrationListener nsdListener;
     private final BroadcastReceiver settingsReceiver;
@@ -176,7 +180,7 @@ public class BluetoothProxyManager {
         executor.shutdownNow();
     }
 
-    private void registerNsd() { // should work... but not tested
+    private void registerNsd() {
         try {
             String name = mSharedPreferences.getString(SP_BLUETOOTH_PROXY_NAME, "ShellyElevate");
             NsdServiceInfo info = new NsdServiceInfo();
@@ -213,7 +217,9 @@ public class BluetoothProxyManager {
 
     private class ClientSession {
         private final Socket socket;
-        private final BlockingQueue<byte[]> outQueue = new LinkedBlockingQueue<>(2000); // write que so scan callbacks dont block on tcp writes
+        // Bounded write queue so a slow HA client backpressure never blocks the
+        // BLE scan callback (which runs on the system Bluetooth thread).
+        private final BlockingQueue<byte[]> outQueue = new LinkedBlockingQueue<>(2000);
         private final AtomicBoolean closed = new AtomicBoolean(false);
 
         ClientSession(Socket socket) { this.socket = socket; }
@@ -262,7 +268,7 @@ public class BluetoothProxyManager {
                     enqueue(buildFrame(MSG_HELLO_RESPONSE, buildHelloResponse()));
                     break;
                 case MSG_CONNECT_REQUEST:
-                    enqueue(buildFrame(MSG_CONNECT_RESPONSE, new byte[0])); // empty payload -> no auth
+                    enqueue(buildFrame(MSG_CONNECT_RESPONSE, new byte[0])); // empty payload = no password required
                     break;
                 case MSG_LIST_ENTITIES_REQUEST:
                     enqueue(buildFrame(MSG_LIST_ENTITIES_DONE, new byte[0]));
@@ -270,7 +276,7 @@ public class BluetoothProxyManager {
                 case MSG_SUBSCRIBE_STATES:
                 case MSG_SUBSCRIBE_HA_STATES:
                 case MSG_GET_TIME_RESPONSE:
-                    break; // dont need those
+                    break;
                 case MSG_DEVICE_INFO_REQUEST:
                     enqueue(buildFrame(MSG_DEVICE_INFO_RESPONSE, buildDeviceInfoResponse()));
                     break;
@@ -350,10 +356,9 @@ public class BluetoothProxyManager {
         }
     }
 
-    // protobuf builder
     private static byte[] buildFrame(int msgType, byte[] payload) {
         ByteArrayOutputStream f = new ByteArrayOutputStream(8 + payload.length);
-        f.write(0x00); // plaintext indicator
+        f.write(0x00); // 0x00 = plaintext frame; 0x01 would indicate Noise-encrypted
         writeVarint(f, payload.length);
         writeVarint(f, msgType);
         f.write(payload, 0, payload.length);
@@ -375,15 +380,16 @@ public class BluetoothProxyManager {
         String mac   = getWifiMac();
         String btMac = getBtMac();
         ByteArrayOutputStream out = new ByteArrayOutputStream();
+        // Field numbers correspond to DeviceInfoResponse in ESPHome's api.proto.
         encodeBytesField(out, 2,  name);
         encodeBytesField(out, 3,  mac);
-        encodeBytesField(out, 4,  "2026.4.0");           // esphome version
-        encodeBytesField(out, 6,  "android-bt-proxy");    // model
-        encodeVarintField(out, 11, BT_LEGACY_VERSION);    // legacy_bluetooth_proxy_version
-        encodeBytesField(out, 12, "Android");             // manufacturer
-        encodeBytesField(out, 13, name);                  // friendly_name
-        encodeVarintField(out, 15, BT_PROXY_FLAGS);       // bluetooth_proxy_feature_flags
-        if (!btMac.isEmpty()) encodeBytesField(out, 18, btMac); // bluetooth_mac_address
+        encodeBytesField(out, 4,  "2026.4.0");
+        encodeBytesField(out, 6,  "android-bt-proxy");
+        encodeVarintField(out, 11, BT_LEGACY_VERSION);
+        encodeBytesField(out, 12, "Android");
+        encodeBytesField(out, 13, name);
+        encodeVarintField(out, 15, BT_PROXY_FLAGS);
+        if (!btMac.isEmpty()) encodeBytesField(out, 18, btMac);
         Log.d(TAG, "DeviceInfoResponse: flags=" + BT_PROXY_FLAGS + " legacyVer=" + BT_LEGACY_VERSION
                 + " btMac=" + (btMac.isEmpty() ? "(none)" : btMac));
         return out.toByteArray();
@@ -400,7 +406,7 @@ public class BluetoothProxyManager {
             if (record != null && record.getDeviceName() != null && !record.getDeviceName().isEmpty())
                 encodeBytesField(out, 2, record.getDeviceName());
 
-            // rssi is sint32 must be zigzag-encoded
+            // rssi is sint32 in the proto definition, so it requires zigzag encoding.
             encodeZigzagField(out, 3, result.getRssi());
 
             if (record != null) {
@@ -441,8 +447,9 @@ public class BluetoothProxyManager {
         return out.toByteArray();
     }
 
-    // protobuf wire helpers
+    // Protobuf wire-format helpers (only the subset we need).
 
+    // Emit 7 bits at a time, setting the high bit on every byte except the last.
     private static void writeVarint(ByteArrayOutputStream out, long value) {
         while ((value & ~0x7FL) != 0L) {
             out.write((int) ((value & 0x7F) | 0x80));
@@ -452,17 +459,17 @@ public class BluetoothProxyManager {
     }
 
     private static void encodeVarintField(ByteArrayOutputStream out, int field, long value) {
-        writeVarint(out, (long) field << 3); // wire type 0
+        writeVarint(out, (long) field << 3);
         writeVarint(out, value);
     }
 
-    // sint32 uses zigzag encoding: (n<<1) ^ (n>>31)
+    /** sint32 zigzag: (n &lt;&lt; 1) ^ (n &gt;&gt; 31), required for negative RSSI values. */
     private static void encodeZigzagField(ByteArrayOutputStream out, int field, int value) {
         encodeVarintField(out, field, (((long) value << 1)) ^ ((long) (value >> 31)));
     }
 
     private static void encodeLenField(ByteArrayOutputStream out, int field, byte[] data) {
-        writeVarint(out, ((long) field << 3) | 2L); // wire type 2
+        writeVarint(out, ((long) field << 3) | 2L);
         writeVarint(out, data.length);
         out.write(data, 0, data.length);
     }
@@ -500,6 +507,8 @@ public class BluetoothProxyManager {
         }
     }
 
+    // "AA:BB:CC:DD:EE:FF" -> 0x0000AABBCCDDEEFF. ESPHome's BLE proto uses a
+    // single 64-bit field for the address with the upper 16 bits unused.
     private static long parseMacToLong(String mac) {
         String[] parts = mac.split(":");
         long addr = 0;

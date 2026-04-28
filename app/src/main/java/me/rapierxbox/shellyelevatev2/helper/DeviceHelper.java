@@ -18,6 +18,7 @@ import java.util.Objects;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
+import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 public class DeviceHelper {
 
@@ -60,10 +61,8 @@ public class DeviceHelper {
     }
 
     public void setScreenOn(boolean on) {
+        // ScreenManager owns the brightness target; just track the boolean here.
         screenOn = on;
-
-        // Don't write brightness here; let ScreenManager control it via updateBrightness()
-        // Avoid redundant writes and let the brightness manager decide the target
     }
 
     public boolean getScreenOn() {
@@ -71,7 +70,6 @@ public class DeviceHelper {
     }
 
     public void setScreenBrightness(int brightness) {
-        // Skip redundant writes to avoid duplicate logs and I/O
         if (lastScreenBrightness == brightness) return;
 
         lastScreenBrightness = brightness;
@@ -88,9 +86,9 @@ public class DeviceHelper {
         brightness = Math.max(0, Math.min(brightness, 255));
         if (BuildConfig.DEBUG) Log.d(TAG, "Set brightness to: " + brightness);
 
-        // Check for WRITE_SETTINGS permission (requested in MainActivity.onCreate)
-        // Note: SELinux denials for sysfs access (avc: denied { write } for name="brightness")
-        // are expected and work in permissive mode on rooted Shelly devices
+        // SELinux denials for the sysfs write are expected and harmless on rooted
+        // Shelly devices running permissive mode. WRITE_SETTINGS is requested in
+        // MainActivity.onCreate so we can disable Android's automatic brightness.
         if (!Settings.System.canWrite(mApplicationContext)) {
             Log.i(TAG, "Please disable androids automatic brightness or give the app the change settings permission.");
         } else {
@@ -116,10 +114,30 @@ public class DeviceHelper {
 
     public void setRelay(int num, boolean state) {
         state ^= deviceModel.invertRelay;
-        writeFileContent(getRelayFile(num), state ? "1" : "0");
-
+        if (deviceModel.usesInitScriptRelay()) {
+            triggerInitRelay(num, state);
+        } else {
+            writeFileContent(getRelayFile(num), state ? "1" : "0");
+        }
         if (mMQTTServer.shouldSend()) {
             mMQTTServer.publishRelay(num, state);
+        }
+    }
+
+    private void triggerInitRelay(int num, boolean state) {
+        String[] scripts = deviceModel.initRelayScripts;
+        if (scripts == null || num >= scripts.length) return;
+        String scriptName = scripts[num];
+        try {
+            // Newer models expose relays via init.rc scripts: write the desired state to
+            // a system property and pulse `ctl.start` to run the script.
+            Class<?> sp = Class.forName("android.os.SystemProperties");
+            java.lang.reflect.Method set = sp.getMethod("set", String.class, String.class);
+            set.invoke(null, "shelly.relay." + num + ".state", state ? "1" : "0");
+            set.invoke(null, "ctl.start", scriptName);
+        } catch (Exception e) {
+            Log.w(TAG, "Init relay failed for " + scriptName + ", falling back to sysfs: " + e.getMessage());
+            writeFileContent(getRelayFile(num), state ? "1" : "0");
         }
     }
 
@@ -139,7 +157,7 @@ public class DeviceHelper {
         try
         {
             var content = readFileContent(tempAndHumFile);
-            if (content == null || content.isEmpty()) return -999;
+            if (content.isEmpty()) return -999;
 
             String[] tempSplit = content.split(":");
             double temp = (Double.parseDouble(tempSplit[1]) * 175.0 / 65535.0) - 45.0;
@@ -167,7 +185,7 @@ public class DeviceHelper {
     public double getHumidity() {
         try {
             var content = readFileContent(tempAndHumFile);
-            if (content == null || content.isEmpty()) return -999;
+            if (content.isEmpty()) return -999;
 
             String[] humiditySplit = content.split(":");
             double humidity = Double.parseDouble(humiditySplit[0]) * 100.0 / 65535.0;
@@ -194,9 +212,45 @@ public class DeviceHelper {
         return content.toString();
     }
 
+    public boolean isDimmerAttached() {
+        return StesProtocolHandler.isOperational();
+    }
+
+    public void setDimmerBrightness(int percent0to100, Runnable onComplete) {
+        int stes = Math.round(percent0to100 * 10.0f);
+        StesProtocolHandler.setDimmer(stes, new StesProtocolHandler.OnDimmerListener() {
+            @Override public void onResult(StesProtocolHandler.DimmerStatus s) {
+                mSharedPreferences.edit()
+                    .putInt(SP_DIMMER_LAST_BRIGHTNESS, percent0to100)
+                    .putBoolean(SP_DIMMER_LAST_STATE, percent0to100 > 0)
+                    .apply();
+                if (mMQTTServer.shouldSend()) {
+                    mMQTTServer.publishDimmer(percent0to100 > 0, percent0to100);
+                }
+                if (onComplete != null) onComplete.run();
+            }
+            @Override public void onError(String e) {
+                if (onComplete != null) onComplete.run();
+            }
+        });
+    }
+
+    public void setDimmerOn(boolean on) {
+        int lastBri = mSharedPreferences.getInt(SP_DIMMER_LAST_BRIGHTNESS, 100);
+        setDimmerBrightness(on ? lastBri : 0, null);
+    }
+
+    public StesProtocolHandler.DimmerStatus getDimmerStatus() {
+        return StesProtocolHandler.lastStatus;
+    }
+
+    public StesProtocolHandler.DimmerPower getDimmerPower() {
+        return StesProtocolHandler.lastPower;
+    }
+
     private static String sanitizeString(String input) {
         if (input == null) return "";
-        return input.replaceAll("[^0-9]", ""); // keep only digits
+        return input.replaceAll("[^0-9]", "");
     }
 
     private static void writeFileContent(String filePath, String content) {

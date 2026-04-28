@@ -102,10 +102,10 @@ public class ServiceHelper {
             boolean hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
             boolean validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
 
-            // Prefer validated when available; fall back to INTERNET to avoid false negatives right after boot.
+            // VALIDATED isn't set immediately after boot; fall back to INTERNET so
+            // first-boot HTTP starts succeed instead of waiting for the captive check.
             return validated || hasInternet;
         } else {
-            // Legacy fallback (pre-M): rely on active network info
             try {
                 android.net.NetworkInfo info = cm.getActiveNetworkInfo();
 	            //noinspection deprecation

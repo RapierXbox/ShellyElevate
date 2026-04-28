@@ -36,6 +36,7 @@ import java.io.InputStreamReader;
 import fi.iki.elonen.NanoHTTPD;
 public class HttpServer extends NanoHTTPD {
     final SettingsParser mSettingsParser = new SettingsParser();
+    private static final String TAG = "HttpServer";
 
     public HttpServer() {
         super(8080);
@@ -48,7 +49,7 @@ public class HttpServer extends NanoHTTPD {
                     try {
                         start();
                     } catch (IOException e) {
-                        Log.d("HttpServer", "Failed to start http server: " + e);
+                        Log.d(TAG, "Failed to start http server: " + e);
                     }
                 } else if (!mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true) && isAlive()) {
                     stop();
@@ -111,13 +112,13 @@ public class HttpServer extends NanoHTTPD {
                     json.put("numOfButtons", device.buttons);
                     json.put("numOfInputs", device.inputs);
                 } catch (JSONException e) {
-                    Log.e("MQTT", "Error publishing hello", e);
+                    Log.e(TAG, "Error responding with device details!", e);
                 }
 
                 return newFixedLengthResponse(Response.Status.OK, "application/json", json.toString());
             }
         } catch (JSONException | ResponseException | IOException | InterruptedException e) {
-            Log.e("HttpServer", "Error handling request", e);
+            Log.e(TAG, "Error handling request", e);
         }
 
         return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", jsonResponse.toString());
@@ -274,15 +275,12 @@ public class HttpServer extends NanoHTTPD {
                 Map<String, String> files = new HashMap<>();
                 Map<String, List<String>> params = new HashMap<>();
                 try {
-                    /* cannot be called multiple times;
-                       session.parseBody() reads the POST request's body and calls HTTPSession's decodeParms() method,
-                       which sets the queryParameterString and parms field values to the POST's body */
+                    // parseBody() must be called before getParameters() to populate the
+                    // POST body into NanoHTTPD's params map; it cannot be called twice.
                     session.parseBody(files);
-
-                    //params.putAll(session.getParms()); getParams() is deprecated!
                     params.putAll(session.getParameters());
                 } catch (IOException | ResponseException e) {
-                    Log.e("HttpServer", "Invalid parameters", e);
+                    Log.e(TAG, "Invalid parameters", e);
                 }
                 if (method.equals(Method.GET)) {
                     int num = GetNumParameter(params, 0);
@@ -290,14 +288,13 @@ public class HttpServer extends NanoHTTPD {
                     jsonResponse.put("success", true);
                     jsonResponse.put("state", mDeviceHelper.getRelay(num));
                 } else if (method.equals(Method.POST)) {
-                    // get the POST body { "state", "true" }
                     String postData = files.get("postData");
                     assert postData != null;
                     JSONObject jsonObject = new JSONObject(postData);
 
                     int num = GetNumParameter(params, -1);
                     if (num == -999) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
-                    // num as json body
+                    // Fall back to the JSON body when ?num= isn't provided.
                     if (num == -1 && jsonObject.getInt("num")>=0)
                         num = jsonObject.getInt("num");
 
@@ -376,7 +373,7 @@ public class HttpServer extends NanoHTTPD {
                             try {
                                 Runtime.getRuntime().exec("reboot");
                             } catch (IOException e) {
-                                Log.e("HttpServer", "Error rebooting:", e);
+                                Log.e(TAG, "Error rebooting:", e);
                             }
                         }, "reboot-exec").start();
                         jsonResponse.put("success", true);
@@ -385,22 +382,63 @@ public class HttpServer extends NanoHTTPD {
                     }
                 }
                 break;
+            case "dimmer":
+                if (!mDeviceHelper.isDimmerAttached()) {
+                    return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"success\":false,\"error\":\"Dimmer not attached\"}");
+                }
+                if (method.equals(Method.GET)) {
+                    jsonResponse.put("success", true);
+                    me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler.DimmerStatus ds = mDeviceHelper.getDimmerStatus();
+                    me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler.DimmerPower dp = mDeviceHelper.getDimmerPower();
+                    if (ds != null) {
+                        jsonResponse.put("on", ds.on);
+                        jsonResponse.put("brightness", ds.actualBrightness / 10);
+                        jsonResponse.put("not_dimmable", ds.notDimmable);
+                        jsonResponse.put("not_calibrated", ds.notCalibrated);
+                        jsonResponse.put("overheat", ds.overheat);
+                        jsonResponse.put("overcurrent", ds.overcurrent);
+                    }
+                    if (dp != null) {
+                        jsonResponse.put("power", dp.powerW);
+                        jsonResponse.put("voltage", dp.voltageV);
+                        jsonResponse.put("current", dp.currentA);
+                    }
+                } else if (method.equals(Method.POST)) {
+                    Map<String, String> dimmerFiles = new HashMap<>();
+                    try {
+                        session.parseBody(dimmerFiles);
+                    } catch (ResponseException e) {
+                        Log.e(TAG, "Error parsing request: ", e);
+                    }
+
+                    String postData = dimmerFiles.get("postData");
+                    if (postData != null && !postData.isEmpty()) {
+                        JSONObject body = new JSONObject(postData);
+                        if (body.has("brightness")) {
+                            mDeviceHelper.setDimmerBrightness(body.getInt("brightness"), null);
+                        } else if (body.has("on")) {
+                            mDeviceHelper.setDimmerOn(body.getBoolean("on"));
+                        }
+                        jsonResponse.put("success", true);
+                    }
+                } else {
+                    jsonResponse.put("success", false);
+                    jsonResponse.put("error", "Invalid request method");
+                }
+                break;
             case "free":
                 jsonResponse.put("success", false);
                 if (method.equals(Method.GET)) {
                     try {
-                        // Execute 'free -m' to get memory info in mebibyte MiB
                         Process process = Runtime.getRuntime().exec("free -m");
                         BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
                         String line;
                         while ((line = reader.readLine()) != null) {
-                            /* free -m: (column "available" doesn't exist at Android)
-                                       total        used        free      shared     buffers
-                                Mem:     959         917          41           1          29
-                            */
+                            // Android's `free -m` lacks the "available" column, so we read
+                            // "free" (token[3]) instead of the more accurate "available".
+                            //   Mem:  total  used  free  shared  buffers
                             if (line.startsWith("Mem:")) {
-                                // Split by whitespace; \\s+ handles multiple spaces
                                 String[] tokens = line.split("\\s+");
                                 if (tokens.length >= 4) {
                                     try {
@@ -410,7 +448,7 @@ public class HttpServer extends NanoHTTPD {
                                         jsonResponse.put("Mem total memory", totalMemory + "MiB");
                                         jsonResponse.put("Mem free memory", availableMemory + "MiB");
                                     } catch (NumberFormatException e) {
-                                        Log.w("HttpServer", "Unparseable Mem line: " + line);
+                                        Log.w(TAG, "Unparseable Mem line: " + line);
                                     }
                                 }
                             }
@@ -424,14 +462,14 @@ public class HttpServer extends NanoHTTPD {
                                         jsonResponse.put("Swap total memory", totalMemory + "MiB");
                                         jsonResponse.put("Swap free memory", availableMemory + "MiB");
                                     } catch (NumberFormatException e) {
-                                        Log.w("HttpServer", "Unparseable Swap line: " + line);
+                                        Log.w(TAG, "Unparseable Swap line: " + line);
                                     }
                                 }
                             }
                         }
                         process.waitFor();
                     } catch (IOException e) {
-                        Log.e("HttpServer", "Error free command request", e);
+                        Log.e(TAG, "Error free command request", e);
                     }
                 }
                 break;
@@ -444,18 +482,15 @@ public class HttpServer extends NanoHTTPD {
         return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
     private static int GetNumParameter(Map<String, List<String>> params, int defaultValue) {
-        // Get the value of num
         List<String> numParam = params.get("num");
         if (!(numParam == null) && !numParam.isEmpty()) {
             try {
-                // first element of the list is the value
                 return Integer.parseInt(numParam.get(0));
             } catch (NumberFormatException e) {
-                // handle invalid number
                 return -999;
             }
         }
-        return defaultValue; // Default
+        return defaultValue;
     }
 
     public void onDestroy() {

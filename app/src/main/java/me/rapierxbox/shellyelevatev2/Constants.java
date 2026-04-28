@@ -52,10 +52,11 @@ public class Constants {
     public static final String SP_VOICE_WAKE_ENABLED = "voiceWakeEnabled";
     public static final String SP_VOICE_WAKE_MODEL_NAME = "voiceWakeModelName";
     public static final String SP_VOICE_WAKE_SOUND_ENABLED = "voiceWakeSoundEnabled";
-    public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 50 is default sens
+    public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 0..100, 50 = model's published cutoff
     public static final String SP_VOICE_SCORE_BAR_ENABLED   = "voiceScoreBarEnabled";
     public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
     public static final String SP_VOICE_WAKE_EXPERIMENTAL_MODELS = "voiceWakeExperimentalModels";
+    public static final String SP_VOICE_ASSISTANT_MUTED = "voiceAssistantMuted";
 
     //MQTT SP Keys
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
@@ -128,12 +129,30 @@ public class Constants {
     public static final String INTENT_VOICE_THRESHOLD_KEY = "wakeThreshold";
 
     //Voice MQTT Topics
-    public static final String MQTT_TOPIC_VOICE_TRIGGER = "shellyelevatev2/%s/voice_trigger";
-    public static final String MQTT_TOPIC_VOICE_STATUS  = "shellyelevatev2/%s/voice_status";
+    public static final String MQTT_TOPIC_VOICE_STATUS       = "shellyelevatev2/%s/voice/status";
+    public static final String MQTT_TOPIC_VOICE_TRIGGER      = "shellyelevatev2/%s/voice/trigger";
+    public static final String MQTT_TOPIC_VOICE_MUTE_STATE   = "shellyelevatev2/%s/voice/mute";
+    public static final String MQTT_TOPIC_VOICE_MUTE_COMMAND = "shellyelevatev2/%s/voice/mute_set";
+
+    //Voice status sensor values
+    public static final String VOICE_STATUS_READY     = "ready";
+    public static final String VOICE_STATUS_MUTED     = "muted";
+    public static final String VOICE_STATUS_LISTENING = "listening";
+    public static final String VOICE_STATUS_ANSWERING = "answering";
 
     //Button Press Types
     public static final String BUTTON_PRESS_TYPE_SHORT = "short";
     public static final String BUTTON_PRESS_TYPE_LONG = "long";
     public static final String BUTTON_PRESS_TYPE_DOUBLE = "double";
     public static final String BUTTON_PRESS_TYPE_TRIPLE = "triple";
+
+    //Dimmer MQTT Topics
+    public static final String MQTT_TOPIC_DIMMER_STATE   = "shellyelevatev2/%s/dimmer";
+    public static final String MQTT_TOPIC_DIMMER_COMMAND = "shellyelevatev2/%s/dimmer_set";
+    public static final String MQTT_TOPIC_DIMMER_BRI     = "shellyelevatev2/%s/dimmer_bri";
+    public static final String MQTT_TOPIC_DIMMER_POWER   = "shellyelevatev2/%s/dimmer_power";
+
+    //Dimmer SP Keys
+    public static final String SP_DIMMER_LAST_BRIGHTNESS = "dimmerLastBrightness";
+    public static final String SP_DIMMER_LAST_STATE      = "dimmerLastState";
 }

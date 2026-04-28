@@ -49,7 +49,7 @@ import java.net.NetworkInterface
 @SuppressLint("UseSwitchCompatOrMaterialCode")
 class SettingsActivity : AppCompatActivity() {
 
-    private lateinit var binding: SettingsActivityBinding // Declare the binding object
+    private lateinit var binding: SettingsActivityBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
