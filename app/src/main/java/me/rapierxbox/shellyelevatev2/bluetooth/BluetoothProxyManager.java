@@ -128,10 +128,15 @@ public class BluetoothProxyManager {
                     try {
                         client = serverSocket.accept();
                     } catch (IOException e) {
-                        if (enabled) Log.e(TAG, "accept error", e);
-                        break;
+                        // Only bail on shutdown; transient accept() errors shouldn't kill the listener.
+                        if (!enabled || serverSocket.isClosed()) break;
+                        Log.w(TAG, "accept error, continuing: " + e.getMessage());
+                        continue;
                     }
                     Log.i(TAG, "HA connected from " + client.getInetAddress());
+                    try {
+                        client.setKeepAlive(true); // detect dead HA connection without waiting hours
+                    } catch (Exception ignored) {}
                     ClientSession prev = activeSession.getAndSet(null);
                     if (prev != null) prev.close("new connection");
                     ClientSession session = new ClientSession(client);
@@ -240,7 +245,11 @@ public class BluetoothProxyManager {
             } finally {
                 close("session ended");
                 if (activeSession.compareAndSet(this, null)) {
-                    stopBleScanning();
+                    // Keep the BLE scan running across HA reconnects. Android silently
+                    // throttles apps that start/stop scans >5x/30s; we just drop the
+                    // target instead. The scan is torn down only in shutdown().
+                    if (scanTarget.compareAndSet(this, null))
+                        Log.d(TAG, "session ended, scan kept running for next HA reconnect");
                     Log.i(TAG, "session cleaned up");
                 }
             }
@@ -343,7 +352,10 @@ public class BluetoothProxyManager {
                 if (ad != null) target.sendAdvertisement(ad);
             }
             @Override public void onScanFailed(int errorCode) {
-                Log.e(TAG, "BLE scan failed: " + errorCode);
+                // Clear activeScanCb or startBleScanning()'s "already running" guard
+                // permanently short-circuits. errorCode 2 = the silent 5-scans/30s throttle.
+                Log.e(TAG, "BLE scan failed: " + errorCode + " (clearing callback so we can retry)");
+                if (activeScanCb == this) activeScanCb = null;
             }
         };
 
