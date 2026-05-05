@@ -12,13 +12,27 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.LinkedHashSet;
 
 public class SettingsParser {
-    public JSONObject getSettings() throws JSONException {
+    // Keys whose values must always be stored as Float in SharedPreferences.
+    // Any component that calls getFloat() on these keys must be listed here so
+    // that the HTTP /settings API cannot accidentally corrupt them by writing
+    // whole-number JSON values as Integer.
+    private static final Set<String> FLOAT_PREF_KEYS = Collections.unmodifiableSet(
+        new HashSet<>(Arrays.asList(
+            Constants.SP_DYNAMIC_TEMP_OFFSET_BASELINE,
+            Constants.SP_DYNAMIC_TEMP_OFFSET_K
+        ))
+    );
+
+    public JSONObject getSettings()throws JSONException {
         JSONObject settings = new JSONObject();
         Map<String, ?> allPreferences = mSharedPreferences.getAll();
         for (Map.Entry<String, ?> entry : allPreferences.entrySet()) {
@@ -77,13 +91,20 @@ public class SettingsParser {
             } else if (value instanceof Number) {
                 Number num = (Number) value;
                 double d = num.doubleValue();
-                boolean isWhole = Math.floor(d) == d && !Double.isInfinite(d) && !Double.isNaN(d);
-                if (!isWhole) {
+                // Always use putFloat() for known Float pref keys, regardless of whether
+                // the current stored type is Float/Int/Long. This repairs any corruption
+                // caused by a previous write that stored a whole-number float as Integer.
+                if (FLOAT_PREF_KEYS.contains(key)) {
                     editor.putFloat(key, (float) d);
-                } else if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
-                    editor.putInt(key, (int) d);
                 } else {
-                    editor.putLong(key, (long) d);
+                    boolean isWhole = Math.floor(d) == d && !Double.isInfinite(d) && !Double.isNaN(d);
+                    if (!isWhole) {
+                        editor.putFloat(key, (float) d);
+                    } else if (d >= Integer.MIN_VALUE && d <= Integer.MAX_VALUE) {
+                        editor.putInt(key, (int) d);
+                    } else {
+                        editor.putLong(key, (long) d);
+                    }
                 }
             }
         }
