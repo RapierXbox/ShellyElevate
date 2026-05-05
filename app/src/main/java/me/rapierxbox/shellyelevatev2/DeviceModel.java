@@ -28,7 +28,8 @@ public enum DeviceModel {
     JENNA   (new Config("Jenna",    "Shelly Wall Display X2i", "SAWD-5A1XX10EU0")
             .proximity().powerButton().io(0, 1, 2)
             .initRelay("cloud.shelly.jenna.relay1", "cloud.shelly.jenna.relay2")
-            .inputEvents("/dev/input/event5", "/dev/input/event7")),
+            // event4 is JENNA's proximity gpio_keys node; event5/event7 carry the regular keys.
+            .inputEvents("/dev/input/event4", "/dev/input/event5", "/dev/input/event7")),
     CALLY   (new Config("Cally",    "Shelly Wall Display XLi", "SAWD-6A1XX10EU0")
             .proximity().powerButton().io(4, 1, 2)
             .initRelay("cloud.shelly.cally.relay1", "cloud.shelly.cally.relay2")

@@ -79,20 +79,27 @@ public class DeviceSensorManager implements SensorEventListener {
             Log.i(TAG, "SensorManager proximity sensor registered (max range " + fallbackProximityMaxRange + ")");
         }
 
-        // Preference order for proximity input: native JNI monitor, `getevent` fallback,
-        // then SensorManager. The two gpio_keys paths emit KEY_F5/KEY_F6 events.
+        // Try the native input monitor, then a getevent fallback. SensorManager
+        // proximity stays registered as a backup since not every model's gpio_keys
+        // actually emits KEY_F5/KEY_F6.
         if (inputEventPaths.length > 0 && InputMonitor.isAvailable()) {
             usingGpioKeysProximity = startNativeInputMonitor();
         }
         if (!usingGpioKeysProximity && inputEventPaths.length > 0) {
             usingGpioKeysProximity = startProximityKeyFallback();
         }
-        if (usingGpioKeysProximity) {
+        if (fallbackProximityMaxRange >= 0f) {
+            maxProximitySensorValue = fallbackProximityMaxRange;
+            proximitySensorAvailable = true;
+        } else if (usingGpioKeysProximity) {
             maxProximitySensorValue = 1f;
             proximitySensorAvailable = true;
-            Log.i(TAG, "GPIO input active via " + (mInputMonitor != null ? "JNI" : "getevent"));
         } else {
-            applyProximityFallback();
+            proximitySensorAvailable = false;
+            Log.w(TAG, "Proximity sensor unavailable (no gpio_keys or SensorManager sensor)");
+        }
+        if (usingGpioKeysProximity) {
+            Log.i(TAG, "GPIO input active via " + (mInputMonitor != null ? "JNI" : "getevent"));
         }
     }
 
@@ -146,7 +153,7 @@ public class DeviceSensorManager implements SensorEventListener {
                 LocalBroadcastManager.getInstance(context).sendBroadcast(intent);
                 lastLuxBroadcastAtMs = now;
             }
-        } else if (event.sensor.getType() == Sensor.TYPE_PROXIMITY && !usingGpioKeysProximity) {
+        } else if (event.sensor.getType() == Sensor.TYPE_PROXIMITY) {
             lastMeasuredDistance = event.values[0];
             publishProximity(lastMeasuredDistance);
         }
@@ -170,10 +177,11 @@ public class DeviceSensorManager implements SensorEventListener {
     }
 
     private void handleNativeKeyEvent(int keyCode, int action, int repeatCount) {
-        // KEY_F5 = 63 (near), KEY_F6 = 64 (far)
+        // KEY_F5 = 63 (near), KEY_F6 = 64 (far). Far publishes the SensorManager max
+        // so both sources share the same scale for ScreenSaverManager's threshold.
         if (action == 1) { // DOWN
             if (keyCode == 63) publishProximity(0f);
-            else if (keyCode == 64) publishProximity(1f);
+            else if (keyCode == 64) publishProximity(maxProximitySensorValue);
         }
     }
 
@@ -217,9 +225,8 @@ public class DeviceSensorManager implements SensorEventListener {
                 process.destroy();
             }
             proximityFallbackProcess = null;
-            // If the reader dies (EOF, IOException, non-zero exit), let
-            // SensorManager's proximity sensor take over by clearing the gpio
-            // flag; onSensorChanged gates on !usingGpioKeysProximity.
+            // Reader exited; clear the flag. SensorManager proximity, if registered,
+            // keeps publishing on its own.
             if (usingGpioKeysProximity) {
                 usingGpioKeysProximity = false;
                 applyProximityFallback();
@@ -251,7 +258,7 @@ public class DeviceSensorManager implements SensorEventListener {
         if (normalized.contains(PROXIMITY_KEY_NEAR)) {
             publishProximity(0f);
         } else if (normalized.contains(PROXIMITY_KEY_FAR)) {
-            publishProximity(1f);
+            publishProximity(maxProximitySensorValue);
         }
     }
 

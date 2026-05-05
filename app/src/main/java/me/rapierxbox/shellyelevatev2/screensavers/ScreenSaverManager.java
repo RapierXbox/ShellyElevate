@@ -33,7 +33,6 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private long lastTouchEventTime;
     private boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
-    private long lastProximityEventTime = 0L;
     private long lastProximityWakeTime = 0L;
     private Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
@@ -200,11 +199,6 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (BuildConfig.DEBUG) Log.i(TAG, "Proximity event: " + proximity + " - Value: " + proximity);
 
         long now = System.currentTimeMillis();
-        // Debounce: gpio_keys can fire multiple events for a single physical move.
-        if (now - lastProximityEventTime < 350L) {
-            return;
-        }
-        lastProximityEventTime = now;
 
         var mqtt = ShellyElevateApplication.mMQTTServer;
         if (mqtt != null && mqtt.shouldSend()) mqtt.publishProximity(proximity);
