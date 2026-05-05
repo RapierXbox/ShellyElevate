@@ -230,9 +230,13 @@ public class MQTTServer {
             });
 
             // Last-will: broker publishes "offline" if we drop without a clean disconnect.
-            MqttMessage lwtMessage = new MqttMessage("offline".getBytes());
+            MqttMessage lwtMessage = new MqttMessage("offline".getBytes(java.nio.charset.StandardCharsets.UTF_8));
             lwtMessage.setQos(1);
             lwtMessage.setRetained(true);
+            MqttProperties lwtProps = new MqttProperties();
+            lwtProps.setPayloadFormat(true);
+            lwtProps.setContentType("text/plain; charset=utf-8");
+            lwtMessage.setProperties(lwtProps);
             mMqttConnectionsOptions.setWill(parseTopic(MQTT_TOPIC_STATUS), lwtMessage);
 
             mMqttClient.connect(mMqttConnectionsOptions);
@@ -267,7 +271,16 @@ public class MQTTServer {
         scheduler.execute(() -> {
             try {
                 publishHello();
-                publishConfig();
+                if (isHaDiscoveryEnabled()) {
+                    publishConfig();
+                } else {
+                    // Clear any stale retained discovery blob from a previous session.
+                    try {
+                        deleteConfig();
+                    } catch (MqttException e) {
+                        Log.w(TAG, "Failed to clear stale discovery topic", e);
+                    }
+                }
                 publishInternal(parseTopic(MQTT_TOPIC_STATUS), "online", 1, true);
 
                 // Stagger publishes so the initial discovery burst doesn't overwhelm
@@ -305,12 +318,20 @@ public class MQTTServer {
         });
     }
 
+    private boolean isHaDiscoveryEnabled() {
+        return mSharedPreferences.getBoolean(SP_MQTT_HA_DISCOVERY, true);
+    }
+
+    private boolean shouldRetainState() {
+        return mSharedPreferences.getBoolean(SP_MQTT_RETAIN_STATE, true);
+    }
+
     public void disconnect() {
         Log.d(TAG, "Disconnecting");
         if (mMqttClient != null && mMqttClient.isConnected()) {
             try {
                 deleteConfig();
-                mMqttClient.publish(parseTopic(MQTT_TOPIC_STATUS), "offline".getBytes(), 1, true);
+                publishInternalSync(parseTopic(MQTT_TOPIC_STATUS), "offline", 1, true);
                 mMqttClient.disconnect();
             } catch (MqttException e) {
                 Log.e(TAG, "Error disconnecting MQTT client", e);
@@ -373,9 +394,17 @@ public class MQTTServer {
             return;
         }
         try {
-            MqttMessage message = new MqttMessage(payload.getBytes());
+            MqttMessage message = new MqttMessage(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
             message.setQos(qos);
             message.setRetained(retained);
+            // Mark payloads as UTF-8 text/JSON so v5 brokers don't render them as
+            // binary; v3.1 brokers ignore these properties.
+            MqttProperties props = new MqttProperties();
+            props.setPayloadFormat(true);
+            String trimmed = payload.length() > 0 ? payload.trim() : "";
+            boolean looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+            props.setContentType(looksLikeJson ? "application/json" : "text/plain; charset=utf-8");
+            message.setProperties(props);
             mMqttClient.publish(topic, message);
         } catch (MqttException e) {
             Log.e(TAG, "Failed to publish to " + topic, e);
@@ -385,22 +414,23 @@ public class MQTTServer {
     public void publishTempAndHum() {
         float temp = (float) mDeviceHelper.getTemperature();
         float hum = (float) mDeviceHelper.getHumidity();
-        if (temp != -999) publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, false);
-        if (hum != -999) publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, false);
+        boolean retain = shouldRetainState();
+        if (temp != -999) publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, retain);
+        if (hum != -999) publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, retain);
     }
 
     public void publishTemp(float temp) {
         if (temp == -999) return;
-        publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, false);
+        publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, shouldRetainState());
     }
 
     public void publishHum(float hum) {
         if (hum == -999) return;
-        publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, false);
+        publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, shouldRetainState());
     }
 
     public void publishLux(float lux) {
-        publishInternal(parseTopic(MQTT_TOPIC_LUX_SENSOR), String.valueOf(lux), 1, false);
+        publishInternal(parseTopic(MQTT_TOPIC_LUX_SENSOR), String.valueOf(lux), 1, shouldRetainState());
     }
 
     public void publishScreenBrightness(int brightness) {
@@ -416,34 +446,36 @@ public class MQTTServer {
             lastBrightnessSentAtMs = now;
         }
 
-        publishInternal(parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS), String.valueOf(brightness), 1, false);
+        publishInternal(parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS), String.valueOf(brightness), 1, shouldRetainState());
     }
     public void publishProximity(float distance) {
-        publishInternal(parseTopic(MQTT_TOPIC_PROXIMITY_SENSOR), String.valueOf(distance), 1, false);
+        publishInternal(parseTopic(MQTT_TOPIC_PROXIMITY_SENSOR), String.valueOf(distance), 1, shouldRetainState());
     }
 
     public void publishRelay(int num, boolean state) {
         var mqttSuffix = (num >0 ? ("_" + num): "");
-        publishInternalCoalesced(parseTopic(MQTT_TOPIC_RELAY_STATE) + mqttSuffix, state ? "ON" : "OFF", 1, false);
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_RELAY_STATE) + mqttSuffix, state ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     public void publishDimmer(boolean on, int brightness0to100) {
-        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_STATE), on ? "ON" : "OFF", 1, false);
-        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_BRI), String.valueOf(brightness0to100), 1, false);
+        boolean retain = shouldRetainState();
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_STATE), on ? "ON" : "OFF", 1, retain);
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_BRI), String.valueOf(brightness0to100), 1, retain);
     }
 
     public void publishDimmerPower(float watts, int volts, float amps) {
         String json = "{\"power\":" + watts + ",\"voltage\":" + volts + ",\"current\":" + amps + "}";
-        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_POWER), json, 1, false);
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_DIMMER_POWER), json, 1, shouldRetainState());
     }
 
     public void publishSwitch(int num, boolean state) {
         var mqttSuffix = (num >0 ? ("_" + num): "");
+        // Switch presses are momentary events, never retained.
         publishInternalCoalesced(parseTopic(MQTT_TOPIC_BUTTON_STATE) + mqttSuffix, state?"PRESS":"RELEASE", 1, false);
     }
 
     public void publishSleeping(boolean state) {
-        publishInternal(parseTopic(MQTT_TOPIC_SLEEPING_BINARY_SENSOR), state ? "ON" : "OFF", 1, false);
+        publishInternal(parseTopic(MQTT_TOPIC_SLEEPING_BINARY_SENSOR), state ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     // Button id 140 is the dedicated power button; 0..3 are the regular touch buttons.
@@ -510,23 +542,25 @@ public class MQTTServer {
         }
     }
 
-    private void publishConfig() throws JSONException, MqttException {
+    private void publishConfig() throws JSONException {
         JSONObject payload = new MqttDiscoveryConfigBuilder(
                 clientId, DeviceModel.getReportedDevice(), mSharedPreferences).build();
         String topic = parseTopic(MQTT_TOPIC_CONFIG_DEVICE);
-        byte[] bytes = payload.toString().getBytes();
-        Log.i(TAG, "publishConfig: topic=" + topic + " bytes=" + bytes.length
+        String json = payload.toString();
+        Log.i(TAG, "publishConfig: topic=" + topic + " bytes=" + json.length()
                 + " components=" + payload.optJSONObject("cmps").length());
-        mMqttClient.publish(topic, bytes, 1, true);
+        // Routed through publishInternalSync so v5 brokers tag this as application/json.
+        publishInternalSync(topic, json, 1, true);
     }
 
     private void publishThermalZones() {
         if (!mSharedPreferences.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)) return;
+        boolean retain = shouldRetainState();
         for (ThermalZoneReader.Zone z : ThermalZoneReader.discoverZones()) {
             Float t = ThermalZoneReader.readZoneTempC(z);
             if (t == null) continue;
             String topic = String.format(MQTT_TOPIC_THERMAL_ZONE, clientId, z.type);
-            publishInternal(topic, String.valueOf(Math.round(t * 10f) / 10f), 1, false);
+            publishInternal(topic, String.valueOf(Math.round(t * 10f) / 10f), 1, retain);
         }
     }
 

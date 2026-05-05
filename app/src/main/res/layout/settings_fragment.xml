@@ -642,6 +642,26 @@
                     android:inputType="textVisiblePassword"
                     android:textSize="18sp" />
             </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/mqttHaDiscovery"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="16dp"
+                android:text="@string/mqtt_ha_discovery"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <TextView
+                android:id="@+id/mqttHaDiscoveryHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:text="@string/mqtt_ha_discovery_hint"
+                android:textSize="14sp"
+                android:alpha="0.7" />
+
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/publishThermalSensors"
                 android:layout_width="match_parent"

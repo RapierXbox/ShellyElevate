@@ -50,6 +50,8 @@
     <string name="client_id">Client ID</string>
     <string name="mqtt_client_id_hint">your custom client id</string>
     <string name="mqtt_port_hint">1883</string>
+    <string name="mqtt_ha_discovery">Home Assistant auto-discovery</string>
+    <string name="mqtt_ha_discovery_hint">Disable for non-HA brokers (ioBroker, etc.). Each value is then published to its own topic instead of one big config blob.</string>
     <string name="proximity_sensor_available">Proximity sensor available to app: %1$s</string>
     <string name="sensor_available_yes">Yes</string>
     <string name="sensor_available_no">No</string>

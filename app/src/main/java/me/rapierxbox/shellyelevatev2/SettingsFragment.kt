@@ -204,12 +204,14 @@ class SettingsFragment : Fragment() {
             visibleWhen(binding.mqttEnabled,
                 binding.mqttBrokerLayout, binding.mqttPortLayout,
                 binding.mqttUsernameLayout, binding.mqttPasswordLayout,
-                binding.mqttClientIdLayout)
+                binding.mqttClientIdLayout,
+                binding.mqttHaDiscovery, binding.mqttHaDiscoveryHint)
             +TextPref(binding.mqttBroker, SP_MQTT_BROKER)
             +IntTextPref(binding.mqttPort, SP_MQTT_PORT, MQTT_DEFAULT_PORT)
             +TextPref(binding.mqttUsername, SP_MQTT_USERNAME)
             +TextPref(binding.mqttPassword, SP_MQTT_PASSWORD)
             +TextPref(binding.mqttClientId, SP_MQTT_CLIENTID, defaultClientId)
+            +SwitchPref(binding.mqttHaDiscovery, SP_MQTT_HA_DISCOVERY, true)
 
             +SwitchPref(binding.switchOnSwipe, SP_SWITCH_ON_SWIPE, true)
             +SwitchPref(binding.powerButtonAutoReboot, SP_POWER_BUTTON_AUTO_REBOOT, true)

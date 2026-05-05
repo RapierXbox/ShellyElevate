@@ -65,6 +65,10 @@ public class Constants {
     public static final String SP_MQTT_USERNAME = "mqttUsername";
     public static final String SP_MQTT_PASSWORD = "mqttPassword";
     public static final String SP_MQTT_CLIENTID = "mqttDeviceId";
+    // Disable for non-HA brokers (ioBroker etc.) that can't parse the discovery JSON.
+    public static final String SP_MQTT_HA_DISCOVERY = "mqttHomeAssistantDiscovery";
+    // Retain per-state topics so a fresh subscriber sees current values immediately.
+    public static final String SP_MQTT_RETAIN_STATE = "mqttRetainState";
 
     //ScreenSaver intents
     public static final String INTENT_SCREEN_SAVER_STARTED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STARTED";
