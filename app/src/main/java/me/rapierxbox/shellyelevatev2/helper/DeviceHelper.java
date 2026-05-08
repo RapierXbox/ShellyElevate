@@ -154,13 +154,13 @@ public class DeviceHelper {
     }
 
     public double getTemperature() {
-        try
-        {
+        try {
             var content = readFileContent(tempAndHumFile);
             if (content.isEmpty()) return -999;
 
-            String[] tempSplit = content.split(":");
-            double temp = (Double.parseDouble(tempSplit[1]) * 175.0 / 65535.0) - 45.0;
+            String[] tempSplit = content.trim().split(":");
+            if (tempSplit.length < 2) return -999;
+            double temp = (Double.parseDouble(tempSplit[1].trim()) * 175.0 / 65535.0) - 45.0;
 
             temp += DeviceModel.getReportedDevice().temperatureOffset;
             temp -= getDynamicTempCorrection();
@@ -187,8 +187,9 @@ public class DeviceHelper {
             var content = readFileContent(tempAndHumFile);
             if (content.isEmpty()) return -999;
 
-            String[] humiditySplit = content.split(":");
-            double humidity = Double.parseDouble(humiditySplit[0]) * 100.0 / 65535.0;
+            String[] humiditySplit = content.trim().split(":");
+            if (humiditySplit.length < 2) return -999;
+            double humidity = Double.parseDouble(humiditySplit[0].trim()) * 100.0 / 65535.0;
 
             humidity += DeviceModel.getReportedDevice().humidityOffset;
 
