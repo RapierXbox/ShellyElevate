@@ -34,7 +34,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
     private long lastProximityWakeTime = 0L;
-    private Boolean lastNearState = null;
+    private volatile Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
 
     public static ScreenSaver[] getAvailableScreenSavers() {

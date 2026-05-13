@@ -130,7 +130,7 @@ public class DeviceSensorManager implements SensorEventListener {
      * just after the screensaver starts) so that a user who is already in range
      * can wake the screen without first moving away and back.
      */
-    public void resetProximityState() {
+    public synchronized void resetProximityState() {
         lastPublishedProximity = -1f;
     }
 
@@ -273,7 +273,7 @@ public class DeviceSensorManager implements SensorEventListener {
         }
     }
 
-    private void publishProximity(float value) {
+    private synchronized void publishProximity(float value) {
         if (Float.compare(lastPublishedProximity, value) == 0) {
             return;
         }
