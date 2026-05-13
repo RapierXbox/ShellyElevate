@@ -123,6 +123,17 @@ public class DeviceSensorManager implements SensorEventListener {
         return proximitySensorAvailable;
     }
 
+    /**
+     * Resets the published-proximity tracking so the next reading is always
+     * broadcast, even if the sensor value has not changed.  Call this whenever
+     * the app re-enters a state where proximity needs to be re-evaluated (e.g.
+     * just after the screensaver starts) so that a user who is already in range
+     * can wake the screen without first moving away and back.
+     */
+    public synchronized void resetProximityState() {
+        lastPublishedProximity = -1f;
+    }
+
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (event == null) return;
@@ -262,7 +273,7 @@ public class DeviceSensorManager implements SensorEventListener {
         }
     }
 
-    private void publishProximity(float value) {
+    private synchronized void publishProximity(float value) {
         if (Float.compare(lastPublishedProximity, value) == 0) {
             return;
         }

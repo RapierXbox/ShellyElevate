@@ -34,7 +34,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
     private long lastProximityWakeTime = 0L;
-    private Boolean lastNearState = null;
+    private volatile Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
 
     public static ScreenSaver[] getAvailableScreenSavers() {
@@ -151,6 +151,20 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (screenSaverRunning || !isScreenSaverEnabled()) return;
 
         screenSaverRunning = true;
+
+        // Reset proximity tracking so the first event after the screensaver starts is
+        // always treated as a fresh transition.  Without this, a user who was already
+        // near when the idle timeout fired would be unable to wake the screen because
+        // lastNearState would already equal the incoming isNear value and the
+        // transition guard would silently return early.
+        lastNearState = null;
+        if (mDeviceSensorManager != null) {
+            // Force SensorManager-based sensors (which fire continuously) to re-publish
+            // their current value so the screensaver can wake immediately when the user
+            // is already in range.
+            mDeviceSensorManager.resetProximityState();
+        }
+
         ScreenSaver saver = getCurrentScreenSaver();
         saver.onStart(appContext);
         Log.i(TAG, "Starting screensaver: " + saver.getClass().getSimpleName());
