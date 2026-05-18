@@ -10,7 +10,6 @@ import android.util.Log;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -23,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import me.rapierxbox.shellyelevatev2.helper.HttpDownloader;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -199,32 +199,7 @@ public class WakeWordModelManager {
     }
 
     public static void downloadFile(OkHttpClient client, String url, File destFile, ProgressCallback onProgress) throws IOException {
-        Request request = new Request.Builder()
-                .url(url)
-                .header("User-Agent", "ShellyElevateV2")
-                .build();
-        try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) throw new IOException("HTTP " + response.code() + " for " + url);
-            ResponseBody body = response.body();
-            if (body == null) throw new IOException("Empty body for " + url);
-
-            long total = body.contentLength();
-            File parent = destFile.getParentFile();
-            if (parent != null) parent.mkdirs();
-
-            long bytesRead = 0;
-            try (OutputStream out = new BufferedOutputStream(new FileOutputStream(destFile));
-                 InputStream input = body.byteStream()) {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = input.read(buf)) != -1) {
-                    out.write(buf, 0, n);
-                    bytesRead += n;
-                    if (total > 0) onProgress.onProgress((int) (bytesRead * 100 / total));
-                }
-            }
-        }
-        onProgress.onProgress(100);
+        HttpDownloader.download(client, url, destFile, onProgress::onProgress);
     }
 
     public static String importCustomModel(Context context, Uri tfliteUri, File wakewordsDir) throws IOException {
