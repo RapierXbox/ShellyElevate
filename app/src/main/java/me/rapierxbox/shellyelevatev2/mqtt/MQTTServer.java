@@ -513,7 +513,12 @@ public class MQTTServer {
     }
 
     public void publishSwipeEvent() {
-        publishInternal(parseTopic(MQTT_TOPIC_SWIPE_EVENT), "{\"event_type\": \"swipe\"}", 1, false);
+        publishSwipeEvent("swipe");
+    }
+
+    public void publishSwipeEvent(String eventType) {
+        publishInternal(parseTopic(MQTT_TOPIC_SWIPE_EVENT),
+                "{\"event_type\": \"" + eventType + "\"}", 1, false);
     }
 
     public void publishHello() {

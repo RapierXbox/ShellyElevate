@@ -150,6 +150,13 @@ public class Constants {
     public static final String BUTTON_PRESS_TYPE_DOUBLE = "double";
     public static final String BUTTON_PRESS_TYPE_TRIPLE = "triple";
 
+    //Swipe Event Types
+    public static final String SWIPE_EVENT_TYPE_SINGLE              = "swipe";
+    public static final String SWIPE_EVENT_TYPE_TWO_FINGER_UP       = "two_finger_swipe_up";
+    public static final String SWIPE_EVENT_TYPE_TWO_FINGER_DOWN     = "two_finger_swipe_down";
+    public static final String SWIPE_EVENT_TYPE_TWO_FINGER_LEFT     = "two_finger_swipe_left";
+    public static final String SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT    = "two_finger_swipe_right";
+
     //Dimmer MQTT Topics
     public static final String MQTT_TOPIC_DIMMER_STATE   = "shellyelevatev2/%s/dimmer";
     public static final String MQTT_TOPIC_DIMMER_COMMAND = "shellyelevatev2/%s/dimmer_set";
