@@ -64,6 +64,9 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.MainActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.ButtonPressDetector
+import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_UPDATE_PROMPTED
+import androidx.appcompat.app.AlertDialog
 import me.rapierxbox.shellyelevatev2.Constants.SP_POWER_BUTTON_AUTO_REBOOT
 import android.provider.Settings
 import android.net.Uri
@@ -74,6 +77,7 @@ class MainActivity : ComponentActivity() {
     private var retryJob: kotlinx.coroutines.Job? = null
     private var firstPaintDone = false
     private val pendingJs = mutableListOf<String>()
+    private var webviewUpdatePromptShown = false
 
     private lateinit var binding: MainActivityBinding
     /** Current WebView; replaced wholesale after a render-process crash. */
@@ -570,6 +574,54 @@ class MainActivity : ComponentActivity() {
             safeInitialLoad()
             initialLoadDone = true
         }
+
+        maybePromptForWebViewUpdate()
+    }
+
+    // Ask exactly once, on the first launch where the WebView is actually too
+    // old. After the user has answered (Yes or No), the Settings screen is the
+    // only entry point for triggering the update again.
+    private fun maybePromptForWebViewUpdate() {
+        if (webviewUpdatePromptShown) return
+        if (mSharedPreferences.getBoolean(SP_WEBVIEW_UPDATE_PROMPTED, false)) return
+        if (!WebViewUpdater.isUpdateNeeded(applicationContext)) return
+
+        webviewUpdatePromptShown = true
+        AlertDialog.Builder(this)
+            .setTitle(R.string.webview_update_prompt_title)
+            .setMessage(R.string.webview_update_prompt_message)
+            .setCancelable(false)
+            .setPositiveButton(R.string.webview_update_prompt_yes) { _, _ ->
+                mSharedPreferences.edit().putBoolean(SP_WEBVIEW_UPDATE_PROMPTED, true).apply()
+                startBackgroundWebViewDownload()
+            }
+            .setNegativeButton(R.string.webview_update_prompt_no) { _, _ ->
+                mSharedPreferences.edit().putBoolean(SP_WEBVIEW_UPDATE_PROMPTED, true).apply()
+            }
+            .show()
+    }
+
+    private fun startBackgroundWebViewDownload() {
+        WebViewUpdater.downloadAndStage(object : WebViewUpdater.Listener {
+            override fun onProgress(percent: Int) {}
+            override fun onCompleted(staged: java.io.File) {
+                Log.i("MainActivity", "WebView OTA staged at ${staged.absolutePath}")
+                showWebViewRebootDialog()
+            }
+            override fun onFailed(reason: String) {
+                Log.w("MainActivity", "WebView OTA download failed: $reason")
+            }
+        })
+    }
+
+    private fun showWebViewRebootDialog() {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.webview_update_reboot_title)
+            .setMessage(R.string.webview_update_reboot_message)
+            .setPositiveButton(R.string.webview_update_reboot_now) { _, _ -> WebViewUpdater.rebootToInstall() }
+            .setNegativeButton(R.string.webview_update_reboot_later, null)
+            .show()
     }
 
     @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)

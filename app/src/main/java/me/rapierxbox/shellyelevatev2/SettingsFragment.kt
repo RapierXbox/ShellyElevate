@@ -42,20 +42,15 @@ import me.rapierxbox.shellyelevatev2.voice.WakeWordModelManager
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
+import me.rapierxbox.shellyelevatev2.helper.HttpDownloader
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
+import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
-import okhttp3.OkHttpClient
 import java.io.File
 import java.io.IOException
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManager
-import javax.net.ssl.X509TrustManager
 import java.net.NetworkInterface
 import java.util.Locale
 import java.util.UUID
-import java.util.concurrent.TimeUnit
 
 class SettingsFragment : Fragment() {
 
@@ -72,23 +67,8 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    private val okHttpClient by lazy {
-        // Trust-all client used only for fetching wake-word model lists/files from
-        // GitHub. Android 7's CA store predates the Sectigo roots that github.com
-        // currently chains to, so a strict TrustManager would refuse the handshake.
-        val trustAll = arrayOf<TrustManager>(object : X509TrustManager {
-            override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-            override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) {}
-            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
-        })
-        val sslContext = SSLContext.getInstance("SSL").apply { init(null, trustAll, SecureRandom()) }
-        OkHttpClient.Builder()
-            .sslSocketFactory(sslContext.socketFactory, trustAll[0] as X509TrustManager)
-            .hostnameVerifier { _, _ -> true }
-            .connectTimeout(8, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .build()
-    }
+    // Shared trust-all client. See HttpDownloader for the rationale.
+    private val okHttpClient by lazy { HttpDownloader.defaultClient() }
     private var modelList: MutableList<WakeWordModel> = mutableListOf()
     private var selectedModelName: String = ""
     private var downloadJob: Job? = null
@@ -153,6 +133,68 @@ class SettingsFragment : Fragment() {
         loadInlineValues()
         setupInlineListeners()
         setupModelChooser()
+        setupWebViewUpdater()
+    }
+
+    private fun setupWebViewUpdater() {
+        val hasUrl = WebViewUpdater.hasUpdateUrl()
+        binding.webviewUpdateSection.isVisible = hasUrl
+        if (!hasUrl) return
+
+        refreshWebViewUpdateUi()
+        binding.webviewUpdateButton.setOnClickListener { startWebViewUpdateDownload() }
+    }
+
+    private fun refreshWebViewUpdateUi() {
+        val ctx = context ?: return
+        val version = WebViewUpdater.getInstalledWebViewVersion(ctx)
+            .ifEmpty { getString(R.string.webview_update_version_unknown) }
+        binding.webviewUpdateVersion.text = getString(R.string.webview_update_version, version)
+
+        val statusRes = when {
+            !WebViewUpdater.hasUpdateUrl() -> R.string.webview_update_status_unsupported
+            WebViewUpdater.isUpdateNeeded(ctx) -> R.string.webview_update_status_needed
+            else -> R.string.webview_update_status_ok
+        }
+        binding.webviewUpdateStatus.text = getString(statusRes)
+    }
+
+    private fun startWebViewUpdateDownload() {
+        if (WebViewUpdater.isDownloadInProgress()) return
+        binding.webviewUpdateButton.isEnabled = false
+        binding.webviewUpdateProgressLayout.visibility = View.VISIBLE
+        binding.webviewUpdateProgressBar.progress = 0
+        binding.webviewUpdateProgressText.text = "0%"
+
+        WebViewUpdater.downloadAndStage(object : WebViewUpdater.Listener {
+            override fun onProgress(percent: Int) {
+                if (_binding == null) return
+                binding.webviewUpdateProgressBar.progress = percent
+                binding.webviewUpdateProgressText.text = getString(R.string.webview_update_downloading, percent)
+            }
+            override fun onCompleted(staged: java.io.File) {
+                if (_binding == null) return
+                binding.webviewUpdateProgressLayout.visibility = View.GONE
+                binding.webviewUpdateButton.isEnabled = true
+                showRebootToInstallDialog()
+            }
+            override fun onFailed(reason: String) {
+                if (_binding == null) return
+                binding.webviewUpdateProgressLayout.visibility = View.GONE
+                binding.webviewUpdateButton.isEnabled = true
+                Toast.makeText(requireContext(), getString(R.string.webview_update_failed, reason), Toast.LENGTH_LONG).show()
+            }
+        })
+    }
+
+    private fun showRebootToInstallDialog() {
+        if (!isAdded) return
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.webview_update_reboot_title)
+            .setMessage(R.string.webview_update_reboot_message)
+            .setPositiveButton(R.string.webview_update_reboot_now) { _, _ -> WebViewUpdater.rebootToInstall() }
+            .setNegativeButton(R.string.webview_update_reboot_later, null)
+            .show()
     }
 
     override fun onResume() {

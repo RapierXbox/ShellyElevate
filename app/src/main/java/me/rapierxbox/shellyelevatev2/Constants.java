@@ -26,6 +26,9 @@ public class Constants {
     public static final String SP_DEPRECATED_HA_IP = "homeAssistantIp";
     public static final String SP_IGNORE_SSL_ERRORS = "ignoreSslErrors";
 
+    //WebView OTA SP Keys
+    public static final String SP_WEBVIEW_UPDATE_PROMPTED = "webviewUpdatePrompted";
+
     //Screen SP Keys
     public static final String SP_AUTOMATIC_BRIGHTNESS = "automaticBrightness";
     public static final String SP_MIN_BRIGHTNESS = "minBrightness";
