@@ -36,6 +36,7 @@ class MqttDiscoveryConfigBuilder {
         addButtonComponents(components);
         addRelayAndSwitchComponents(components);
         addDimmerComponents(components);
+        addScreenBrightnessComponent(components);
         addControlButtonComponents(components);
         addMiscComponents(components);
         addThermalComponents(components);
@@ -161,6 +162,23 @@ class MqttDiscoveryConfigBuilder {
         sleeping.put("unique_id", clientId + "_sleeping");
         sleeping.put("object_id", "shelly_walldisplay_" + clientId + "_sleeping");
         components.put(clientId + "_sleeping", sleeping);
+    }
+
+    private void addScreenBrightnessComponent(JSONObject components) throws JSONException {
+        String id = clientId + "_screen_brightness";
+        JSONObject bri = new JSONObject();
+        bri.put("p", "number");
+        bri.put("name", "Screen Brightness");
+        bri.put("state_topic", parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS));
+        bri.put("command_topic", parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS_COMMAND));
+        bri.put("min", 0);
+        bri.put("max", 255);
+        bri.put("step", 1);
+        bri.put("mode", "slider");
+        bri.put("icon", "mdi:brightness-6");
+        bri.put("unique_id", id);
+        bri.put("object_id", "shelly_walldisplay_" + id);
+        components.put(id, bri);
     }
 
     private void addDimmerComponents(JSONObject components) throws JSONException {
