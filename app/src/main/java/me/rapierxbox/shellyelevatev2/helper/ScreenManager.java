@@ -143,7 +143,8 @@ public class ScreenManager extends BroadcastReceiver {
         if (!screenOn && cachedTouchToWake) {
             Log.i(TAG, "Touch detected, waking screen via touch-to-wake");
             setScreenOn(true);
-            updateBrightness();
+            // Apply brightness immediately on wake; hysteresis is only for lux jitter.
+            wakeScreen("touch-to-wake");
         }
     }
 
@@ -174,7 +175,14 @@ public class ScreenManager extends BroadcastReceiver {
                 updateScreenSaverState(false);
                 break;
             case INTENT_TURN_SCREEN_ON:
+                // Clear screensaver state before waking: INTENT_TURN_SCREEN_ON can arrive
+                // before INTENT_SCREEN_SAVER_STOPPED (race between the handler post and the
+                // executor send in ScreenOffScreenSaver / ScreenSaverManager), so we must
+                // clear inScreenSaver here to let computeDesiredBrightness return the real
+                // target instead of 0.
+                inScreenSaver = false;
                 setScreenOn(true);
+                wakeScreen("screen on");
                 break;
             case INTENT_TURN_SCREEN_OFF:
                 setScreenOn(false);
@@ -301,16 +309,26 @@ public class ScreenManager extends BroadcastReceiver {
         } else {
             // Wake immediately; the hysteresis delay is only meant for lux jitter.
             setScreenOn(true);
-
-            int desiredBrightness = computeDesiredBrightness();
-            targetBrightness = desiredBrightness;
-            currentBrightness = desiredBrightness;
-            fadeHandler.removeCallbacks(fadeRunnable);
-            brightnessAnimator.cancel();
-            applyBrightness(desiredBrightness, "exit screensaver immediate");
-            lastUpdateTime = System.currentTimeMillis();
-            if (BuildConfig.DEBUG) Log.d(TAG, "Exited screensaver, applied brightness immediately: " + desiredBrightness);
+            wakeScreen("exit screensaver");
+            if (BuildConfig.DEBUG) Log.d(TAG, "Exited screensaver, applied brightness immediately");
         }
+    }
+
+    /**
+     * Immediately restores brightness to the configured target without waiting for
+     * the hysteresis delay.  Call this whenever the screen transitions from off/dark
+     * to on so users see the correct brightness instantly rather than after the
+     * 3-second lux-jitter guard fires.
+     */
+    private synchronized void wakeScreen(String reason) {
+        int desiredBrightness = computeDesiredBrightness();
+        targetBrightness = desiredBrightness;
+        currentBrightness = desiredBrightness;
+        fadeHandler.removeCallbacks(fadeRunnable);
+        brightnessAnimator.cancel();
+        applyBrightness(desiredBrightness, reason);
+        lastUpdateTime = System.currentTimeMillis();
+        if (BuildConfig.DEBUG) Log.d(TAG, "wakeScreen(" + reason + "): applied brightness=" + desiredBrightness);
     }
 
     private static int clamp(int v, int min, int max) {
