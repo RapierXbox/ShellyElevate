@@ -4,6 +4,7 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicatio
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mNightModeManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceAssistantManager;
 
@@ -107,6 +108,12 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
                     int bri = Integer.parseInt(new String(message.getPayload(), StandardCharsets.UTF_8).trim());
                     mDeviceHelper.setScreenBrightness(Math.max(0, Math.min(255, bri)));
                 } catch (NumberFormatException ignored) {}
+                break;
+            case MQTT_TOPIC_NIGHT_MODE_COMMAND:
+                if (mNightModeManager != null) {
+                    String nmPayload = new String(message.getPayload(), StandardCharsets.UTF_8).trim();
+                    mNightModeManager.setEnabled("ON".equalsIgnoreCase(nmPayload));
+                }
                 break;
             case MQTT_TOPIC_DIMMER_COMMAND:
                 if (mDeviceHelper.isDimmerAttached()) {

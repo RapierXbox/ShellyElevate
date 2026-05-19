@@ -41,6 +41,7 @@ class MqttDiscoveryConfigBuilder {
         addMiscComponents(components);
         addThermalComponents(components);
         addVoiceComponents(components);
+        addNightModeComponent(components);
 
         payload.put("cmps", components);
         payload.put("state_topic", parseTopic(MQTT_TOPIC_STATUS));
@@ -241,6 +242,21 @@ class MqttDiscoveryConfigBuilder {
         trigger.put("unique_id", triggerId);
         trigger.put("object_id", "shelly_walldisplay_" + triggerId);
         components.put(triggerId, trigger);
+    }
+
+    private void addNightModeComponent(JSONObject components) throws JSONException {
+        String nmId = clientId + "_night_mode";
+        JSONObject nm = new JSONObject();
+        nm.put("p", "switch");
+        nm.put("name", "Night Mode");
+        nm.put("state_topic", parseTopic(MQTT_TOPIC_NIGHT_MODE_STATE));
+        nm.put("command_topic", parseTopic(MQTT_TOPIC_NIGHT_MODE_COMMAND));
+        nm.put("payload_on", "ON");
+        nm.put("payload_off", "OFF");
+        nm.put("icon", "mdi:weather-night");
+        nm.put("unique_id", nmId);
+        nm.put("object_id", "shelly_walldisplay_" + nmId);
+        components.put(nmId, nm);
     }
 
     private void addThermalComponents(JSONObject components) throws JSONException {

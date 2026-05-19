@@ -282,6 +282,7 @@ public class MQTTServer {
                     }
                 }
                 publishInternal(parseTopic(MQTT_TOPIC_STATUS), "online", 1, true);
+                publishNightModeState();
 
                 // Stagger publishes so the initial discovery burst doesn't overwhelm
                 // a slow broker or starve other tasks on the single-thread scheduler.
@@ -510,6 +511,12 @@ public class MQTTServer {
                 mVoiceAssistantManager.getPublishedStatus(), 1, true);
         publishInternal(parseTopic(MQTT_TOPIC_VOICE_MUTE_STATE),
                 mVoiceAssistantManager.isMuted() ? "ON" : "OFF", 1, true);
+    }
+
+    public void publishNightModeState() {
+        if (mNightModeManager == null) return;
+        publishInternal(parseTopic(MQTT_TOPIC_NIGHT_MODE_STATE),
+                mNightModeManager.isEnabled() ? "ON" : "OFF", 1, true);
     }
 
     public void publishSwipeEvent() {

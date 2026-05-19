@@ -8,6 +8,7 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicatio
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mNightModeManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
@@ -302,6 +303,31 @@ public class HttpServer extends NanoHTTPD {
 
                     jsonResponse.put("success", true);
                     jsonResponse.put("state", mDeviceHelper.getRelay(num));
+                } else {
+                    jsonResponse.put("success", false);
+                    jsonResponse.put("error", "Invalid request method");
+                }
+                break;
+            case "night_mode":
+                if (method.equals(Method.GET)) {
+                    jsonResponse.put("success", true);
+                    jsonResponse.put("state", mNightModeManager != null && mNightModeManager.isEnabled());
+                } else if (method.equals(Method.POST)) {
+                    Map<String, String> nmFiles = new HashMap<>();
+                    try {
+                        session.parseBody(nmFiles);
+                    } catch (IOException | ResponseException e) {
+                        Log.e(TAG, "Invalid night_mode body", e);
+                    }
+                    String nmPostData = nmFiles.get("postData");
+                    assert nmPostData != null;
+                    JSONObject nmJson = new JSONObject(nmPostData);
+                    boolean state = nmJson.getBoolean("state");
+                    if (mNightModeManager != null) {
+                        mNightModeManager.setEnabled(state);
+                    }
+                    jsonResponse.put("success", true);
+                    jsonResponse.put("state", mNightModeManager != null && mNightModeManager.isEnabled());
                 } else {
                     jsonResponse.put("success", false);
                     jsonResponse.put("error", "Invalid request method");

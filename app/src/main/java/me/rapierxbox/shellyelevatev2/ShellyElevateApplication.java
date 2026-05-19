@@ -23,6 +23,7 @@ import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
+import me.rapierxbox.shellyelevatev2.helper.NightModeManager;
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
@@ -45,6 +46,7 @@ public class ShellyElevateApplication extends Application {
     public static MediaHelper mMediaHelper;
     public static ScreenSaverManager mScreenSaverManager;
     public static ScreenManager mScreenManager;
+    public static NightModeManager mNightModeManager;
     public static VoiceAssistantManager mVoiceAssistantManager;
     public static BluetoothProxyManager mBluetoothProxyManager;
 
@@ -101,6 +103,8 @@ public class ShellyElevateApplication extends Application {
             StesProtocolHandler.init();
             mScreenSaverManager = new ScreenSaverManager(this);
             mScreenManager = new ScreenManager(this);
+            mNightModeManager = new NightModeManager(this);
+            registerActivityLifecycleCallbacks(mNightModeManager);
             mDeviceSensorManager = new DeviceSensorManager(this);
             mSwipeHelper = new SwipeHelper();
             mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
@@ -216,6 +220,10 @@ public class ShellyElevateApplication extends Application {
         mScreenSaverManager.onDestroy();
         mScreenManager.setScreenOn(true);
         mScreenManager.onDestroy();
+        if (mNightModeManager != null) {
+            unregisterActivityLifecycleCallbacks(mNightModeManager);
+            mNightModeManager.onDestroy();
+        }
 
         mMQTTServer.onDestroy();
         StesProtocolHandler.close();

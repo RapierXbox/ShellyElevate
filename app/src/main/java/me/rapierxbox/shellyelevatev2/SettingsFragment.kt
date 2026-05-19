@@ -271,6 +271,8 @@ class SettingsFragment : Fragment() {
             +IntTextPref(binding.proximityKeepAwakeSeconds, SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS, min = 0)
             +SliderPref(binding.screensaverMinBrightness, SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT) { mDeviceHelper.setScreenBrightness(it) }
 
+            +SwitchPref(binding.nightModeEnabled, SP_NIGHT_MODE_ENABLED, false)
+
             +SwitchPref(binding.httpServerEnabled, SP_HTTP_SERVER_ENABLED, true)
             visibleWhen(binding.httpServerEnabled, binding.httpServerAddressLayout, binding.httpServerLayout)
 

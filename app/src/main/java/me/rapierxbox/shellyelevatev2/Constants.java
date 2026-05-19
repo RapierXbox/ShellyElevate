@@ -34,6 +34,9 @@ public class Constants {
     public static final String SP_MIN_BRIGHTNESS = "minBrightness";
     public static final String SP_BRIGHTNESS = "brightness";
 
+    //Night Mode SP Keys
+    public static final String SP_NIGHT_MODE_ENABLED = "nightModeEnabled";
+
     //Screen Saver SP Keys
     public static final String SP_SCREEN_SAVER_ENABLED = "screenSaver";
     public static final String SP_SCREEN_SAVER_DELAY = "screenSaverDelay";
@@ -109,6 +112,8 @@ public class Constants {
     public static final String MQTT_TOPIC_LUX_SENSOR = "shellyelevatev2/%s/lux";
     public static final String MQTT_TOPIC_SCREEN_BRIGHTNESS = "shellyelevatev2/%s/bri";
     public static final String MQTT_TOPIC_SCREEN_BRIGHTNESS_COMMAND = "shellyelevatev2/%s/bri_set";
+    public static final String MQTT_TOPIC_NIGHT_MODE_STATE   = "shellyelevatev2/%s/night_mode";
+    public static final String MQTT_TOPIC_NIGHT_MODE_COMMAND = "shellyelevatev2/%s/night_mode_set";
     public static final String MQTT_TOPIC_PROXIMITY_SENSOR = "shellyelevatev2/%s/proximity";
     public static final String MQTT_TOPIC_RELAY_STATE = "shellyelevatev2/%s/relay_state";
     public static final String MQTT_TOPIC_RELAY_COMMAND = "shellyelevatev2/%s/relay_command";
