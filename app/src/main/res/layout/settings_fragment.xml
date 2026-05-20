@@ -314,6 +314,15 @@
 
             </LinearLayout>
 
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/nightModeEnabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/night_mode_enabled"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
             <LinearLayout
                 android:id="@+id/volumeSettingLayout"
                 android:layout_width="match_parent"
@@ -420,14 +429,36 @@
 
             </LinearLayout>
 
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/nightModeEnabled"
+            <LinearLayout
+                android:id="@+id/sleepOptimizationLevelLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
                 android:layout_marginTop="24dp"
-                android:text="@string/night_mode_enabled"
-                android:textSize="18sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/sleep_opt_title"
+                    android:textSize="18sp" />
+
+                <Spinner
+                    android:id="@+id/sleepOptimizationLevel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:spinnerMode="dialog" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="4dp"
+                android:text="@string/sleep_opt_hint"
+                android:textSize="14sp"
+                android:textStyle="italic" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/wakeOnProximity"
@@ -466,49 +497,6 @@
             </LinearLayout>
 
 
-            <LinearLayout
-                android:id="@+id/sensorStatusLayout"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="48dp"
-                android:layout_marginTop="24dp"
-                android:orientation="vertical">
-
-                <TextView
-                    android:id="@+id/proximitySensorAvailability"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/proximity_sensor_available_default"
-                    android:textSize="18sp"
-                    tools:text="Proximity sensor available to app: Yes" />
-
-                <TextView
-                    android:id="@+id/proximitySensorValue"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/proximity_sensor_value_default"
-                    android:textSize="18sp"
-                    tools:text="Proximity sensor current value: 0.00" />
-
-                <TextView
-                    android:id="@+id/proximitySensorState"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/proximity_sensor_state_default"
-                    android:textSize="18sp"
-                    tools:text="Proximity sensor state: FAR" />
-
-                <TextView
-                    android:id="@+id/lightSensorValue"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/light_sensor_value_default"
-                    android:textSize="18sp"
-                    tools:text="Light sensor current value: 4.21 lx" />
-            </LinearLayout>
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/httpServerEnabled"
                 android:layout_width="match_parent"

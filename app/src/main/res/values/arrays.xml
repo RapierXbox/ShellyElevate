@@ -1,4 +1,9 @@
 <resources>
     <!-- Reply Preference -->
 
+    <string-array name="sleep_optimization_levels">
+        <item>@string/sleep_opt_none</item>
+        <item>@string/sleep_opt_standard</item>
+        <item>@string/sleep_opt_aggressive</item>
+    </string-array>
 </resources>

@@ -148,6 +148,8 @@ public class BluetoothProxyManager {
 
     private ScheduledFuture<?> scanWatchdogTask;
 
+    private volatile int activeScanMode = ScanSettings.SCAN_MODE_LOW_LATENCY;
+
 
     public BluetoothProxyManager() {
         settingsReceiver = new BroadcastReceiver() {
@@ -186,6 +188,17 @@ public class BluetoothProxyManager {
         } else if (!want && enabled) {
             enabled = false;
             shutdown();
+        }
+    }
+
+    public void setLowPowerMode(boolean low) {
+        int target = low ? ScanSettings.SCAN_MODE_LOW_POWER : ScanSettings.SCAN_MODE_LOW_LATENCY;
+        if (target == activeScanMode) return;
+        activeScanMode = target;
+        Log.i(TAG, "Scan mode -> " + (low ? "LOW_POWER" : "LOW_LATENCY"));
+        ClientSession s = scanTarget.get();
+        if (s != null && activeScanCb != null) {
+            restartScan(s);
         }
     }
 
@@ -824,7 +837,7 @@ public class BluetoothProxyManager {
         if (bleScanner == null) { Log.w(TAG, "LE scanner unavailable"); return; }
 
         ScanSettings settings = new ScanSettings.Builder()
-                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .setScanMode(activeScanMode)
                 .setReportDelay(0)
                 .build();
 

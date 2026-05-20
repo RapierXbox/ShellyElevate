@@ -114,6 +114,9 @@ public class WakeWordDetector {
     private int wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
     private float lastRawScore = 0f;
 
+    private volatile boolean lowPowerMode = false;
+    private boolean skipNextInference = false;
+
     private Interpreter vadTflite;
     private File vadModelFile;
     private int vadNFrames;
@@ -454,6 +457,10 @@ public class WakeWordDetector {
         scoreBroadcastEnabled = enabled;
     }
 
+    public void setLowPowerMode(boolean low) {
+        lowPowerMode = low;
+    }
+
     public void start() {
         if (modelStatus != ModelStatus.LOADED) {
             Log.w(TAG, "can't start: model not loaded (" + modelStatus + ")"); return;
@@ -609,6 +616,12 @@ public class WakeWordDetector {
         // for any model with nFrames > 1, so we mirror that batching here.
         if (framesCollected < nFrames || newFramesSinceInfer < nFrames) return;
         newFramesSinceInfer = 0;
+
+        // Low-power: skip every other inference. ~2x detection latency, ~50% CPU.
+        if (lowPowerMode) {
+            skipNextInference = !skipNextInference;
+            if (skipNextInference) return;
+        }
 
         int base = frameRingPos % nFrames;
         try {

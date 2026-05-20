@@ -46,6 +46,17 @@ public class Constants {
     public static final String SP_SCREEN_SAVER_MIN_BRIGHTNESS = "screenSaverMinBrightness";
     public static final String SP_TOUCH_TO_WAKE = "touchToWake";
 
+    //Sleep Optimization SP Keys
+    public static final String SP_SLEEP_OPTIMIZATION_LEVEL = "sleepOptimizationLevel";
+    public static final int SLEEP_OPT_NONE = 0;
+    public static final int SLEEP_OPT_STANDARD = 1;
+    public static final int SLEEP_OPT_AGGRESSIVE = 2;
+
+    //Sleep Optimization Intents
+    public static final String INTENT_SLEEP_LEVEL_CHANGED = "me.rapierxbox.shellyelevatev2.SLEEP_LEVEL_CHANGED";
+    public static final String EXTRA_SLEEP_ACTIVE = "sleepActive";
+    public static final String EXTRA_SLEEP_LEVEL  = "sleepLevel";
+
     //Bluetooth Proxy SP Keys
     public static final String SP_BLUETOOTH_PROXY_ENABLED = "bluetoothProxyEnabled";
     public static final String SP_BLUETOOTH_PROXY_NAME    = "bluetoothProxyName";

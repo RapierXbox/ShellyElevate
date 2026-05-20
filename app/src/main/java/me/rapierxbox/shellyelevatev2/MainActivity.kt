@@ -55,6 +55,9 @@ import androidx.core.content.ContextCompat
 import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SETTINGS_EVER_SHOWN
+import me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL
+import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_NONE
+import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -201,14 +204,53 @@ class MainActivity : ComponentActivity() {
                 when (action) {
                     INTENT_TURN_SCREEN_ON -> mShellyElevateJavascriptInterface.onScreenOn()
                     INTENT_TURN_SCREEN_OFF -> mShellyElevateJavascriptInterface.onScreenOff()
-                    INTENT_SCREEN_SAVER_STARTED -> mShellyElevateJavascriptInterface.onScreensaverOn()
-                    INTENT_SCREEN_SAVER_STOPPED -> mShellyElevateJavascriptInterface.onScreensaverOff()
+                    INTENT_SCREEN_SAVER_STARTED -> {
+                        mShellyElevateJavascriptInterface.onScreensaverOn()
+                        if (sleepLevel() >= SLEEP_OPT_STANDARD) pauseWebViewForSleep()
+                    }
+                    INTENT_SCREEN_SAVER_STOPPED -> {
+                        resumeWebViewFromSleep()
+                        mShellyElevateJavascriptInterface.onScreensaverOff()
+                    }
                     INTENT_PROXIMITY_UPDATED -> mShellyElevateJavascriptInterface.onMotion()
                 }
                 if (BuildConfig.DEBUG) Log.d("MainActivity", "screenStateReceiver invoked: $action")
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error handling screen state: $action", e)
             }
+        }
+    }
+
+    private var webViewPausedForSleep = false
+
+    private fun sleepLevel(): Int =
+        mSharedPreferences.getInt(SP_SLEEP_OPTIMIZATION_LEVEL, SLEEP_OPT_NONE)
+
+    private fun pauseWebViewForSleep() {
+        if (webViewPausedForSleep) return
+        webViewPausedForSleep = true
+        try {
+            webView.onPause()
+            webView.pauseTimers()
+            webView.setLayerType(View.LAYER_TYPE_NONE, null)
+            webView.visibility = View.INVISIBLE
+            Log.i("MainActivity", "webview paused for sleep")
+        } catch (e: Exception) {
+            Log.w("MainActivity", "pauseWebViewForSleep failed: ${e.message}")
+        }
+    }
+
+    private fun resumeWebViewFromSleep() {
+        if (!webViewPausedForSleep) return
+        webViewPausedForSleep = false
+        try {
+            webView.visibility = View.VISIBLE
+            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            webView.resumeTimers()
+            webView.onResume()
+            Log.i("MainActivity", "webview resumed from sleep")
+        } catch (e: Exception) {
+            Log.w("MainActivity", "resumeWebViewFromSleep failed: ${e.message}")
         }
     }
 
@@ -564,6 +606,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
 
         setScreenOptions()
+
+        // Resume if screensaver-stopped broadcast didn't fire first.
+        resumeWebViewFromSleep()
 
         // Re-fire the JS lifecycle hooks on every resume so a webview that was
         // suspended in the background can refresh its UI state.

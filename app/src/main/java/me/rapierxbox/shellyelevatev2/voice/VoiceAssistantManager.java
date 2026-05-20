@@ -301,6 +301,11 @@ public class VoiceAssistantManager {
         }
     }
 
+    public void setLowPowerMode(boolean low) {
+        WakeWordDetector det = wakeDetector;
+        if (det != null) det.setLowPowerMode(low);
+    }
+
     public void setMuted(boolean mute) {
         if (muted == mute) return;
         muted = mute;

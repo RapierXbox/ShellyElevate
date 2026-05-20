@@ -17,8 +17,14 @@ sealed interface PrefBinding {
 class SwitchPref(
     private val view: MaterialSwitch,
     private val key: String,
-    private val default: Boolean
+    private val default: Boolean,
+    live: ((Boolean) -> Unit)? = null
 ) : PrefBinding {
+    init {
+        if (live != null) {
+            view.setOnCheckedChangeListener { _, checked -> live(checked) }
+        }
+    }
     override fun load(prefs: SharedPreferences) {
         view.isChecked = prefs.getBoolean(key, default)
     }

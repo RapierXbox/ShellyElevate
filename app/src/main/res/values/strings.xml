@@ -13,6 +13,11 @@
     <string name="screen_saver_delay">Delay</string>
     <string name="screen_saver_delay_hint">45</string>
     <string name="screenSaverTypeText">Type</string>
+    <string name="sleep_opt_title">Sleep optimization</string>
+    <string name="sleep_opt_hint">Standard pauses display + throttles CPU. Aggressive also throttles MQTT/BLE/voice.</string>
+    <string name="sleep_opt_none">None</string>
+    <string name="sleep_opt_standard">Standard</string>
+    <string name="sleep_opt_aggressive">Aggressive</string>
     <string name="http_server_enabled">HTTP Server enabled:</string>
     <string name="http_server_address">Address:</string>
     <string name="extended_js_interface">Extended JS Interface</string>

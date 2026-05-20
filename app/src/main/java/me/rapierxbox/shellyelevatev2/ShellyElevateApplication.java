@@ -24,6 +24,7 @@ import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.NightModeManager;
+import me.rapierxbox.shellyelevatev2.helper.PowerOptimizer;
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
@@ -49,6 +50,7 @@ public class ShellyElevateApplication extends Application {
     public static NightModeManager mNightModeManager;
     public static VoiceAssistantManager mVoiceAssistantManager;
     public static BluetoothProxyManager mBluetoothProxyManager;
+    public static PowerOptimizer mPowerOptimizer;
 
     public static Context mApplicationContext;
     public static SharedPreferences mSharedPreferences;
@@ -116,6 +118,7 @@ public class ShellyElevateApplication extends Application {
             mMQTTServer = new MQTTServer();
             mVoiceAssistantManager = new VoiceAssistantManager();
             mBluetoothProxyManager = new BluetoothProxyManager();
+            mPowerOptimizer = new PowerOptimizer(this);
 
             mHttpServer = new HttpServer();
             httpWatchdog = Executors.newSingleThreadScheduledExecutor();
@@ -224,6 +227,8 @@ public class ShellyElevateApplication extends Application {
             unregisterActivityLifecycleCallbacks(mNightModeManager);
             mNightModeManager.onDestroy();
         }
+
+        if (mPowerOptimizer != null) mPowerOptimizer.onDestroy();
 
         mMQTTServer.onDestroy();
         StesProtocolHandler.close();

@@ -59,13 +59,6 @@ class SettingsFragment : Fragment() {
     // Restored in onDestroyView so leaving Settings doesn't leave the screen at 100%.
     private var savedBrightness = DEFAULT_BRIGHTNESS
     private var hasProximitySensor = false
-    private val sensorStatusHandler = Handler(Looper.getMainLooper())
-    private val sensorStatusRunnable = object : Runnable {
-        override fun run() {
-            updateSensorStatus()
-            sensorStatusHandler.postDelayed(this, 1000)
-        }
-    }
 
     // Shared trust-all client. See HttpDownloader for the rationale.
     private val okHttpClient by lazy { HttpDownloader.defaultClient() }
@@ -78,7 +71,6 @@ class SettingsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         downloadJob?.cancel()
-        sensorStatusHandler.removeCallbacks(sensorStatusRunnable)
         mDeviceHelper?.setScreenBrightness(savedBrightness)
         _binding = null
     }
@@ -127,6 +119,7 @@ class SettingsFragment : Fragment() {
         }, viewLifecycleOwner)
 
         binding.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
+        binding.sleepOptimizationLevel.adapter = getSleepOptimizationSpinnerAdapter()
 
         buildBinder()
         binder.loadAll()
@@ -137,9 +130,10 @@ class SettingsFragment : Fragment() {
     }
 
     private fun setupWebViewUpdater() {
-        val hasUrl = WebViewUpdater.hasUpdateUrl()
-        binding.webviewUpdateSection.isVisible = hasUrl
-        if (!hasUrl) return
+        val ctx = context ?: return
+        val show = WebViewUpdater.hasUpdateUrl() && WebViewUpdater.isUpdateNeeded(ctx)
+        binding.webviewUpdateSection.isVisible = show
+        if (!show) return
 
         refreshWebViewUpdateUi()
         binding.webviewUpdateButton.setOnClickListener { startWebViewUpdateDownload() }
@@ -197,37 +191,9 @@ class SettingsFragment : Fragment() {
             .show()
     }
 
-    override fun onResume() {
-        super.onResume()
-        sensorStatusHandler.post(sensorStatusRunnable)
-    }
-
     override fun onPause() {
         super.onPause()
-        sensorStatusHandler.removeCallbacks(sensorStatusRunnable)
         saveSettings()
-    }
-
-    private fun updateSensorStatus() {
-        val sensorManager = mDeviceSensorManager
-        val proximityAvailable = sensorManager?.isProximitySensorAvailable() == true
-        val proximityAvailableText = if (proximityAvailable) getString(R.string.sensor_available_yes) else getString(R.string.sensor_available_no)
-        binding.proximitySensorAvailability.text = getString(R.string.proximity_sensor_available, proximityAvailableText)
-
-        val proximityValue = sensorManager?.lastMeasuredDistance ?: 0f
-        binding.proximitySensorValue.text = getString(R.string.proximity_sensor_value, proximityValue)
-        val maxProximity = sensorManager?.maxProximitySensorValue ?: 1f
-        val threshold = if (maxProximity <= 1.5f) 0.5f else maxOf(0.5f, maxProximity * 0.1f)
-        val isNear = proximityAvailable && proximityValue < (maxProximity - threshold)
-        val proximityState = when {
-            !proximityAvailable -> getString(R.string.proximity_state_unavailable)
-            isNear -> getString(R.string.proximity_state_near)
-            else -> getString(R.string.proximity_state_far)
-        }
-        binding.proximitySensorState.text = getString(R.string.proximity_sensor_state, proximityState)
-
-        val lightValue = sensorManager?.lastMeasuredLux ?: 0f
-        binding.lightSensorValue.text = getString(R.string.light_sensor_value, lightValue)
     }
 
     private fun buildBinder() {
@@ -268,10 +234,13 @@ class SettingsFragment : Fragment() {
             +SwitchPref(binding.screenSaver, SP_SCREEN_SAVER_ENABLED, true)
             +IntTextPref(binding.screenSaverDelay, SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY)
             +SpinnerPref(binding.screenSaverType, SP_SCREEN_SAVER_ID, 0)
+            +SpinnerPref(binding.sleepOptimizationLevel, SP_SLEEP_OPTIMIZATION_LEVEL, SLEEP_OPT_NONE)
             +IntTextPref(binding.proximityKeepAwakeSeconds, SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS, min = 0)
             +SliderPref(binding.screensaverMinBrightness, SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT) { mDeviceHelper.setScreenBrightness(it) }
 
-            +SwitchPref(binding.nightModeEnabled, SP_NIGHT_MODE_ENABLED, false)
+            +SwitchPref(binding.nightModeEnabled, SP_NIGHT_MODE_ENABLED, false) { enabled ->
+                mNightModeManager?.setEnabled(enabled)
+            }
 
             +SwitchPref(binding.httpServerEnabled, SP_HTTP_SERVER_ENABLED, true)
             visibleWhen(binding.httpServerEnabled, binding.httpServerAddressLayout, binding.httpServerLayout)
@@ -711,6 +680,13 @@ class SettingsFragment : Fragment() {
         val adapter = ArrayAdapter<String?>(ShellyElevateApplication.mApplicationContext, android.R.layout.simple_spinner_item)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         for (screenSaver in ScreenSaverManager.getAvailableScreenSavers()) adapter.add(screenSaver.getName())
+        return adapter
+    }
+
+    fun getSleepOptimizationSpinnerAdapter(): ArrayAdapter<CharSequence> {
+        val ctx = ShellyElevateApplication.mApplicationContext
+        val adapter = ArrayAdapter.createFromResource(ctx, R.array.sleep_optimization_levels, android.R.layout.simple_spinner_item)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         return adapter
     }
 

@@ -29,6 +29,7 @@ import org.json.JSONObject;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.DeviceModel;
@@ -44,6 +45,10 @@ public class MQTTServer {
     private final MqttConnectionOptions mMqttConnectionsOptions;
     private final ScheduledExecutorService scheduler;
     private volatile boolean periodicScheduled = false;
+    private static final long PERIODIC_INTERVAL_NORMAL_SEC = 30;
+    private static final long PERIODIC_INTERVAL_LOW_POWER_SEC = 120;
+    private volatile long periodicIntervalSec = PERIODIC_INTERVAL_NORMAL_SEC;
+    private ScheduledFuture<?> periodicFuture;
     private String clientId;
     private boolean validForConnection;
     private volatile boolean connecting = false;
@@ -137,15 +142,30 @@ public class MQTTServer {
 
     private void schedulePeriodicTempHum() {
         if (periodicScheduled) return;
-        scheduler.scheduleWithFixedDelay(() -> {
-            publishTempAndHum();
-            publishThermalZones();
-            if (mDeviceHelper.isDimmerAttached()) {
-                StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10));
-                StesProtocolHandler.getPowerMeter(p -> publishDimmerPower(p.powerW, p.voltageV, p.currentA));
-            }
-        }, 0, 30, TimeUnit.SECONDS);
+        periodicFuture = scheduler.scheduleWithFixedDelay(this::runPeriodicPublish,
+                0, periodicIntervalSec, TimeUnit.SECONDS);
         periodicScheduled = true;
+    }
+
+    private void runPeriodicPublish() {
+        publishTempAndHum();
+        publishThermalZones();
+        if (mDeviceHelper.isDimmerAttached()) {
+            StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10));
+            StesProtocolHandler.getPowerMeter(p -> publishDimmerPower(p.powerW, p.voltageV, p.currentA));
+        }
+    }
+
+    public synchronized void setLowPowerMode(boolean low) {
+        long target = low ? PERIODIC_INTERVAL_LOW_POWER_SEC : PERIODIC_INTERVAL_NORMAL_SEC;
+        if (target == periodicIntervalSec) return;
+        periodicIntervalSec = target;
+        Log.i(TAG, "Periodic publish interval -> " + target + "s (lowPower=" + low + ")");
+        if (periodicScheduled) {
+            if (periodicFuture != null) periodicFuture.cancel(false);
+            periodicFuture = scheduler.scheduleWithFixedDelay(this::runPeriodicPublish,
+                    target, target, TimeUnit.SECONDS);
+        }
     }
 
     public void checkCredsAndConnect() {
