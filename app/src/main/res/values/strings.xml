@@ -41,6 +41,7 @@
     <string name="floating_back_button">Floating Back Button</string>
     <string name="reboot">Reboot</string>
     <string name="B_exit">Exit</string>
+    <string name="night_mode_enabled">Night Mode (red channel only)</string>
     <string name="wake_on_proximity">Wake on Proximity</string>
     <string name="proximity_keep_awake_seconds">Keep awake after proximity (seconds)</string>
     <string name="proximity_keep_awake_hint">30</string>
