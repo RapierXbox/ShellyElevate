@@ -1,6 +1,8 @@
+import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
+import java.util.Base64
 
 plugins {
     alias(libs.plugins.android.application)
@@ -57,14 +59,14 @@ android {
     if (hasReleaseKey) {
         signingConfigs {
             create("release") {
-                val keystoreFile = java.io.File.createTempFile("release_keystore_", ".keystore")
+                val keystoreFile = File.createTempFile("release_keystore_", ".keystore")
                     .also {
                         // Owner-only read/write (createTempFile already restricts, but be explicit)
                         it.setReadable(true, true)
                         it.setWritable(true, true)
                         it.deleteOnExit()
                         it.writeBytes(
-                            java.util.Base64.getDecoder()
+                            Base64.getDecoder()
                                 .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
                         )
                     }
