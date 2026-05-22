@@ -65,13 +65,18 @@ android {
                         it.setReadable(true, true)
                         it.setWritable(true, true)
                         it.deleteOnExit()
-                        it.writeBytes(
-                            Base64.getDecoder()
-                                .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
-                        )
                     }
-                // Explicitly delete on build finish as deleteOnExit() only runs on normal JVM exit
+                // Register cleanup before decode/write so the file is always removed on build finish
                 gradle.buildFinished { keystoreFile.delete() }
+                try {
+                    keystoreFile.writeBytes(
+                        Base64.getDecoder()
+                            .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
+                    )
+                } catch (e: Exception) {
+                    keystoreFile.delete()
+                    throw e
+                }
                 storeFile = keystoreFile
                 storePassword = System.getenv("SIGNING_STORE_PASSWORD")
                     ?: error("SIGNING_STORE_PASSWORD is required when SIGNING_KEYSTORE_BASE64 is set")
