@@ -57,13 +57,19 @@ android {
     if (hasReleaseKey) {
         signingConfigs {
             create("release") {
-                val keystoreFile = java.io.File(
-                    System.getProperty("java.io.tmpdir"), "release.keystore"
-                )
-                keystoreFile.writeBytes(
-                    java.util.Base64.getDecoder()
-                        .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
-                )
+                val keystoreFile = java.io.File.createTempFile("release_keystore_", ".keystore")
+                    .also {
+                        // Owner-only read/write (createTempFile already restricts, but be explicit)
+                        it.setReadable(true, true)
+                        it.setWritable(true, true)
+                        it.deleteOnExit()
+                        it.writeBytes(
+                            java.util.Base64.getDecoder()
+                                .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
+                        )
+                    }
+                // Explicitly delete on build finish as deleteOnExit() only runs on normal JVM exit
+                gradle.buildFinished { keystoreFile.delete() }
                 storeFile = keystoreFile
                 storePassword = System.getenv("SIGNING_STORE_PASSWORD")
                     ?: error("SIGNING_STORE_PASSWORD is required when SIGNING_KEYSTORE_BASE64 is set")

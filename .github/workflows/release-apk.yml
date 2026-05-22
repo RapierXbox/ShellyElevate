@@ -39,6 +39,24 @@ jobs:
       - name: Ensure gradlew is executable
         run: chmod +x ./gradlew
 
+      - name: Validate signing secrets
+        if: github.ref_type == 'tag'
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [ -z "$SIGNING_KEYSTORE_BASE64" ] && missing+=("SIGNING_KEYSTORE_BASE64")
+          [ -z "$SIGNING_STORE_PASSWORD" ] && missing+=("SIGNING_STORE_PASSWORD")
+          [ -z "$SIGNING_KEY_ALIAS" ] && missing+=("SIGNING_KEY_ALIAS")
+          [ -z "$SIGNING_KEY_PASSWORD" ] && missing+=("SIGNING_KEY_PASSWORD")
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing required signing secrets: ${missing[*]}"
+            exit 1
+          fi
+
       - name: Build release APK
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
