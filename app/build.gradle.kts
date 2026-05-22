@@ -52,11 +52,37 @@ android {
         }
     }
 
+    val hasReleaseKey = !System.getenv("SIGNING_KEYSTORE_BASE64").isNullOrEmpty()
+
+    if (hasReleaseKey) {
+        signingConfigs {
+            create("release") {
+                val keystoreFile = java.io.File(
+                    System.getProperty("java.io.tmpdir"), "release.keystore"
+                )
+                keystoreFile.writeBytes(
+                    java.util.Base64.getDecoder()
+                        .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
+                )
+                storeFile = keystoreFile
+                storePassword = System.getenv("SIGNING_STORE_PASSWORD")
+                    ?: error("SIGNING_STORE_PASSWORD is required when SIGNING_KEYSTORE_BASE64 is set")
+                keyAlias = System.getenv("SIGNING_KEY_ALIAS")
+                    ?: error("SIGNING_KEY_ALIAS is required when SIGNING_KEYSTORE_BASE64 is set")
+                keyPassword = System.getenv("SIGNING_KEY_PASSWORD")
+                    ?: error("SIGNING_KEY_PASSWORD is required when SIGNING_KEYSTORE_BASE64 is set")
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
-            // Use the default debug signing key for release to simplify installs
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
