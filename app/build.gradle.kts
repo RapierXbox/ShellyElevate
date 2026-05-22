@@ -1,6 +1,8 @@
+import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoField
+import java.util.Base64
 
 plugins {
     alias(libs.plugins.android.application)
@@ -57,13 +59,24 @@ android {
     if (hasReleaseKey) {
         signingConfigs {
             create("release") {
-                val keystoreFile = java.io.File(
-                    System.getProperty("java.io.tmpdir"), "release.keystore"
-                )
-                keystoreFile.writeBytes(
-                    java.util.Base64.getDecoder()
-                        .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
-                )
+                val keystoreFile = File.createTempFile("release_keystore_", ".keystore")
+                    .also {
+                        // Owner-only read/write (createTempFile already restricts, but be explicit)
+                        it.setReadable(true, true)
+                        it.setWritable(true, true)
+                        it.deleteOnExit()
+                    }
+                // Register cleanup before decode/write so the file is always removed on build finish
+                gradle.buildFinished { keystoreFile.delete() }
+                try {
+                    keystoreFile.writeBytes(
+                        Base64.getDecoder()
+                            .decode(System.getenv("SIGNING_KEYSTORE_BASE64"))
+                    )
+                } catch (e: Exception) {
+                    keystoreFile.delete()
+                    throw e
+                }
                 storeFile = keystoreFile
                 storePassword = System.getenv("SIGNING_STORE_PASSWORD")
                     ?: error("SIGNING_STORE_PASSWORD is required when SIGNING_KEYSTORE_BASE64 is set")
