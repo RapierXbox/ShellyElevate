@@ -708,9 +708,13 @@ class MainActivity : ComponentActivity() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupSwipeOverlay() {
-        // The WebView's own touch listener handles gestures; this overlay is only
-        // here for hit-testing on regions outside the web content.
-        binding.swipeDetectionOverlay.setOnTouchListener { _, _ -> false }
+        // forward so wake works when webview is invisible during sleep
+        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
+            mSwipeHelper?.onTouchEvent(event)
+            mScreenSaverManager.onTouchEvent(event)
+            ShellyElevateApplication.mScreenManager?.onTouchEvent()
+            false
+        }
     }
 
     @SuppressLint("RestrictedApi")
