@@ -36,9 +36,13 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import me.rapierxbox.shellyelevatev2.Constants.EXTRA_SCREEN_SAVER_ID
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STARTED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STOPPED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STARTED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STOPPED
+import me.rapierxbox.shellyelevatev2.Constants.SCREEN_SAVER_ID_AOD
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_TURN_SCREEN_OFF
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_TURN_SCREEN_ON
@@ -206,7 +210,11 @@ class MainActivity : ComponentActivity() {
                     INTENT_TURN_SCREEN_OFF -> mShellyElevateJavascriptInterface.onScreenOff()
                     INTENT_SCREEN_SAVER_STARTED -> {
                         mShellyElevateJavascriptInterface.onScreensaverOn()
-                        if (sleepLevel() >= SLEEP_OPT_STANDARD) pauseWebViewForSleep()
+                        val saverId = intent.getIntExtra(EXTRA_SCREEN_SAVER_ID, -1)
+                        // aod keeps webview visible, do not pause it for sleep
+                        if (saverId != SCREEN_SAVER_ID_AOD && sleepLevel() >= SLEEP_OPT_STANDARD) {
+                            pauseWebViewForSleep()
+                        }
                     }
                     INTENT_SCREEN_SAVER_STOPPED -> {
                         resumeWebViewFromSleep()
@@ -221,7 +229,43 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private val aodReceiver: BroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                INTENT_AOD_STARTED -> enterAODMode()
+                INTENT_AOD_STOPPED -> exitAODMode()
+            }
+        }
+    }
+
     private var webViewPausedForSleep = false
+    private var inAODMode = false
+
+    // aod ticks the webview briefly once per second so widgets like the clock stay current
+    private val aodTickHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val aodTickPeriodMs = 1000L
+    private val aodTickWindowMs = 200L
+    private val aodTickRunnable = object : Runnable {
+        override fun run() {
+            if (!inAODMode) return
+            try {
+                webView.resumeTimers()
+                webView.onResume()
+                aodTickHandler.postDelayed({
+                    if (!inAODMode) return@postDelayed
+                    try {
+                        webView.onPause()
+                        webView.pauseTimers()
+                    } catch (e: Exception) {
+                        Log.w("MainActivity", "aod tick pause failed: ${e.message}")
+                    }
+                }, aodTickWindowMs)
+            } catch (e: Exception) {
+                Log.w("MainActivity", "aod tick resume failed: ${e.message}")
+            }
+            aodTickHandler.postDelayed(this, aodTickPeriodMs)
+        }
+    }
 
     private fun sleepLevel(): Int =
         mSharedPreferences.getInt(SP_SLEEP_OPTIMIZATION_LEVEL, SLEEP_OPT_NONE)
@@ -251,6 +295,44 @@ class MainActivity : ComponentActivity() {
             Log.i("MainActivity", "webview resumed from sleep")
         } catch (e: Exception) {
             Log.w("MainActivity", "resumeWebViewFromSleep failed: ${e.message}")
+        }
+    }
+
+    private fun enterAODMode() {
+        if (inAODMode) return
+        inAODMode = true
+        try {
+            // visibility stays VISIBLE; ticker resumes timers briefly each second
+            webView.settings.offscreenPreRaster = false
+            webView.onPause()
+            webView.pauseTimers()
+            webView.setLayerType(View.LAYER_TYPE_NONE, null)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
+            }
+            aodTickHandler.removeCallbacks(aodTickRunnable)
+            aodTickHandler.postDelayed(aodTickRunnable, aodTickPeriodMs)
+            Log.i("MainActivity", "aod mode entered")
+        } catch (e: Exception) {
+            Log.w("MainActivity", "enterAODMode failed: ${e.message}")
+        }
+    }
+
+    private fun exitAODMode() {
+        if (!inAODMode) return
+        inAODMode = false
+        try {
+            aodTickHandler.removeCallbacksAndMessages(null)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
+            }
+            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            webView.resumeTimers()
+            webView.onResume()
+            webView.settings.offscreenPreRaster = true
+            Log.i("MainActivity", "aod mode exited")
+        } catch (e: Exception) {
+            Log.w("MainActivity", "exitAODMode failed: ${e.message}")
         }
     }
 
@@ -535,6 +617,10 @@ class MainActivity : ComponentActivity() {
                 addAction(INTENT_SCREEN_SAVER_STARTED)
                 addAction(INTENT_SCREEN_SAVER_STOPPED)
                 addAction(INTENT_PROXIMITY_UPDATED)
+            })
+            registerReceiver(aodReceiver, IntentFilter().apply {
+                addAction(INTENT_AOD_STARTED)
+                addAction(INTENT_AOD_STOPPED)
             })
         }
     }
@@ -847,6 +933,7 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(voiceTextReceiver)
             if (scoreBarRegistered) unregisterReceiver(voiceScoreReceiver)
             unregisterReceiver(screenStateReceiver)
+            unregisterReceiver(aodReceiver)
         }
         cancelRetry()
         super.onDestroy()

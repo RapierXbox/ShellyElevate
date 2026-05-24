@@ -32,6 +32,8 @@ import androidx.annotation.MainThread;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
+import me.rapierxbox.shellyelevatev2.DeviceModel;
+import me.rapierxbox.shellyelevatev2.screensavers.AODScreenSaver;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenOffScreenSaver;
 
 public class ScreenManager extends BroadcastReceiver {
@@ -205,6 +207,16 @@ public class ScreenManager extends BroadcastReceiver {
     private synchronized void updateBrightness() {
         int desiredBrightness = computeDesiredBrightness();
 
+        // aod bypasses MIN_BRIGHTNESS_STEP so small panel-min writes are not dropped
+        if (inScreenSaver && isAODSaverActive()) {
+            int panelMin = clamp(DeviceModel.getReportedDevice().panelMinBacklight, 0, 255);
+            targetBrightness = panelMin;
+            fadeHandler.removeCallbacks(fadeRunnable);
+            brightnessAnimator.cancel();
+            applyBrightness(panelMin, "aod");
+            return;
+        }
+
         if (!screenOn || (inScreenSaver && isScreenOffSaverActive())) {
             targetBrightness = 0;
             applyBrightness(0, "screen off or screen-off screensaver");
@@ -226,6 +238,10 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     private int computeDesiredBrightness() {
+        // aod pins to panel minimum, skip lux ramp
+        if (inScreenSaver && isAODSaverActive()) {
+            return clamp(DeviceModel.getReportedDevice().panelMinBacklight, 0, 255);
+        }
         if (!screenOn || (inScreenSaver && isScreenOffSaverActive())) {
             return 0;
         }
@@ -296,15 +312,23 @@ public class ScreenManager extends BroadcastReceiver {
             Log.d(TAG, "updateScreenSaverState newState=" + newState + ", screenOn=" + screenOn + ", currentBrightness=" + currentBrightness + ", targetBrightness=" + targetBrightness + ", lux=" + lastMeasuredLux);
         }
         if (newState) {
-            updateBrightness();
-            if (isScreenOffSaverActive()) {
-                // Some panels swallow the first brightness=0 write right after
-                // entering the saver; repeating it ~300 ms later sticks reliably.
-                fadeHandler.postDelayed(() -> {
-                    if (inScreenSaver && isScreenOffSaverActive()) {
-                        applyBrightness(0, "screen-off screensaver second write");
-                    }
-                }, 300L);
+            if (isAODSaverActive()) {
+                int panelMin = clamp(DeviceModel.getReportedDevice().panelMinBacklight, 0, 255);
+                targetBrightness = panelMin;
+                fadeHandler.removeCallbacks(fadeRunnable);
+                brightnessAnimator.cancel();
+                applyBrightness(panelMin, "aod start");
+            } else {
+                updateBrightness();
+                if (isScreenOffSaverActive()) {
+                    // Some panels swallow the first brightness=0 write right after
+                    // entering the saver; repeating it ~300 ms later sticks reliably.
+                    fadeHandler.postDelayed(() -> {
+                        if (inScreenSaver && isScreenOffSaverActive()) {
+                            applyBrightness(0, "screen-off screensaver second write");
+                        }
+                    }, 300L);
+                }
             }
         } else {
             // Wake immediately; the hysteresis delay is only meant for lux jitter.
@@ -341,6 +365,12 @@ public class ScreenManager extends BroadcastReceiver {
         if (mScreenSaverManager == null || !inScreenSaver) return false;
         var saver = mScreenSaverManager.getCurrentScreenSaver();
         return saver instanceof ScreenOffScreenSaver;
+    }
+
+    private boolean isAODSaverActive() {
+        if (mScreenSaverManager == null || !inScreenSaver) return false;
+        var saver = mScreenSaverManager.getCurrentScreenSaver();
+        return saver instanceof AODScreenSaver;
     }
 
     private void applyBrightness(int rawValue, String reason) {

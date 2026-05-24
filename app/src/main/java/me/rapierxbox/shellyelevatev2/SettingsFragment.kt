@@ -18,6 +18,7 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
+import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.Toast
@@ -297,6 +298,8 @@ class SettingsFragment : Fragment() {
         binding.wakeOnProximity.isVisible = binding.screenSaver.isChecked && hasProximitySensor
         binding.proximityKeepAwakeLayout.isVisible = binding.screenSaver.isChecked && hasProximitySensor
 
+        applyAodVisibility(mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0), binding.screenSaver.isChecked)
+
         binding.voiceAssistantLayout.isVisible = binding.voiceAssistantEnabled.isChecked
 
         selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
@@ -348,6 +351,14 @@ class SettingsFragment : Fragment() {
             binding.wakeOnProximity.isVisible = isChecked && hasProximitySensor
             binding.proximityKeepAwakeLayout.isVisible = isChecked && hasProximitySensor
             binding.minBrightnessScreenSaverLayout.isVisible = isChecked
+            applyAodVisibility(binding.screenSaverType.selectedItemPosition, isChecked)
+        }
+
+        binding.screenSaverType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                applyAodVisibility(position, binding.screenSaver.isChecked)
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
         binding.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
@@ -390,6 +401,12 @@ class SettingsFragment : Fragment() {
             mScreenSaverManager.onTouchEvent(event)
             false
         }
+    }
+
+    private fun applyAodVisibility(saverPosition: Int, screenSaverEnabled: Boolean) {
+        val isAod = saverPosition == SCREEN_SAVER_ID_AOD
+        binding.minBrightnessScreenSaverLayout.isVisible = screenSaverEnabled && !isAod
+        binding.aodBrightnessAutoHint.isVisible = screenSaverEnabled && isAod
     }
 
     private fun setupModelChooser() {

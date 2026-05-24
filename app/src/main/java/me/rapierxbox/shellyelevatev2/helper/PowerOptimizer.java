@@ -1,11 +1,13 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
+import static me.rapierxbox.shellyelevatev2.Constants.EXTRA_SCREEN_SAVER_ID;
 import static me.rapierxbox.shellyelevatev2.Constants.EXTRA_SLEEP_ACTIVE;
 import static me.rapierxbox.shellyelevatev2.Constants.EXTRA_SLEEP_LEVEL;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STARTED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STOPPED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SLEEP_LEVEL_CHANGED;
+import static me.rapierxbox.shellyelevatev2.Constants.SCREEN_SAVER_ID_AOD;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_AGGRESSIVE;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_NONE;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD;
@@ -69,7 +71,9 @@ public class PowerOptimizer extends BroadcastReceiver {
 
         switch (action) {
             case INTENT_SCREEN_SAVER_STARTED:
-                enterSleep();
+                int saverId = intent.getIntExtra(EXTRA_SCREEN_SAVER_ID, -1);
+                // aod forces cpu governor regardless of user sleep level
+                enterSleep(saverId == SCREEN_SAVER_ID_AOD);
                 break;
             case INTENT_SCREEN_SAVER_STOPPED:
                 exitSleep();
@@ -88,12 +92,17 @@ public class PowerOptimizer extends BroadcastReceiver {
     }
 
     private synchronized void enterSleep() {
+        enterSleep(false);
+    }
+
+    private synchronized void enterSleep(boolean forceLowPower) {
         if (sleepActive) return;
-        int level = currentLevel();
+        // aod floors the level at STANDARD, user level still wins if higher
+        int level = forceLowPower ? Math.max(SLEEP_OPT_STANDARD, currentLevel()) : currentLevel();
         activeLevel = level;
         sleepActive = true;
 
-        Log.i(TAG, "Entering sleep, level=" + level);
+        Log.i(TAG, "Entering sleep, level=" + level + (forceLowPower ? " (aod floor)" : ""));
         broadcastLevel(true, level);
 
         if (level >= SLEEP_OPT_STANDARD) {

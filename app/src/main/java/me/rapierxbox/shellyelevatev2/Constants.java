@@ -92,6 +92,17 @@ public class Constants {
     public static final String INTENT_SCREEN_SAVER_STOPPED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STOPPED";
     public static final String INTENT_END_SCREENSAVER = "me.rapierxbox.shellyelevatev2.END_SCREENSAVER";
 
+    public static final String INTENT_AOD_STARTED = "me.rapierxbox.shellyelevatev2.AOD_STARTED";
+    public static final String INTENT_AOD_STOPPED = "me.rapierxbox.shellyelevatev2.AOD_STOPPED";
+
+    // saver id stamped on start/stop intents so receivers do not race getCurrentScreenSaver
+    public static final String EXTRA_SCREEN_SAVER_ID = "screenSaverIdExtra";
+
+    public static final int SCREEN_SAVER_ID_SCREEN_OFF          = 0;
+    public static final int SCREEN_SAVER_ID_DIGITAL_CLOCK       = 1;
+    public static final int SCREEN_SAVER_ID_DIGITAL_CLOCK_DATE  = 2;
+    public static final int SCREEN_SAVER_ID_AOD                 = 3;
+
     //IO Intents
     public static final String INTENT_LIGHT_UPDATED = "me.rapierxbox.shellyelevatev2.LIGHT_UPDATED";
     public static final String INTENT_LIGHT_KEY = "lightValue";

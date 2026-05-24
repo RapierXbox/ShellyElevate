@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2.screensavers;
 
+import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_UP;
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
@@ -36,12 +37,14 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private long lastProximityWakeTime = 0L;
     private volatile Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
+    private int runningSaverId = -1;
 
     public static ScreenSaver[] getAvailableScreenSavers() {
         return new ScreenSaver[]{
                 new ScreenOffScreenSaver(),
                 new DigitalClockScreenSaver(),
-                new DigitalClockAndDateScreenSaver()
+                new DigitalClockAndDateScreenSaver(),
+                new AODScreenSaver()
         };
     }
 
@@ -78,7 +81,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
         rescheduleIdleCheck();
         if (event == null) return true;
 
-        if (event.getAction() == ACTION_UP && isScreenSaverRunning()) {
+        // wake on down so brightness restores as finger lands
+        if ((event.getAction() == ACTION_DOWN || event.getAction() == ACTION_UP) && isScreenSaverRunning()) {
             stopScreenSaver();
         }
         return true;
@@ -166,16 +170,19 @@ public class ScreenSaverManager extends BroadcastReceiver {
         }
 
         ScreenSaver saver = getCurrentScreenSaver();
+        runningSaverId = getCurrentScreenSaverId();
         saver.onStart(appContext);
         Log.i(TAG, "Starting screensaver: " + saver.getClass().getSimpleName());
 
         var mqtt = ShellyElevateApplication.mMQTTServer;
         if (mqtt != null && mqtt.shouldSend()) mqtt.publishSleeping(true);
 
+        final int activeId = runningSaverId;
         // Broadcasts are observed by ScreenManager and friends; pushing them off
         // the main thread keeps the saver activity responsive on slow devices.
         scheduler.execute(() -> LocalBroadcastManager.getInstance(appContext)
-                .sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STARTED)));
+                .sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STARTED)
+                        .putExtra(EXTRA_SCREEN_SAVER_ID, activeId)));
     }
 
     public void stopScreenSaver() {
@@ -185,10 +192,14 @@ public class ScreenSaverManager extends BroadcastReceiver {
         ScreenSaver saver = getCurrentScreenSaver();
         saver.onEnd(appContext);
 
+        final int activeId = runningSaverId;
+        runningSaverId = -1;
+
         scheduler.execute(() -> {
             appContext.sendBroadcast(new Intent(INTENT_END_SCREENSAVER));
             LocalBroadcastManager.getInstance(appContext)
-                    .sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STOPPED));
+                    .sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STOPPED)
+                            .putExtra(EXTRA_SCREEN_SAVER_ID, activeId));
         });
 
         lastTouchEventTime = System.currentTimeMillis();
@@ -203,6 +214,10 @@ public class ScreenSaverManager extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {
         if (INTENT_SETTINGS_CHANGED.equals(intent.getAction())) {
+            // stop active saver if user switched type mid-sleep so its side effects unwind
+            if (screenSaverRunning && runningSaverId != getCurrentScreenSaverId()) {
+                stopScreenSaver();
+            }
             rescheduleIdleCheck();
             return;
         }

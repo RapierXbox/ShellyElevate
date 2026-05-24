@@ -429,6 +429,17 @@
 
             </LinearLayout>
 
+            <TextView
+                android:id="@+id/aodBrightnessAutoHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="8dp"
+                android:text="@string/aod_brightness_auto_hint"
+                android:textSize="14sp"
+                android:textStyle="italic"
+                android:visibility="gone" />
+
             <LinearLayout
                 android:id="@+id/sleepOptimizationLevelLayout"
                 android:layout_width="match_parent"
