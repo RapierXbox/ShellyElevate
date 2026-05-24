@@ -23,19 +23,19 @@ public enum DeviceModel {
             .initRelay("cloud.shelly.blake.relay")
             .inputEvents("/dev/input/event3", "/dev/input/event5", "/dev/input/event0", "/dev/input/event4")),
     MAVERICK(new Config("Maverick", "Shelly Wall Display U1",  "SAWD-4A1XE10US0")
-            .proximity().powerButton().io(0, 1, 1)
+            .proximity().powerButton().io(0, 1, 1).panelMinBacklight(5)
             .initRelay("cloud.shelly.maverick.relay1", "cloud.shelly.maverick.relay2")),
     JENNA   (new Config("Jenna",    "Shelly Wall Display X2i", "SAWD-5A1XX10EU0")
-            .proximity().powerButton().io(0, 1, 2)
+            .proximity().powerButton().io(0, 1, 2).panelMinBacklight(3)
             .initRelay("cloud.shelly.jenna.relay1", "cloud.shelly.jenna.relay2")
             // event4 is JENNA's proximity gpio_keys node; event5/event7 carry the regular keys.
             .inputEvents("/dev/input/event4", "/dev/input/event5", "/dev/input/event7")),
     CALLY   (new Config("Cally",    "Shelly Wall Display XLi", "SAWD-6A1XX10EU0")
-            .proximity().powerButton().io(4, 1, 2)
+            .proximity().powerButton().io(4, 1, 2).panelMinBacklight(3)
             .initRelay("cloud.shelly.cally.relay1", "cloud.shelly.cally.relay2")
             .inputEvents("/dev/input/event3", "/dev/input/event5")),
     DAYNA   (new Config("Dayna",    "Shelly Wall Display D1",  "SAWD-6A0XX0EU0")
-            .proximity().powerButton().io(0, 0, 0)),
+            .proximity().powerButton().io(0, 0, 0).panelMinBacklight(3)),
     ;
 
     public final String  displayName;
@@ -50,6 +50,8 @@ public enum DeviceModel {
     public final boolean invertRelay;
     public final String[] initRelayScripts;
     public final String[] inputEventPaths;
+    // lowest 0..255 backlight value at which the panel stays lit
+    public final int     panelMinBacklight;
 
     private final String codename;
 
@@ -67,6 +69,7 @@ public enum DeviceModel {
         this.invertRelay        = c.invertRelay;
         this.initRelayScripts   = c.initRelayScripts;
         this.inputEventPaths    = c.inputEventPaths;
+        this.panelMinBacklight  = c.panelMinBacklight;
     }
 
     public boolean usesInitScriptRelay() {
@@ -119,6 +122,7 @@ public enum DeviceModel {
         int     buttons, inputs, relays;
         String[] initRelayScripts;
         String[] inputEventPaths;
+        int     panelMinBacklight = 1;
 
         Config(String codename, String displayName, String sku) {
             this.codename    = codename;
@@ -133,5 +137,6 @@ public enum DeviceModel {
         Config io(int buttons, int inputs, int relays) { this.buttons = buttons; this.inputs = inputs; this.relays = relays; return this; }
         Config initRelay(String... scripts)            { this.initRelayScripts = scripts; return this; }
         Config inputEvents(String... paths)            { this.inputEventPaths = paths;    return this; }
+        Config panelMinBacklight(int v)                { this.panelMinBacklight = v;      return this; }
     }
 }
