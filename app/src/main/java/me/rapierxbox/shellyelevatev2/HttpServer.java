@@ -389,6 +389,29 @@ public class HttpServer extends NanoHTTPD {
                     jsonResponse.put("success", true);
                 }
                 break;
+            case "close":
+                jsonResponse.put("success", false);
+                if (method.equals(Method.POST)) {
+                    jsonResponse.put("success", true);
+                    // exit after responding so the client gets a reply first
+                    new Thread(() -> {
+                        try {
+                            Thread.sleep(100);
+                        } catch (InterruptedException ignored) {}
+                        System.exit(0);
+                    }, "close-exec").start();
+                }
+                break;
+            case "settings":
+                jsonResponse.put("success", false);
+                if (method.equals(Method.POST)) {
+                    Intent settingsIntent = new Intent(mApplicationContext, SettingsActivity.class);
+                    // required when starting an activity from a non-activity context
+                    settingsIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    mApplicationContext.startActivity(settingsIntent);
+                    jsonResponse.put("success", true);
+                }
+                break;
             case "reboot":
                 jsonResponse.put("success", false);
                 if (method.equals(Method.POST)) {
