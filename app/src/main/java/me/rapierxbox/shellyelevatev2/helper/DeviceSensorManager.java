@@ -50,6 +50,9 @@ public class DeviceSensorManager implements SensorEventListener {
 
     private float maxProximitySensorValue = 1.0f;
     private float fallbackProximityMaxRange = -1f;
+    private Sensor proximitySensor;
+    private volatile boolean gpioProximityConfirmed = false;
+    private volatile boolean sensorManagerProximitySuppressed = false;
     private final String[] inputEventPaths;
     private InputMonitor mInputMonitor;
     private ExecutorService proximityFallbackExecutor;
@@ -72,7 +75,7 @@ public class DeviceSensorManager implements SensorEventListener {
 
         inputEventPaths = DeviceModel.getReportedDevice().getInputEventPaths();
 
-        Sensor proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
+        proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         if (proximitySensor != null) {
             sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
             fallbackProximityMaxRange = proximitySensor.getMaximumRange();
@@ -165,6 +168,7 @@ public class DeviceSensorManager implements SensorEventListener {
                 lastLuxBroadcastAtMs = now;
             }
         } else if (event.sensor.getType() == Sensor.TYPE_PROXIMITY) {
+            if (sensorManagerProximitySuppressed) return;
             lastMeasuredDistance = event.values[0];
             publishProximity(lastMeasuredDistance);
         }
@@ -188,11 +192,11 @@ public class DeviceSensorManager implements SensorEventListener {
     }
 
     private void handleNativeKeyEvent(int keyCode, int action, int repeatCount) {
-        // KEY_F5 = 63 (near), KEY_F6 = 64 (far). Far publishes the SensorManager max
-        // so both sources share the same scale for ScreenSaverManager's threshold.
-        if (action == 1) { // DOWN
-            if (keyCode == 63) publishProximity(0f);
-            else if (keyCode == 64) publishProximity(maxProximitySensorValue);
+        // 63 = key_f5 (near), 64 = key_f6 (far)
+        if (action == 1) { // down
+            if (keyCode == 63) onGpioProximityEvent(true);
+            else if (keyCode == 64) onGpioProximityEvent(false);
+            else Log.i(TAG, "Unhandled input key code on monitored event path: " + keyCode);
         }
     }
 
@@ -247,6 +251,17 @@ public class DeviceSensorManager implements SensorEventListener {
 
     private void applyProximityFallback() {
         if (fallbackProximityMaxRange >= 0f) {
+            // gpio reader is gone; revive the sensormanager proximity sensor if suppressed
+            if (sensorManagerProximitySuppressed && proximitySensor != null) {
+                try {
+                    ((SensorManager) context.getSystemService(Context.SENSOR_SERVICE))
+                            .registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
+                } catch (Exception e) {
+                    Log.w(TAG, "Failed to re-register SensorManager proximity sensor", e);
+                }
+            }
+            gpioProximityConfirmed = false;
+            sensorManagerProximitySuppressed = false;
             maxProximitySensorValue = fallbackProximityMaxRange;
             proximitySensorAvailable = true;
             Log.i(TAG, "Using SensorManager proximity sensor with max range " + maxProximitySensorValue);
@@ -267,9 +282,38 @@ public class DeviceSensorManager implements SensorEventListener {
         }
 
         if (normalized.contains(PROXIMITY_KEY_NEAR)) {
-            publishProximity(0f);
+            onGpioProximityEvent(true);
         } else if (normalized.contains(PROXIMITY_KEY_FAR)) {
-            publishProximity(maxProximitySensorValue);
+            onGpioProximityEvent(false);
+        } else {
+            Log.i(TAG, "Unhandled gpio key line on proximity event path: " + line.trim());
+        }
+    }
+
+    // gpio_keys is the wide-range proximity source. once it actually fires, treat it
+    // as primary and stop the short-range sensormanager sensor from competing.
+    // confirming on the first event leaves models whose gpio never emits these keys
+    // on the sensormanager fallback.
+    private synchronized void onGpioProximityEvent(boolean near) {
+        if (!gpioProximityConfirmed) {
+            gpioProximityConfirmed = true;
+            maxProximitySensorValue = 1.0f; // binary near/far scale
+            proximitySensorAvailable = true;
+            suppressSensorManagerProximity();
+            Log.i(TAG, "gpio_keys proximity confirmed, using as primary; SensorManager proximity suppressed");
+        }
+        publishProximity(near ? 0f : maxProximitySensorValue);
+    }
+
+    private void suppressSensorManagerProximity() {
+        sensorManagerProximitySuppressed = true;
+        if (proximitySensor == null) return;
+        try {
+            // unregister only proximity; the light sensor shares this listener
+            ((SensorManager) context.getSystemService(Context.SENSOR_SERVICE))
+                    .unregisterListener(this, proximitySensor);
+        } catch (Exception e) {
+            Log.w(TAG, "Failed to unregister SensorManager proximity sensor", e);
         }
     }
 
