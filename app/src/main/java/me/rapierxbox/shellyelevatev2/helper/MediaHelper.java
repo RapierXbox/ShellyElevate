@@ -34,7 +34,8 @@ public class MediaHelper {
         }
     }
 
-    private void initPlayers() {
+    // synchronized to avoid double init from concurrent callers
+    private synchronized void initPlayers() {
         if (mediaPlayerEffects != null || mediaPlayerMusic != null) return;
 
         Log.i("MediaHelper", "MediaHelper enabled: starting...");

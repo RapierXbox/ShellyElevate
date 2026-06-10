@@ -39,13 +39,14 @@ public class NightModeManager implements Application.ActivityLifecycleCallbacks 
     private final WeakHashMap<Activity, NightModeOverlayView> overlays = new WeakHashMap<>();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private volatile boolean enabled;
+    private final BroadcastReceiver settingsReceiver;
 
     public NightModeManager(Context ctx) {
         this.appContext = ctx.getApplicationContext();
         this.prefs = appContext.getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
         this.enabled = prefs.getBoolean(SP_NIGHT_MODE_ENABLED, false);
 
-        BroadcastReceiver settingsReceiver = new BroadcastReceiver() {
+        settingsReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 boolean newState = prefs.getBoolean(SP_NIGHT_MODE_ENABLED, false);
@@ -78,6 +79,8 @@ public class NightModeManager implements Application.ActivityLifecycleCallbacks 
     }
 
     public void onDestroy() {
+        // unregister to avoid leaking the receiver
+        LocalBroadcastManager.getInstance(appContext).unregisterReceiver(settingsReceiver);
         for (java.util.Map.Entry<Activity, NightModeOverlayView> e : overlays.entrySet()) {
             detachOverlay(e.getKey(), e.getValue());
         }
