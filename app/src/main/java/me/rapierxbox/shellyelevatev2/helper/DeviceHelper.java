@@ -70,7 +70,13 @@ public class DeviceHelper {
     }
 
     public void setScreenBrightness(int brightness) {
-        if (lastScreenBrightness == brightness) return;
+        setScreenBrightness(brightness, false);
+    }
+
+    // force skips the dedup so the screen-off retry write reaches panels that
+    // swallow the first brightness=0 write (e.g. X2i/JENNA)
+    public void setScreenBrightness(int brightness, boolean force) {
+        if (!force && lastScreenBrightness == brightness) return;
 
         lastScreenBrightness = brightness;
         setScreenBrightnessInternal(brightness);

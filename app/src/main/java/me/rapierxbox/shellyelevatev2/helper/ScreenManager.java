@@ -325,7 +325,7 @@ public class ScreenManager extends BroadcastReceiver {
                     // entering the saver; repeating it ~300 ms later sticks reliably.
                     fadeHandler.postDelayed(() -> {
                         if (inScreenSaver && isScreenOffSaverActive()) {
-                            applyBrightness(0, "screen-off screensaver second write");
+                            applyBrightness(0, "screen-off screensaver second write", true);
                         }
                     }, 300L);
                 }
@@ -374,8 +374,12 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     private void applyBrightness(int rawValue, String reason) {
+        applyBrightness(rawValue, reason, false);
+    }
+
+    private void applyBrightness(int rawValue, String reason, boolean force) {
         int clamped = clamp(rawValue, 0, 255);
-        mDeviceHelper.setScreenBrightness(clamped);
+        mDeviceHelper.setScreenBrightness(clamped, force);
         currentBrightness = clamped;
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "Brightness set to " + clamped + " (" + reason + "), target=" + targetBrightness + ", inScreenSaver=" + inScreenSaver + ", screenOn=" + screenOn);
