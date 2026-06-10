@@ -22,6 +22,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 // One GATT connection to a peripheral. Handle numbering matches ESPHome's flat ATT space.
 // Ops are queued because Android only allows one in-flight GATT call at a time.
@@ -32,6 +36,15 @@ public class ActiveBleConnection {
     private static final int PREFERRED_MTU = 517; // ATT max; stack negotiates down
     // Used when the op never reached the stack (gatt null, write rejected, etc). Real GATT codes are 0..0xFF.
     private static final int SYNTHETIC_GATT_FAILURE = 0x101;
+
+    // recover the op queue if a gatt completion never arrives
+    private static final long OP_TIMEOUT_MS = 20_000;
+    private static final ScheduledExecutorService OP_TIMEOUT_EXEC =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "ble-op-timeout");
+                t.setDaemon(true);
+                return t;
+            });
 
     // Writing 0x0001/0x0002/0x0000 here enables notify/indicate/off.
     private static final UUID CCCD_UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb");
@@ -62,6 +75,7 @@ public class ActiveBleConnection {
         final OpKind kind;
         final int reportHandle;  // char handle for char/notify ops; desc handle for desc ops
         final Runnable start;    // kicks off the BluetoothGatt call
+        boolean settled = false; // guarded by opLock so a timeout and a real callback cant both finish it
         PendingOp(OpKind k, int h, Runnable s) { kind = k; reportHandle = h; start = s; }
     }
 
@@ -80,6 +94,7 @@ public class ActiveBleConnection {
     private final Object opLock = new Object();
     private final Queue<PendingOp> opQueue = new ArrayDeque<>();
     private PendingOp currentOp;
+    private ScheduledFuture<?> opTimeoutFuture;
 
     // Single counter across services/chars/descriptors, matching ESPHome's flat ATT handle space.
     private int nextHandle = 1;
@@ -129,10 +144,13 @@ public class ActiveBleConnection {
         closed = true;
         BluetoothGatt g = gatt;
         if (g != null) {
+            // disconnect first so the os releases the gatt slot cleanly
+            try { g.disconnect(); } catch (Exception ignored) {}
             try { g.close(); } catch (Exception ignored) {}
             gatt = null;
         }
         synchronized (opLock) {
+            cancelOpTimeoutLocked();
             opQueue.clear();
             currentOp = null;
         }
@@ -284,6 +302,7 @@ public class ActiveBleConnection {
             if (currentOp == null) {
                 currentOp = op;
                 toRun = op.start;
+                armOpTimeoutLocked(op);
             } else {
                 opQueue.add(op);
             }
@@ -294,10 +313,57 @@ public class ActiveBleConnection {
     private void completeAndAdvance() {
         Runnable next = null;
         synchronized (opLock) {
+            if (currentOp != null) currentOp.settled = true;
+            cancelOpTimeoutLocked();
             currentOp = opQueue.poll();
-            if (currentOp != null) next = currentOp.start;
+            if (currentOp != null) {
+                next = currentOp.start;
+                armOpTimeoutLocked(currentOp);
+            }
         }
         if (next != null) next.run();
+    }
+
+    // must hold opLock
+    private void armOpTimeoutLocked(PendingOp op) {
+        cancelOpTimeoutLocked();
+        opTimeoutFuture = OP_TIMEOUT_EXEC.schedule(() -> onOpTimeout(op), OP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+    }
+
+    // must hold opLock
+    private void cancelOpTimeoutLocked() {
+        if (opTimeoutFuture != null) {
+            opTimeoutFuture.cancel(false);
+            opTimeoutFuture = null;
+        }
+    }
+
+    // fired when a gatt op never got its completion callback
+    private void onOpTimeout(PendingOp timedOut) {
+        Runnable next = null;
+        synchronized (opLock) {
+            if (timedOut.settled || currentOp != timedOut) return;
+            timedOut.settled = true;
+            cancelOpTimeoutLocked();
+            currentOp = opQueue.poll();
+            if (currentOp != null) {
+                next = currentOp.start;
+                armOpTimeoutLocked(currentOp);
+            }
+        }
+        if (next != null) next.run();
+        Log.w(TAG, "gatt op timed out kind=" + timedOut.kind + " handle=" + timedOut.reportHandle);
+        reportOpFailure(timedOut);
+    }
+
+    private void reportOpFailure(PendingOp op) {
+        switch (op.kind) {
+            case READ_CHAR:         cb.onCharRead(address, op.reportHandle, null, SYNTHETIC_GATT_FAILURE); break;
+            case WRITE_CHAR:        cb.onCharWrite(address, op.reportHandle, SYNTHETIC_GATT_FAILURE); break;
+            case READ_DESC:         cb.onDescRead(address, op.reportHandle, null, SYNTHETIC_GATT_FAILURE); break;
+            case WRITE_DESC:        cb.onDescWrite(address, op.reportHandle, SYNTHETIC_GATT_FAILURE); break;
+            case NOTIFY_CCCD_WRITE: cb.onNotifyResult(address, op.reportHandle, SYNTHETIC_GATT_FAILURE); break;
+        }
     }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {

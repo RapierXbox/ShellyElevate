@@ -96,6 +96,8 @@ public class BluetoothProxyManager {
     private static final int MSG_BT_DEVICE_UNPAIRING_RESPONSE      = 86;
     private static final int MSG_UNSUBSCRIBE_BLE                   = 87;
     private static final int MSG_BT_DEVICE_CLEAR_CACHE_RESPONSE    = 88;
+    // batched raw ads modern path replacing deprecated 67
+    private static final int MSG_BLE_RAW_AD_RESPONSE              = 93;
 
     private static final int DEV_REQ_CONNECT                  = 0;
     private static final int DEV_REQ_DISCONNECT               = 1;
@@ -105,11 +107,14 @@ public class BluetoothProxyManager {
     private static final int DEV_REQ_CONNECT_V3_WITHOUT_CACHE = 5;
     private static final int DEV_REQ_CLEAR_CACHE              = 6;
 
-    // PASSIVE_SCAN | ACTIVE_CONNECTIONS | CACHE_CLEARING.
+    // PASSIVE_SCAN | ACTIVE_CONNECTIONS | CACHE_CLEARING | RAW_ADVERTISEMENTS.
     // No REMOTE_CACHING (handles reset on reconnect) or PAIRING (needs Android UI).
-    private static final int BT_PROXY_FLAGS = 1 | 2 | 16;
+    private static final int BT_PROXY_FLAGS = 1 | 2 | 16 | 32;
+    // flag ha sets in the subscribe request to ask for raw ads
+    private static final int SUBSCRIPTION_RAW_ADVERTISEMENTS = 1;
     // old HA builds that don't read BT_PROXY_FLAGS check this version number instead
     private static final int BT_LEGACY_VERSION = 5;
+    private static final String ESPHOME_VERSION = "2026.5.1";
 
     // Android allows 4-7 connections depending on vendor; 3 is safe across the board
     private static final int MAX_ACTIVE_CONNECTIONS = 3;
@@ -122,6 +127,12 @@ public class BluetoothProxyManager {
     // Android throttles at 5 scan starts/30s; stay one under
     private static final int  SCAN_START_BUDGET = 4;
     private static final long SCAN_START_WINDOW_MS = 30_000;
+
+    // batch raw ads to cut frame count and queue pressure
+    private static final int  RAW_AD_BATCH_MAX = 16;
+    private static final long RAW_AD_FLUSH_MS  = 100;
+    // reject absurd frame lengths to avoid heap blowup on the open socket
+    private static final int  MAX_FRAME_SIZE = 256 * 1024;
 
     private static final byte[] WRITE_QUEUE_SENTINEL = new byte[0];
 
@@ -362,6 +373,10 @@ public class BluetoothProxyManager {
         // throttle drop logs so we don't spam logcat
         private long droppedSinceLastLog = 0;
         private long lastDropLogMs = 0;
+        // set when ha subscribes with the raw flag
+        private volatile boolean rawAds = false;
+        private final List<byte[]> rawAdBatch = new ArrayList<>();
+        private ScheduledFuture<?> rawFlushTask;
 
         ClientSession(Socket socket) { this.socket = socket; }
 
@@ -442,6 +457,7 @@ public class BluetoothProxyManager {
                     enqueue(buildFrame(MSG_DEVICE_INFO_RESPONSE, buildDeviceInfoResponse()));
                     break;
                 case MSG_SUBSCRIBE_BLE:
+                    if ((readSingleVarintField(payload, 1) & SUBSCRIPTION_RAW_ADVERTISEMENTS) != 0) enableRawAds();
                     startBleScanning(this);
                     break;
                 case MSG_UNSUBSCRIBE_BLE:
@@ -491,6 +507,43 @@ public class BluetoothProxyManager {
             enqueue(buildFrame(MSG_BLE_AD_RESPONSE, payload));
         }
 
+        void enableRawAds() {
+            rawAds = true;
+            if (rawFlushTask == null)
+                rawFlushTask = scheduler.scheduleWithFixedDelay(
+                        this::flushRawAds, RAW_AD_FLUSH_MS, RAW_AD_FLUSH_MS, TimeUnit.MILLISECONDS);
+        }
+
+        void sendRawAdvertisement(byte[] entry) {
+            List<byte[]> toFlush = null;
+            synchronized (rawAdBatch) {
+                rawAdBatch.add(entry);
+                if (rawAdBatch.size() >= RAW_AD_BATCH_MAX) {
+                    toFlush = new ArrayList<>(rawAdBatch);
+                    rawAdBatch.clear();
+                }
+            }
+            if (toFlush != null) flushBatch(toFlush);
+        }
+
+        private void flushRawAds() {
+            if (closed.get()) return;
+            List<byte[]> toFlush;
+            synchronized (rawAdBatch) {
+                if (rawAdBatch.isEmpty()) return;
+                toFlush = new ArrayList<>(rawAdBatch);
+                rawAdBatch.clear();
+            }
+            flushBatch(toFlush);
+        }
+
+        // one BluetoothLERawAdvertisementsResponse holds repeated entries in field 1
+        private void flushBatch(List<byte[]> entries) {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            for (byte[] e : entries) encodeLenField(out, 1, e);
+            enqueue(buildFrame(MSG_BLE_RAW_AD_RESPONSE, out.toByteArray()));
+        }
+
         private void enqueue(byte[] frame) {
             if (closed.get()) return;
             if (!outQueue.offer(frame)) {
@@ -510,6 +563,7 @@ public class BluetoothProxyManager {
             outQueue.offer(WRITE_QUEUE_SENTINEL);
             try { socket.close(); } catch (IOException ignored) {}
             if (pingTask != null) pingTask.cancel(false);
+            if (rawFlushTask != null) rawFlushTask.cancel(false);
             // snapshot first — close() fires onConnectionStateChanged which removes from the map
             List<ActiveBleConnection> snapshot = new ArrayList<>(connections.values());
             connections.clear();
@@ -846,8 +900,13 @@ public class BluetoothProxyManager {
                 lastScanResultMs.set(System.currentTimeMillis());
                 ClientSession target = scanTarget.get();
                 if (target == null) return;
-                byte[] ad = buildBleScanRecord(result);
-                if (ad != null) target.sendAdvertisement(ad);
+                if (target.rawAds) {
+                    byte[] raw = buildRawAdvertisement(result);
+                    if (raw != null) target.sendRawAdvertisement(raw);
+                } else {
+                    byte[] ad = buildBleScanRecord(result);
+                    if (ad != null) target.sendAdvertisement(ad);
+                }
             }
             @Override public void onScanFailed(int errorCode) {
                 // must clear this or startBleScanning() thinks it's still running; error 2 = OS throttle
@@ -913,7 +972,7 @@ public class BluetoothProxyManager {
         // field numbers from ESPHome's api.proto DeviceInfoResponse
         encodeBytesField(out, 2,  name);
         encodeBytesField(out, 3,  mac);
-        encodeBytesField(out, 4,  "2026.4.0");
+        encodeBytesField(out, 4,  ESPHOME_VERSION);
         encodeBytesField(out, 6,  "android-bt-proxy");
         encodeVarintField(out, 11, BT_LEGACY_VERSION);
         encodeBytesField(out, 12, "Android");
@@ -966,6 +1025,30 @@ public class BluetoothProxyManager {
             return out.toByteArray();
         } catch (Exception e) {
             Log.w(TAG, "encode scan result failed: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // raw adv payload straight from the scan record matches BluetoothLERawAdvertisement
+    private static byte[] buildRawAdvertisement(ScanResult result) {
+        try {
+            ScanRecord record = result.getScanRecord();
+            byte[] data = record != null ? record.getBytes() : null;
+            if (data == null) return null;
+            long address = parseMacToLong(result.getDevice().getAddress());
+            int addrType = 0;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+                    && result.getDevice().getAddressType() == 1) {
+                addrType = 1; // random
+            }
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            encodeVarintField(out, 1, address);
+            encodeZigzagField(out, 2, result.getRssi());
+            encodeVarintField(out, 3, addrType);
+            encodeLenField(out, 4, data);
+            return out.toByteArray();
+        } catch (Exception e) {
+            Log.w(TAG, "encode raw scan result failed: " + e.getMessage());
             return null;
         }
     }
@@ -1082,6 +1165,8 @@ public class BluetoothProxyManager {
         if (b == -1) return null;
         if (b != 0x00) throw new IOException("bad preamble: 0x" + Integer.toHexString(b));
         int payloadLen = readVarint(in);
+        if (payloadLen < 0 || payloadLen > MAX_FRAME_SIZE)
+            throw new IOException("frame too large: " + payloadLen);
         int msgType    = readVarint(in);
         byte[] payload = new byte[payloadLen];
         int off = 0;
