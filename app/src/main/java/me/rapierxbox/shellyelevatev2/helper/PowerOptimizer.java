@@ -71,9 +71,8 @@ public class PowerOptimizer extends BroadcastReceiver {
 
         switch (action) {
             case INTENT_SCREEN_SAVER_STARTED:
-                int saverId = intent.getIntExtra(EXTRA_SCREEN_SAVER_ID, -1);
-                // aod forces cpu governor regardless of user sleep level
-                enterSleep(saverId == SCREEN_SAVER_ID_AOD);
+                // every saver (incl aod) uses the user-defined sleep level
+                enterSleep();
                 break;
             case INTENT_SCREEN_SAVER_STOPPED:
                 exitSleep();
@@ -92,17 +91,12 @@ public class PowerOptimizer extends BroadcastReceiver {
     }
 
     private synchronized void enterSleep() {
-        enterSleep(false);
-    }
-
-    private synchronized void enterSleep(boolean forceLowPower) {
         if (sleepActive) return;
-        // aod floors the level at STANDARD, user level still wins if higher
-        int level = forceLowPower ? Math.max(SLEEP_OPT_STANDARD, currentLevel()) : currentLevel();
+        int level = currentLevel();
         activeLevel = level;
         sleepActive = true;
 
-        Log.i(TAG, "Entering sleep, level=" + level + (forceLowPower ? " (aod floor)" : ""));
+        Log.i(TAG, "Entering sleep, level=" + level);
         broadcastLevel(true, level);
 
         if (level >= SLEEP_OPT_STANDARD) {
