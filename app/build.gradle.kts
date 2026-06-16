@@ -14,8 +14,9 @@ fun generateVersionCode(): Int {
     val now = LocalDateTime.now()
     val year = now.year % 100  // Last 2 digits of year
     val dayOfYear = now.dayOfYear
-    // Format: 3YYDDD (e.g., 326111 for year 2026, day 111)
-    return 3_00_000 + (year * 1000) + dayOfYear
+    val minuteOfDay = now.hour * 60 + now.minute  // 0..1439
+    // (3YYDDD) * 1440 + minuteOfDay: monotonic intraday, fits a 32-bit int
+    return ((3_00_000 + (year * 1000) + dayOfYear) * 1440) + minuteOfDay
 }
 
 fun generateVersionName(): String {
@@ -24,6 +25,24 @@ fun generateVersionName(): String {
     val dayOfYear = now.dayOfYear
     val hourMin = now.format(DateTimeFormatter.ofPattern("HHmm"))
     return "3.${year}${dayOfYear.toString().padStart(3, '0')}.${hourMin}"
+}
+
+// on tag builds the workflow sets SE_RELEASE_VERSION so the apk version equals the tag
+val releaseVersion: String? = System.getenv("SE_RELEASE_VERSION")?.trim()?.removePrefix("v")?.ifEmpty { null }
+
+fun versionNameForBuild(): String = releaseVersion ?: generateVersionName()
+
+fun versionCodeForBuild(): Int {
+    val v = releaseVersion ?: return generateVersionCode()
+    return try {
+        val parts = v.split(".")
+        val mid = parts[1].toInt()              // YYDDD
+        val hhmm = parts[2]
+        val minuteOfDay = hhmm.substring(0, 2).toInt() * 60 + hhmm.substring(2).toInt()
+        ((3_00_000 + mid) * 1440) + minuteOfDay
+    } catch (e: Exception) {
+        generateVersionCode()
+    }
 }
 
 android {
@@ -35,8 +54,8 @@ android {
         minSdk = 24
         //noinspection ExpiredTargetSdkVersion
         targetSdk = 24
-        versionCode = generateVersionCode()
-        versionName = generateVersionName()
+        versionCode = versionCodeForBuild()
+        versionName = versionNameForBuild()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
