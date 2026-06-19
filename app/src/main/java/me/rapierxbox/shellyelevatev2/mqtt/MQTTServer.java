@@ -114,16 +114,18 @@ public class MQTTServer {
     private void reconnectWithNewSettings() {
         scheduler.execute(() -> {
             try {
-                if (mMqttClient != null && mMqttClient.isConnected()) {
-                    Log.d(TAG, "Disconnecting old MQTT connection before applying new settings");
+                if (mMqttClient != null) {
+                    Log.d(TAG, "Tearing down old MQTT connection before applying new settings");
                     try {
-                        mMqttClient.disconnect();
+                        if (mMqttClient.isConnected()) mMqttClient.disconnect();
                         mMqttClient.close();
                     } catch (MqttException e) {
                         Log.w(TAG, "Error disconnecting during settings change", e);
                     }
                     mMqttClient = null;
                 }
+                // clear any stuck connecting flag so the fresh attempt is not blocked
+                connecting = false;
 
                 setupClientId();
                 Log.d(TAG, "Updated MQTT client ID to: " + clientId);
