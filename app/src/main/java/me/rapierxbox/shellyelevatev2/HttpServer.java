@@ -2,7 +2,6 @@ package me.rapierxbox.shellyelevatev2;
 
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MEDIA_ENABLED;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
@@ -12,10 +11,7 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mNightModeM
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
-import android.content.BroadcastReceiver;
-import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
@@ -41,23 +37,7 @@ public class HttpServer extends NanoHTTPD {
 
     public HttpServer() {
         super(8080);
-
-        LocalBroadcastManager localBroadcastManager = LocalBroadcastManager.getInstance(mApplicationContext);
-        BroadcastReceiver settingsChangedBroadcastReceiver = new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true) && !isAlive()) {
-                    try {
-                        start();
-                    } catch (IOException e) {
-                        Log.d(TAG, "Failed to start http server: " + e);
-                    }
-                } else if (!mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true) && isAlive()) {
-                    stop();
-                }
-            }
-        };
-        localBroadcastManager.registerReceiver(settingsChangedBroadcastReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
+        // lifecycle start stop and restart on settings change is owned by ShellyElevateApplication
     }
 
     @Override
