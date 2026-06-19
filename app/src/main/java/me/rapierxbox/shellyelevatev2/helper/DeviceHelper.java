@@ -1,6 +1,5 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
-import static android.content.Context.DEVICE_ID_DEFAULT;
 import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
@@ -119,12 +118,13 @@ public class DeviceHelper {
     }
 
     public void setRelay(int num, boolean state) {
-        state ^= deviceModel.invertRelay;
+        boolean physicalState = state ^ deviceModel.invertRelay;
         if (deviceModel.usesInitScriptRelay()) {
-            triggerInitRelay(num, state);
+            triggerInitRelay(num, physicalState);
         } else {
-            writeFileContent(getRelayFile(num), state ? "1" : "0");
+            writeFileContent(getRelayFile(num), physicalState ? "1" : "0");
         }
+        // publish the logical state so mqtt matches getRelay and the http api
         if (mMQTTServer.shouldSend()) {
             mMQTTServer.publishRelay(num, state);
         }
