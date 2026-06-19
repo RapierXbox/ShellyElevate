@@ -211,7 +211,7 @@ public class MQTTServer {
             mMqttConnectionsOptions.setCleanStart(true);
 
             mMqttClient = new MqttClient(
-                mSharedPreferences.getString(SP_MQTT_BROKER, "") + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883),
+                normalizeBrokerUri(mSharedPreferences.getString(SP_MQTT_BROKER, "")) + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883),
                 clientId, mMemoryPersistence
             );
 
@@ -264,7 +264,18 @@ public class MQTTServer {
             Log.e(TAG, "Connect failed, scheduling retry in 60s: ", e);
             connecting = false;
             scheduler.schedule(this::connect, 60, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            // a bad broker uri throws here so reset the flag so a fixed setting can reconnect without reboot
+            Log.e(TAG, "Connect failed with unexpected error: ", e);
+            connecting = false;
         }
+    }
+
+    private String normalizeBrokerUri(String broker) {
+        String b = broker.trim();
+        // default to plain tcp when the scheme is omitted
+        if (!b.contains("://")) b = "tcp://" + b;
+        return b;
     }
 
     private void safeOnConnected() {
