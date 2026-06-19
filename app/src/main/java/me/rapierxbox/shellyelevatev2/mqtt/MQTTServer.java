@@ -435,7 +435,7 @@ public class MQTTServer {
             // binary; v3.1 brokers ignore these properties.
             MqttProperties props = new MqttProperties();
             props.setPayloadFormat(true);
-            String trimmed = payload.length() > 0 ? payload.trim() : "";
+            String trimmed = !payload.isEmpty() ? payload.trim() : "";
             boolean looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
             props.setContentType(looksLikeJson ? "application/json" : "text/plain; charset=utf-8");
             message.setProperties(props);
