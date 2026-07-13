@@ -139,7 +139,9 @@ public final class AppUpdater {
             PackageManager pm = ctx.getPackageManager();
             PackageInfo remote = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_SIGNATURES);
             PackageInfo local = pm.getPackageInfo(ctx.getPackageName(), PackageManager.GET_SIGNATURES);
-            if (remote == null || remote.signatures == null || remote.signatures.length == 0) return false;
+            // reject an apk for a different package before trusting its signatures
+            if (remote == null || !ctx.getPackageName().equals(remote.packageName)) return false;
+            if (remote.signatures == null || remote.signatures.length == 0) return false;
             if (local == null || local.signatures == null) return false;
             if (remote.signatures.length != local.signatures.length) return false;
             for (int i = 0; i < remote.signatures.length; i++) {

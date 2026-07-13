@@ -48,28 +48,33 @@ public final class PrivAppInstaller {
         if (apk == null || !apk.exists() || apk.length() <= 0) return false;
         if (!remountRw()) return false;
 
-        String src = apk.getAbsolutePath();
-        String copy = "mkdir -p " + PRIV_DIR
-                + " && cp -f '" + src + "' " + TEMP_APK
-                + " && chmod 644 " + TEMP_APK;
-        if (!PrivilegedShell.runShell(copy).ok() || !sizeMatches(TEMP_APK, apk.length())) {
-            PrivilegedShell.runShell("rm -f " + TEMP_APK);
-            remountRo();
-            return false;
-        }
+        // finally so /system is dropped back to read-only on every path
+        // including an early return or a timeout that kills a shell mid-copy
+        try {
+            String src = apk.getAbsolutePath();
+            String copy = "mkdir -p " + PRIV_DIR
+                    + " && cp -f '" + src + "' " + TEMP_APK
+                    + " && chmod 644 " + TEMP_APK;
+            if (!PrivilegedShell.runShell(copy).ok() || !sizeMatches(TEMP_APK, apk.length())) {
+                PrivilegedShell.runShell("rm -f " + TEMP_APK);
+                return false;
+            }
 
-        boolean ok = PrivilegedShell.runShell("mv -f " + TEMP_APK + " " + TARGET_APK
-                + " && chmod 644 " + TARGET_APK).ok();
-        if (!ok) {
-            // dont leave the temp apk behind on a failed swap
-            PrivilegedShell.runShell("rm -f " + TEMP_APK);
+            boolean ok = PrivilegedShell.runShell("mv -f " + TEMP_APK + " " + TARGET_APK
+                    + " && chmod 644 " + TARGET_APK).ok();
+            if (!ok) {
+                // dont leave the temp apk behind on a failed swap
+                PrivilegedShell.runShell("rm -f " + TEMP_APK);
+                return false;
+            }
+            // best effort selinux label so the new apk loads
+            PrivilegedShell.runShell("chcon u:object_r:system_file:s0 " + TARGET_APK);
+            // flush to disk so the copy survives the reboot the caller triggers
+            PrivilegedShell.runShell("sync");
+            return true;
+        } finally {
             remountRo();
-            return false;
         }
-        // best effort selinux label so the new apk loads
-        PrivilegedShell.runShell("chcon u:object_r:system_file:s0 " + TARGET_APK);
-        remountRo();
-        return true;
     }
 
     public static boolean hasSystemSpaceFor(long need) {
