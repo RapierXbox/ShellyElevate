@@ -10,7 +10,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 public class UartHelper {
 
@@ -68,7 +67,11 @@ public class UartHelper {
             while (!isInterrupted() && !cancelled) {
                 try {
                     int n = mInputStream.read(buf);
-                    if (n <= 0) continue;
+                    if (n < 0) {
+                        if (!cancelled) Log.w(TAG, "EOF on serial input, stopping reader");
+                        break;
+                    }
+                    if (n == 0) continue;
                     byte[] data = new byte[n];
                     System.arraycopy(buf, 0, data, 0, n);
                     sHandler.removeCallbacks(mTimeoutRunnable);
@@ -79,6 +82,12 @@ public class UartHelper {
                 } catch (IOException e) {
                     if (!cancelled) Log.e(TAG, "Read error: " + e.getMessage());
                     transferActive = false;
+                    // avoid hot spinning on a persistent error
+                    try {
+                        Thread.sleep(100);
+                    } catch (InterruptedException ie) {
+                        break;
+                    }
                 }
             }
         }
@@ -95,8 +104,7 @@ public class UartHelper {
         public void run() {
             while (!isInterrupted()) {
                 try {
-                    byte[] d = queue.poll(100, TimeUnit.MILLISECONDS);
-                    if (d == null) continue;
+                    byte[] d = queue.take();
                     mOutputStream.write(d);
                     mOutputStream.flush();
                 } catch (InterruptedException e) {
