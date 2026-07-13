@@ -102,9 +102,14 @@ class MainActivity : ComponentActivity() {
     private val settingsChangedBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             try {
+                // reload only when the target url changed or we sit on the offline page
+                // so saving unrelated settings does not restart the whole dashboard
                 val webviewUrl = ServiceHelper.getWebviewUrl()
-                Log.d("MainActivity", "Reloading WebView due to settings change: $webviewUrl")
-                webView.loadUrl(webviewUrl)
+                val onOfflinePage = webView.url?.contains("offline.html") == true
+                if (webviewUrl != lastRequestedUrl || onOfflinePage) {
+                    Log.d("MainActivity", "Reloading WebView due to settings change: $webviewUrl")
+                    loadDashboard(webviewUrl)
+                }
             } catch (e: Exception) {
                 Log.e("MainActivity", "Error reloading WebView on settings change", e)
             }
@@ -117,6 +122,8 @@ class MainActivity : ComponentActivity() {
             val javascriptCode = intent?.getStringExtra("javascript")?.trim() ?: return
             try {
                 if (!firstPaintDone) {
+                    // cap the queue so a page stuck loading cannot grow it forever
+                    if (pendingJs.size >= 50) pendingJs.removeAt(0)
                     pendingJs.add(javascriptCode)
                     Log.d("MainActivity", "Queueing JS until first paint")
                     return
@@ -338,6 +345,14 @@ class MainActivity : ComponentActivity() {
 
     var offlineFile = "file:///android_asset/offline.html"
 
+    // last dashboard url we asked the webview to load; used to skip redundant reloads
+    private var lastRequestedUrl: String? = null
+
+    private fun loadDashboard(url: String) {
+        lastRequestedUrl = url
+        webView.loadUrl(url)
+    }
+
     private fun initializeButtonPressDetectors() {
         val pressCallback = ButtonPressDetector.Callback { buttonId, pressType ->
             onButtonPressTypeDetected(buttonId, pressType)
@@ -445,6 +460,12 @@ class MainActivity : ComponentActivity() {
                 setLayerType(View.LAYER_TYPE_HARDWARE, null)
             }
 
+            // let the renderer drop priority whenever the webview is covered
+            // by settings or a screensaver activity instead of only after aod
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
+            }
+
             webViewClient = object : WebViewClient() {
 
                 override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
@@ -463,8 +484,9 @@ class MainActivity : ComponentActivity() {
                             handler?.proceed()
                         } else {
                             handler?.cancel()
+                            val failingUrl = error?.url
                             view?.post {
-                                if (!isOfflineUrl(offlineFile)) view.loadUrl(offlineFile)
+                                if (!isOfflineUrl(failingUrl)) view.loadUrl(offlineFile)
                             }
                         }
                     } catch (e: Exception) {
@@ -524,7 +546,7 @@ class MainActivity : ComponentActivity() {
                     val url = request?.url?.toString() ?: return false
                     if (url.startsWith("shellyelevate:")) {
                         when (url.removePrefix("shellyelevate:")) {
-                            "reload" -> view?.post { view.loadUrl(ServiceHelper.getWebviewUrl()) }
+                            "reload" -> view?.post { loadDashboard(ServiceHelper.getWebviewUrl()) }
                             "offline" -> view?.post { view.loadUrl(offlineFile) }
                             "settings" -> startSettingsActivity()
                         }
@@ -639,7 +661,7 @@ class MainActivity : ComponentActivity() {
 
             withContext(Dispatchers.Main) {
                 if (online) {
-                    webView.loadUrl(url)
+                    loadDashboard(url)
                     initialLoadDone = true
                     cancelRetry()
                 } else {
@@ -663,7 +685,7 @@ class MainActivity : ComponentActivity() {
                 val online = ServiceHelper.isNetworkReady(applicationContext)
                 if (online) {
                     withContext(Dispatchers.Main) {
-                        webView.loadUrl(targetUrl)
+                        loadDashboard(targetUrl)
                         cancelRetry()
                     }
                     return@launch
@@ -674,7 +696,7 @@ class MainActivity : ComponentActivity() {
                 val online = ServiceHelper.isNetworkReady(applicationContext)
                 if (online) {
                     withContext(Dispatchers.Main) {
-                        webView.loadUrl(targetUrl)
+                        loadDashboard(targetUrl)
                         cancelRetry()
                     }
                     return@launch
@@ -768,6 +790,8 @@ class MainActivity : ComponentActivity() {
 
         binding = MainActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
+        // the webview covers the whole window so the theme background is pure overdraw
+        window.setBackgroundDrawable(null)
         webView = binding.myWebView
 
         initializeButtonPressDetectors()
@@ -783,10 +807,8 @@ class MainActivity : ComponentActivity() {
         // if we're being relaunched from a crash (isTaskRoot==false and Settings
         // already on the task stack), otherwise we'd open it on every relaunch.
         if (!mSharedPreferences.getBoolean(SP_SETTINGS_EVER_SHOWN, false)) {
-            val settingsAlreadyRunning = isActivityInStack(SettingsActivity::class.java.name)
-            if (!settingsAlreadyRunning && !isTaskRoot) {
-                startActivity(Intent(this, SettingsActivity::class.java))
-            } else if (isTaskRoot) {
+            // never stack a second settings instance on top of a running one
+            if (!isActivityInStack(SettingsActivity::class.java.name)) {
                 startActivity(Intent(this, SettingsActivity::class.java))
             }
         }
@@ -811,6 +833,11 @@ class MainActivity : ComponentActivity() {
 
     private fun onKeyEventInternal(keyCode: Int, event: android.view.KeyEvent): Boolean {
         if (BuildConfig.DEBUG) Log.d("MainActivity", "Key pressed: $keyCode - Event: $event")
+        // key auto repeat resends ACTION_DOWN while held which would reset the
+        // press timers and inflate click counts in the detectors
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0) {
+            return when (keyCode) { 140, 131, 132, 133, 134, 141, 142 -> true; else -> false }
+        }
         when (keyCode) {
             // Power button (140): supports short/long/double/triple press types.
             140 -> {
@@ -936,6 +963,14 @@ class MainActivity : ComponentActivity() {
             unregisterReceiver(aodReceiver)
         }
         cancelRetry()
+        // destroy the webview or every crash relaunch leaks a full renderer
+        aodTickHandler.removeCallbacksAndMessages(null)
+        try {
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            webView.destroy()
+        } catch (e: Exception) {
+            Log.w("MainActivity", "webview destroy failed: ${e.message}")
+        }
         super.onDestroy()
     }
 
