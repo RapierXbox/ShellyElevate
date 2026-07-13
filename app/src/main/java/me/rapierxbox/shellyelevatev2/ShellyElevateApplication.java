@@ -58,6 +58,7 @@ public class ShellyElevateApplication extends Application {
     private static long applicationStartTime;
     private ScheduledExecutorService httpWatchdog;
     private ScheduledFuture<?> httpWatchdogFuture;
+    private ScheduledFuture<?> httpRetryFuture;
     private int retryDelaySeconds = 5;
     private BroadcastReceiver httpSettingsReceiver;
 
@@ -144,6 +145,15 @@ public class ShellyElevateApplication extends Application {
                     tryStartHttpServer();
                     scheduleHttpWatchdog();
                 }
+
+                // media can be toggled at runtime and previously required a reboot
+                boolean mediaEnabled = mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false);
+                if (mediaEnabled && mMediaHelper == null) {
+                    mMediaHelper = new MediaHelper();
+                } else if (!mediaEnabled && mMediaHelper != null) {
+                    mMediaHelper.onDestroy();
+                    mMediaHelper = null;
+                }
             }
         };
         LocalBroadcastManager.getInstance(this)
@@ -170,9 +180,16 @@ public class ShellyElevateApplication extends Application {
             httpWatchdogFuture.cancel(false);
             httpWatchdogFuture = null;
         }
+        // a pending backoff retry would otherwise restart a disabled server
+        if (httpRetryFuture != null) {
+            httpRetryFuture.cancel(false);
+            httpRetryFuture = null;
+        }
     }
 
-    private void tryStartHttpServer() {
+    // synchronized because the settings receiver and the watchdog executor race here
+    private synchronized void tryStartHttpServer() {
+        if (!mSharedPreferences.getBoolean(SP_HTTP_SERVER_ENABLED, true)) return;
         try {
             if (mHttpServer == null) {
                 mHttpServer = new HttpServer();
@@ -206,7 +223,7 @@ public class ShellyElevateApplication extends Application {
             int delay = retryDelaySeconds;
             retryDelaySeconds = Math.min(retryDelaySeconds * 2, 60);
 
-            httpWatchdog.schedule(this::tryStartHttpServer, delay, TimeUnit.SECONDS);
+            httpRetryFuture = httpWatchdog.schedule(this::tryStartHttpServer, delay, TimeUnit.SECONDS);
         }
     }
 
