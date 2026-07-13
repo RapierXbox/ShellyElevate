@@ -44,7 +44,12 @@ class MqttDiscoveryConfigBuilder {
         addNightModeComponent(components);
 
         payload.put("cmps", components);
-        payload.put("state_topic", parseTopic(MQTT_TOPIC_STATUS));
+        // shared availability so every entity follows the lwt status topic
+        JSONObject availability = new JSONObject();
+        availability.put("topic", parseTopic(MQTT_TOPIC_STATUS));
+        availability.put("payload_available", "online");
+        availability.put("payload_not_available", "offline");
+        payload.put("availability", new JSONArray().put(availability));
         return payload;
     }
 
@@ -119,16 +124,15 @@ class MqttDiscoveryConfigBuilder {
             String suffix = num > 0 ? "_" + num : "";
             String nameTrailer = num > 0 ? " " + num : "";
 
+            // physical inputs are published as PRESS/RELEASE state not commanded by ha
             JSONObject sw = new JSONObject();
-            sw.put("p", "button");
+            sw.put("p", "binary_sensor");
             sw.put("name", ("Switch" + nameTrailer).trim());
-            sw.put("command_topic", parseTopic(MQTT_TOPIC_SWITCH_STATE) + suffix);
-            sw.put("payload_press", "PRESS");
-            sw.put("payload_release", "RELEASE");
-            sw.put("value_template", "{{ value }}");
+            sw.put("state_topic", parseTopic(MQTT_TOPIC_SWITCH_STATE) + suffix);
+            sw.put("payload_on", "PRESS");
+            sw.put("payload_off", "RELEASE");
             sw.put("unique_id", clientId + "_switch" + suffix);
             sw.put("object_id", "shelly_walldisplay_" + clientId + "_switch" + suffix);
-            sw.put("device_class", "restart");
             components.put(clientId + "_switch" + suffix, sw);
         }
     }

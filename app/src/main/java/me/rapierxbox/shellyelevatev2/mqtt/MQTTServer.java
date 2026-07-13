@@ -55,6 +55,11 @@ public class MQTTServer {
     private volatile int lastPublishedBrightness = Integer.MIN_VALUE;
     private volatile long lastBrightnessSentAtMs = 0L;
     private static final long MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS = 500;
+    // trailing publish so the final value of a fade always goes out
+    private ScheduledFuture<?> brightnessTrailingFuture;
+    private int pendingBrightness;
+    private BroadcastReceiver settingsChangedReceiver;
+    private BroadcastReceiver voiceStateReceiver;
 
     // Bursty topics (relays/switches/buttons) are coalesced over this window so
     // that flipping a relay rapidly doesn't queue many duplicate publishes.
@@ -93,7 +98,7 @@ public class MQTTServer {
     }
 
     private void registerSettingsReceiver() {
-        BroadcastReceiver settingsChangedBroadcastReceiver = new BroadcastReceiver() {
+        settingsChangedReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
                 Log.d(TAG, "Settings changed - reconnecting with new config");
@@ -101,9 +106,9 @@ public class MQTTServer {
             }
         };
         LocalBroadcastManager.getInstance(mApplicationContext)
-                .registerReceiver(settingsChangedBroadcastReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
+                .registerReceiver(settingsChangedReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
 
-        BroadcastReceiver voiceStateReceiver = new BroadcastReceiver() {
+        voiceStateReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) { publishVoiceState(); }
         };
@@ -112,6 +117,7 @@ public class MQTTServer {
     }
 
     private void reconnectWithNewSettings() {
+        if (scheduler.isShutdown()) return;
         scheduler.execute(() -> {
             try {
                 if (mMqttClient != null) {
@@ -150,6 +156,8 @@ public class MQTTServer {
     }
 
     private void runPeriodicPublish() {
+        // skip sensor and uart reads while there is nothing to publish to
+        if (mMqttClient == null || !mMqttClient.isConnected()) return;
         publishTempAndHum();
         publishThermalZones();
         if (mDeviceHelper.isDimmerAttached()) {
@@ -172,6 +180,12 @@ public class MQTTServer {
 
     public void checkCredsAndConnect() {
         if (!isEnabled()) {
+            // stop the periodic task so no sensor reads fire while disabled
+            if (periodicFuture != null) {
+                periodicFuture.cancel(false);
+                periodicFuture = null;
+            }
+            periodicScheduled = false;
             if (mMqttClient != null && mMqttClient.isConnected()) {
                 Log.d(TAG, "MQTT disabled in settings - disconnecting");
                 disconnect();
@@ -196,6 +210,7 @@ public class MQTTServer {
 
     public void connect() {
         if (!validForConnection || connecting || (mMqttClient != null && mMqttClient.isConnected())) return;
+        if (scheduler.isShutdown()) return;
 
         connecting = true;
         Log.d("MQTT", "Connecting...");
@@ -211,6 +226,16 @@ public class MQTTServer {
             mMqttConnectionsOptions.setAutomaticReconnect(false);
             mMqttConnectionsOptions.setConnectionTimeout(5);
             mMqttConnectionsOptions.setCleanStart(true);
+
+            // release the previous client so its network threads and persistence go away
+            if (mMqttClient != null) {
+                try {
+                    if (mMqttClient.isConnected()) mMqttClient.disconnect();
+                    mMqttClient.close();
+                } catch (Exception e) {
+                    Log.w(TAG, "Error closing previous MQTT client", e);
+                }
+            }
 
             mMqttClient = new MqttClient(
                 normalizeBrokerUri(mSharedPreferences.getString(SP_MQTT_BROKER, "")) + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883),
@@ -287,8 +312,24 @@ public class MQTTServer {
         scheduler.schedule(() -> {
             if (mMqttClient != null && mMqttClient.isConnected()) {
                 try {
-                    mMqttClient.subscribe("shellyelevatev2/#", 1);
-                    mMqttClient.subscribe(MQTT_TOPIC_HOME_ASSISTANT_STATUS, 1);
+                    // subscribe only to inbound command topics so we dont echo our own state
+                    String[] inboundTopics = {
+                            parseTopic(MQTT_TOPIC_UPDATE),
+                            MQTT_TOPIC_UPDATE_GENERIC,
+                            parseTopic(MQTT_TOPIC_RELAY_COMMAND),
+                            parseTopic(MQTT_TOPIC_RELAY_COMMAND) + "_1",
+                            parseTopic(MQTT_TOPIC_DIMMER_COMMAND),
+                            parseTopic(MQTT_TOPIC_SLEEP_BUTTON),
+                            parseTopic(MQTT_TOPIC_WAKE_BUTTON),
+                            parseTopic(MQTT_TOPIC_REBOOT_BUTTON),
+                            parseTopic(MQTT_TOPIC_REFRESH_WEBVIEW_BUTTON),
+                            parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS_COMMAND),
+                            parseTopic(MQTT_TOPIC_NIGHT_MODE_COMMAND),
+                            parseTopic(MQTT_TOPIC_VOICE_TRIGGER),
+                            parseTopic(MQTT_TOPIC_VOICE_MUTE_COMMAND),
+                            MQTT_TOPIC_HOME_ASSISTANT_STATUS
+                    };
+                    for (String t : inboundTopics) mMqttClient.subscribe(t, 1);
 
                     publishStatus();
                 } catch (Exception e) {
@@ -300,6 +341,7 @@ public class MQTTServer {
 
     public void publishStatus() {
         if (mMqttClient == null || !mMqttClient.isConnected()) return;
+        if (scheduler.isShutdown()) return;
 
         scheduler.execute(() -> {
             try {
@@ -473,14 +515,39 @@ public class MQTTServer {
         // Rate-limit identical brightness republishes; the fade animator can
         // call us many times per second with the same final value.
         synchronized (this) {
-            if (brightness == lastPublishedBrightness && (now - lastBrightnessSentAtMs) < MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS) {
+            long since = now - lastBrightnessSentAtMs;
+            if (since < MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS) {
+                if (brightness == lastPublishedBrightness) return;
+                // throttled during a fade so arm a trailing publish of the latest value
+                pendingBrightness = brightness;
+                if (brightnessTrailingFuture != null) brightnessTrailingFuture.cancel(false);
+                if (!scheduler.isShutdown()) {
+                    brightnessTrailingFuture = scheduler.schedule(this::publishTrailingBrightness,
+                            MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS - since, TimeUnit.MILLISECONDS);
+                }
                 return;
+            }
+            if (brightnessTrailingFuture != null) {
+                brightnessTrailingFuture.cancel(false);
+                brightnessTrailingFuture = null;
             }
             lastPublishedBrightness = brightness;
             lastBrightnessSentAtMs = now;
         }
 
         publishInternal(parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS), String.valueOf(brightness), 1, shouldRetainState());
+    }
+
+    private void publishTrailingBrightness() {
+        int value;
+        synchronized (this) {
+            brightnessTrailingFuture = null;
+            value = pendingBrightness;
+            if (value == lastPublishedBrightness) return;
+            lastPublishedBrightness = value;
+            lastBrightnessSentAtMs = SystemClock.elapsedRealtime();
+        }
+        publishInternal(parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS), String.valueOf(value), 1, shouldRetainState());
     }
     public void publishProximity(float distance) {
         publishInternal(parseTopic(MQTT_TOPIC_PROXIMITY_SENSOR), String.valueOf(distance), 1, shouldRetainState());
@@ -505,7 +572,8 @@ public class MQTTServer {
     public void publishSwitch(int num, boolean state) {
         var mqttSuffix = (num >0 ? ("_" + num): "");
         // Switch presses are momentary events, never retained.
-        publishInternalCoalesced(parseTopic(MQTT_TOPIC_BUTTON_STATE) + mqttSuffix, state?"PRESS":"RELEASE", 1, false);
+        // published directly so a fast press then release is not coalesced away
+        publishInternal(parseTopic(MQTT_TOPIC_SWITCH_STATE) + mqttSuffix, state?"PRESS":"RELEASE", 1, false);
     }
 
     public void publishSleeping(boolean state) {
@@ -529,7 +597,8 @@ public class MQTTServer {
                 ? parseTopic(MQTT_TOPIC_POWER_BUTTON)
                 : parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
 
-        publishInternalCoalesced(topic, json.toString(), 1, false);
+        // published directly so rapid events are not coalesced away
+        publishInternal(topic, json.toString(), 1, false);
     }
 
     @Deprecated
@@ -622,6 +691,9 @@ public class MQTTServer {
     }
 
     public void onDestroy() {
+        LocalBroadcastManager lbm = LocalBroadcastManager.getInstance(mApplicationContext);
+        if (settingsChangedReceiver != null) lbm.unregisterReceiver(settingsChangedReceiver);
+        if (voiceStateReceiver != null) lbm.unregisterReceiver(voiceStateReceiver);
         disconnect();
         if (scheduler != null && !scheduler.isShutdown()) scheduler.shutdown();
     }

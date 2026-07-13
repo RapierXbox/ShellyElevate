@@ -9,6 +9,8 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSave
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceAssistantManager;
 
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -27,10 +29,14 @@ import java.nio.charset.StandardCharsets;
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication;
 
 public class ShellyElevateMQTTCallback implements MqttCallback {
+    // toasts must run on a looper thread not the paho comms thread
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+
     @Override
     public void disconnected(MqttDisconnectResponse disconnectResponse) {
         Log.i("MQTT", "Disconnected");
-        Toast.makeText(mApplicationContext, "MQTT disconnected", Toast.LENGTH_SHORT).show();
+        mainHandler.post(() ->
+                Toast.makeText(mApplicationContext, "MQTT disconnected", Toast.LENGTH_SHORT).show());
     }
 
     @Override
@@ -84,7 +90,9 @@ public class ShellyElevateMQTTCallback implements MqttCallback {
                         Log.e("MQTT", "Error rebooting:", e);
                     }
                 } else {
-                    Toast.makeText(mApplicationContext, "Please wait %s seconds before rebooting".replace("%s",String.valueOf(20-deltaTime) ), Toast.LENGTH_LONG).show();
+                    final String waitMessage = "Please wait %s seconds before rebooting".replace("%s", String.valueOf(20 - deltaTime));
+                    mainHandler.post(() ->
+                            Toast.makeText(mApplicationContext, waitMessage, Toast.LENGTH_LONG).show());
                 }
                 break;
             case MQTT_TOPIC_POWER_BUTTON:
