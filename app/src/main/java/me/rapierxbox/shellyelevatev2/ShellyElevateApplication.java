@@ -19,7 +19,9 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import fi.iki.elonen.NanoHTTPD;
+import me.rapierxbox.shellyelevatev2.helper.AdbHelper;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
+import me.rapierxbox.shellyelevatev2.helper.PrivAppInstaller;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
@@ -159,7 +161,34 @@ public class ShellyElevateApplication extends Application {
         LocalBroadcastManager.getInstance(this)
                 .registerReceiver(httpSettingsReceiver, new IntentFilter(Constants.INTENT_SETTINGS_CHANGED));
 
+        runFirstRunPrivilegeSetup();
+
         Log.i("ShellyElevateV2", "Application started");
+    }
+
+    // grants the manual adb perms and self promotes to a priv-app off the main thread
+    private void runFirstRunPrivilegeSetup() {
+        Executors.newSingleThreadExecutor().execute(() -> {
+            try {
+                PrivAppInstaller.autoGrantPermissions(this);
+                boolean isPriv = PrivAppInstaller.isPrivApp(this);
+                boolean attempted = mSharedPreferences.getBoolean(Constants.SP_PRIVAPP_PROMOTION_ATTEMPTED, false);
+                if (!isPriv && !attempted) {
+                    // commit the marker before any reboot so a failed promotion never loops
+                    mSharedPreferences.edit().putBoolean(Constants.SP_PRIVAPP_PROMOTION_ATTEMPTED, true).commit();
+                    if (PrivAppInstaller.promoteToPrivApp(this) == PrivAppInstaller.Result.PROMOTED) {
+                        Runtime.getRuntime().exec("reboot");
+                    }
+                } else if (isPriv && attempted) {
+                    // promotion confirmed so clear the marker
+                    mSharedPreferences.edit().putBoolean(Constants.SP_PRIVAPP_PROMOTION_ATTEMPTED, false).apply();
+                }
+                // the adb tcp port property resets on reboot so restore the saved state
+                AdbHelper.applyFromPrefs();
+            } catch (Throwable t) {
+                Log.e("ShellyElevateApplication", "first run privilege setup failed", t);
+            }
+        });
     }
 
     private void scheduleHttpWatchdog() {

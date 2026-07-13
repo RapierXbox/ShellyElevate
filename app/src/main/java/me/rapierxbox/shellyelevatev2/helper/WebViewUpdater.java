@@ -26,6 +26,8 @@ public final class WebViewUpdater {
 
     // The bootloader scans this exact path on boot. Don't rename it.
     public static final File STAGED_ZIP = new File("/cache/update.zip");
+    // download here first so a power cut cannot stage a truncated ota
+    private static final File TEMP_ZIP = new File("/cache/update.zip.part");
 
     // Only Stargate ships a system WebView old enough to need this OTA. Shelly
     // hasn't published a WebViewUpdate for the newer Wall Displays... those
@@ -107,24 +109,34 @@ public final class WebViewUpdater {
         final Handler main = new Handler(Looper.getMainLooper());
         DOWNLOAD_POOL.execute(() -> {
             try {
-                HttpDownloader.download(HttpDownloader.defaultClient(), url, STAGED_ZIP,
+                HttpDownloader.download(HttpDownloader.defaultClient(), url, TEMP_ZIP,
                         pct -> main.post(() -> listener.onProgress(pct)));
-                if (STAGED_ZIP.length() <= 0) {
+                if (TEMP_ZIP.length() <= 0) {
                     //noinspection ResultOfMethodCallIgnored
-                    STAGED_ZIP.delete();
+                    TEMP_ZIP.delete();
                     main.post(() -> listener.onFailed("Downloaded file is empty"));
+                } else if (!moveIntoPlace()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    TEMP_ZIP.delete();
+                    main.post(() -> listener.onFailed("Could not stage update.zip"));
                 } else {
                     main.post(() -> listener.onCompleted(STAGED_ZIP));
                 }
             } catch (IOException e) {
                 Log.e(TAG, "WebView update download failed", e);
                 //noinspection ResultOfMethodCallIgnored
-                STAGED_ZIP.delete();
+                TEMP_ZIP.delete();
                 postFailed(listener, e.getMessage() != null ? e.getMessage() : "Download failed");
             } finally {
                 DOWNLOAD_IN_PROGRESS.set(false);
             }
         });
+    }
+
+    // rename is atomic within /cache; fall back to a root mv if it fails
+    private static boolean moveIntoPlace() {
+        if (TEMP_ZIP.renameTo(STAGED_ZIP)) return true;
+        return PrivilegedShell.runShell("mv -f " + TEMP_ZIP.getAbsolutePath() + " " + STAGED_ZIP.getAbsolutePath()).ok();
     }
 
     private static void postFailed(Listener listener, String reason) {
@@ -133,9 +145,13 @@ public final class WebViewUpdater {
 
     public static void rebootToInstall() {
         try {
-            Runtime.getRuntime().exec("reboot");
+            int code = Runtime.getRuntime().exec("reboot").waitFor();
+            if (code != 0) Log.e(TAG, "Reboot command exited with " + code);
         } catch (IOException e) {
             Log.e(TAG, "Reboot failed", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            Log.e(TAG, "Reboot interrupted", e);
         }
     }
 }

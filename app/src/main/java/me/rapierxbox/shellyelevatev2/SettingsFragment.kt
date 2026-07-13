@@ -43,6 +43,8 @@ import me.rapierxbox.shellyelevatev2.voice.WakeWordModelManager
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
+import me.rapierxbox.shellyelevatev2.helper.AdbHelper
+import me.rapierxbox.shellyelevatev2.helper.AppUpdater
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
@@ -128,6 +130,7 @@ class SettingsFragment : Fragment() {
         setupInlineListeners()
         setupModelChooser()
         setupWebViewUpdater()
+        setupAppUpdater()
     }
 
     private fun setupWebViewUpdater() {
@@ -192,6 +195,72 @@ class SettingsFragment : Fragment() {
             .show()
     }
 
+    private fun setupAppUpdater() {
+        binding.appUpdateCurrentVersion.text = getString(R.string.app_update_current, BuildConfig.VERSION_NAME)
+        binding.appUpdateStatus.text = ""
+        binding.appUpdateButton.setOnClickListener { startAppUpdateCheck() }
+    }
+
+    private fun startAppUpdateCheck() {
+        if (AppUpdater.isInProgress()) return
+        binding.appUpdateButton.isEnabled = false
+        binding.appUpdateStatus.text = getString(R.string.app_update_status_checking)
+        AppUpdater.checkForUpdate(object : AppUpdater.CheckListener {
+            override fun onUpdateAvailable(info: AppUpdater.ReleaseInfo) {
+                if (_binding == null) return
+                binding.appUpdateStatus.text = getString(R.string.app_update_available, info.versionName)
+                startAppUpdateDownload(info)
+            }
+            override fun onUpToDate(current: String) {
+                if (_binding == null) return
+                binding.appUpdateButton.isEnabled = true
+                binding.appUpdateStatus.text = getString(R.string.app_update_uptodate)
+            }
+            override fun onFailed(reason: String) {
+                if (_binding == null) return
+                binding.appUpdateButton.isEnabled = true
+                binding.appUpdateStatus.text = getString(R.string.app_update_failed, reason)
+            }
+        })
+    }
+
+    private fun startAppUpdateDownload(info: AppUpdater.ReleaseInfo) {
+        binding.appUpdateButton.isEnabled = false
+        binding.appUpdateProgressLayout.visibility = View.VISIBLE
+        binding.appUpdateProgressBar.progress = 0
+        binding.appUpdateProgressText.text = "0%"
+
+        AppUpdater.downloadAndInstall(requireContext().applicationContext, info, object : AppUpdater.InstallListener {
+            override fun onProgress(percent: Int) {
+                if (_binding == null) return
+                binding.appUpdateProgressBar.progress = percent
+                binding.appUpdateProgressText.text = getString(R.string.app_update_downloading, percent)
+            }
+            override fun onCompleted() {
+                if (_binding == null) return
+                binding.appUpdateProgressLayout.visibility = View.GONE
+                binding.appUpdateButton.isEnabled = true
+                showAppRebootToInstallDialog()
+            }
+            override fun onFailed(reason: String) {
+                if (_binding == null) return
+                binding.appUpdateProgressLayout.visibility = View.GONE
+                binding.appUpdateButton.isEnabled = true
+                Toast.makeText(requireContext(), getString(R.string.app_update_failed, reason), Toast.LENGTH_LONG).show()
+            }
+        })
+    }
+
+    private fun showAppRebootToInstallDialog() {
+        if (!isAdded) return
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.app_update_reboot_title)
+            .setMessage(R.string.app_update_reboot_message)
+            .setPositiveButton(R.string.app_update_reboot_now) { _, _ -> AppUpdater.rebootToInstall() }
+            .setNegativeButton(R.string.app_update_reboot_later, null)
+            .show()
+    }
+
     override fun onPause() {
         super.onPause()
         saveSettings()
@@ -208,6 +277,11 @@ class SettingsFragment : Fragment() {
 
             +SwitchPref(binding.ignoreSslErrors, SP_IGNORE_SSL_ERRORS, false)
             +SwitchPref(binding.extendedJavascriptInterface, SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
+
+            +SwitchPref(binding.adbWifiEnabled, SP_ADB_WIFI_ENABLED, false)
+            // both go through the binder so visibleWhen doesnt clobber the toggle action
+            onToggle(binding.adbWifiEnabled) { enabled -> AdbHelper.setAdbWifiEnabled(enabled) }
+            visibleWhen(binding.adbWifiEnabled, binding.adbWifiAddressLayout)
 
             +SwitchPref(binding.mqttEnabled, SP_MQTT_ENABLED, false)
             visibleWhen(binding.mqttEnabled,
@@ -309,6 +383,8 @@ class SettingsFragment : Fragment() {
         binding.httpServerStatus.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
         binding.httpServerButton.isVisible = !mHttpServer.isAlive
 
+        binding.adbWifiAddress.text = getString(R.string.adb_wifi_url, getLocalIpAddress())
+
         val zones = ThermalZoneReader.discoverZones()
         val zoneNames = zones.map { it.type }
         val zoneAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, zoneNames)
@@ -392,9 +468,15 @@ class SettingsFragment : Fragment() {
         }
 
         binding.httpServerButton.setOnClickListener {
-            mHttpServer.start()
-            binding.httpServerText.text = getString(R.string.http_server_running)
-            binding.httpServerButton.isVisible = false
+            // nanohttpd start throws on rebind failures and kotlin does not force the catch
+            try {
+                mHttpServer.start()
+                binding.httpServerText.text = getString(R.string.http_server_running)
+                binding.httpServerButton.isVisible = false
+            } catch (e: IOException) {
+                Log.e("SettingsFragment", "http server start failed", e)
+                Toast.makeText(requireContext(), R.string.http_server_not_running, Toast.LENGTH_SHORT).show()
+            }
         }
 
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
@@ -685,9 +767,9 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        if (!binding.httpServerEnabled.isChecked && mHttpServer.isAlive) mHttpServer.stop()
-        else if (binding.httpServerEnabled.isChecked && !mHttpServer.isAlive) mHttpServer.start()
-
+        // http server lifecycle is owned by the application settings receiver
+        // which reacts to the broadcast below; starting it here as well raced
+        // that receiver and crashed on rebind failures
         LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(Intent(INTENT_SETTINGS_CHANGED))
         Toast.makeText(requireContext(), getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
     }

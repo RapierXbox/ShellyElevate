@@ -21,6 +21,9 @@ public class Constants {
     public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
     public static final String SP_EXTENDED_JAVASCRIPT_INTERFACE = "extendedJavascriptInterface";
 
+    //ADB SP Keys
+    public static final String SP_ADB_WIFI_ENABLED = "adbWifiEnabled";
+
     //HA SP Keys
     public static final String SP_WEBVIEW_URL = "webviewUrl";
     public static final String SP_DEPRECATED_HA_IP = "homeAssistantIp";
@@ -28,6 +31,9 @@ public class Constants {
 
     //WebView OTA SP Keys
     public static final String SP_WEBVIEW_UPDATE_PROMPTED = "webviewUpdatePrompted";
+
+    //Priv-app install SP Keys
+    public static final String SP_PRIVAPP_PROMOTION_ATTEMPTED = "privAppPromotionAttempted";
 
     //Screen SP Keys
     public static final String SP_AUTOMATIC_BRIGHTNESS = "automaticBrightness";

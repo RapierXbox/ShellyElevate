@@ -125,6 +125,81 @@
 
             </LinearLayout>
 
+            <LinearLayout
+                android:id="@+id/appUpdateSection"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/app_update_title"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/appUpdateCurrentVersion"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:textSize="14sp"
+                    tools:text="Installed version: -" />
+
+                <TextView
+                    android:id="@+id/appUpdateStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="2dp"
+                    android:textSize="14sp"
+                    tools:text="Up to date" />
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/app_update_hint"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/appUpdateButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:text="@string/app_update_check_now"
+                    android:textSize="16sp" />
+
+                <LinearLayout
+                    android:id="@+id/appUpdateProgressLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:visibility="gone">
+
+                    <ProgressBar
+                        android:id="@+id/appUpdateProgressBar"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:max="100"
+                        android:progress="0" />
+
+                    <TextView
+                        android:id="@+id/appUpdateProgressText"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:textSize="12sp"
+                        android:text="0%" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/switchOnSwipe"
                 android:layout_width="match_parent"
@@ -584,6 +659,39 @@
                 android:text="@string/extended_js_interface"
                 android:textSize="18sp"
                 tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/adbWifiEnabled"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="24dp"
+                android:text="@string/adb_wifi_enabled"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <LinearLayout
+                android:id="@+id/adbWifiAddressLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="24dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/adb_wifi_address"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/adbWifiAddress"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingVertical="0dp"
+                    android:textSize="18sp"
+                    tools:text="192.168.1.50:5555" />
+            </LinearLayout>
 
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/mediaEnabled"
