@@ -21,6 +21,8 @@ public class MediaHelper {
     private MediaPlayer mediaPlayerMusic;
     private final AudioManager audioManager;
     private boolean enabled = true;
+    // remember if music was playing when an effect started so we only resume then
+    private volatile boolean resumeMusicAfterEffect = false;
 
     public MediaHelper() {
         this.enabled = mSharedPreferences.getBoolean(Constants.SP_MEDIA_ENABLED, false);
@@ -46,12 +48,13 @@ public class MediaHelper {
         mediaPlayerMusic.setLooping(true);
 
         mediaPlayerEffects.setOnPreparedListener(mp -> {
+            resumeMusicAfterEffect = isMusicPlaying();
             mp.start();
             pauseMusic();
         });
         mediaPlayerMusic.setOnPreparedListener(MediaPlayer::start);
 
-        mediaPlayerEffects.setOnCompletionListener(mp -> resumeMusic());
+        mediaPlayerEffects.setOnCompletionListener(mp -> resumeMusicIfNeeded());
 
         mediaPlayerMusic.setOnErrorListener((mp, what, extra) -> {
             Log.e("MediaHelper", "Music error: " + what + " / " + extra);
@@ -59,6 +62,8 @@ public class MediaHelper {
         });
         mediaPlayerEffects.setOnErrorListener((mp, what, extra) -> {
             Log.e("MediaHelper", "Effect error: " + what + " / " + extra);
+            // onCompletion is suppressed when we return true so resume here
+            resumeMusicIfNeeded();
             return true;
         });
     }
@@ -87,6 +92,17 @@ public class MediaHelper {
     public void resumeMusic() {
         if (!enabled || mediaPlayerMusic == null) return;
         try { mediaPlayerMusic.start(); } catch (IllegalStateException ignored) {}
+    }
+
+    private boolean isMusicPlaying() {
+        if (mediaPlayerMusic == null) return false;
+        try { return mediaPlayerMusic.isPlaying(); } catch (IllegalStateException e) { return false; }
+    }
+
+    private void resumeMusicIfNeeded() {
+        if (!resumeMusicAfterEffect) return;
+        resumeMusicAfterEffect = false;
+        resumeMusic();
     }
 
     public void resumeOrPauseMusic() {

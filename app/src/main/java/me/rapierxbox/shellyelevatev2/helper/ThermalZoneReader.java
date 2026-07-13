@@ -28,7 +28,9 @@ public final class ThermalZoneReader {
     private static volatile List<Zone> cachedZones = null;
 
     public static List<Zone> discoverZones() {
-        if (cachedZones != null && !cachedZones.isEmpty()) return cachedZones;
+        // an empty list is a valid cached result so devices without zones dont rescan
+        List<Zone> cached = cachedZones;
+        if (cached != null) return cached;
 
         List<Zone> zones = new ArrayList<>();
         File base = new File(THERMAL_BASE);

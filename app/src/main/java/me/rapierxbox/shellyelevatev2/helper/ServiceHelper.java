@@ -13,6 +13,8 @@ import android.net.NetworkCapabilities;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import java.util.function.Consumer;
@@ -20,12 +22,33 @@ import java.util.function.Consumer;
 import me.rapierxbox.shellyelevatev2.KioskService;
 
 public class ServiceHelper {
+    private static final long DISCOVERY_TIMEOUT_MS = 30_000L;
+
+    private static NsdManager activeNsdManager;
+    private static NsdManager.DiscoveryListener activeDiscoveryListener;
+
+    // stops the given discovery if it is still the active one
+    private static synchronized void stopDiscovery(NsdManager.DiscoveryListener listener) {
+        if (listener == null || listener != activeDiscoveryListener) return;
+        NsdManager manager = activeNsdManager;
+        activeDiscoveryListener = null;
+        activeNsdManager = null;
+        if (manager == null) return;
+        try {
+            manager.stopServiceDiscovery(listener);
+        } catch (IllegalArgumentException ignored) {
+        }
+    }
+
     public static void getHAURL(Context context, Consumer<String> action) {
         NsdManager nsdManager = (NsdManager) context.getSystemService(Context.NSD_SERVICE);
+        // stop a previous discovery so listeners dont stack
+        stopDiscovery(activeDiscoveryListener);
         NsdManager.DiscoveryListener discoveryListener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
                 Log.e("discovery", "Discovery failed: Error code: " + errorCode);
+                stopDiscovery(this);
             }
 
             @Override
@@ -65,7 +88,7 @@ public class ServiceHelper {
 
                     nsdManager.resolveService(serviceInfo, resolveListener);
 
-                    nsdManager.stopServiceDiscovery(this);
+                    stopDiscovery(this);
                 }
             }
 
@@ -75,7 +98,13 @@ public class ServiceHelper {
             }
         };
 
+        synchronized (ServiceHelper.class) {
+            activeNsdManager = nsdManager;
+            activeDiscoveryListener = discoveryListener;
+        }
         nsdManager.discoverServices("_home-assistant._tcp.", NsdManager.PROTOCOL_DNS_SD, discoveryListener);
+        // give up after a timeout when nothing is found
+        new Handler(Looper.getMainLooper()).postDelayed(() -> stopDiscovery(discoveryListener), DISCOVERY_TIMEOUT_MS);
     }
 
     public static String getWebviewUrl() {

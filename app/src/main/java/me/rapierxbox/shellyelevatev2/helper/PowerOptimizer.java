@@ -23,12 +23,17 @@ import android.util.Log;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 public class PowerOptimizer extends BroadcastReceiver {
 
     private static final String TAG = "PowerOptimizer";
 
     private final Context appContext;
     private final CpuGovernor cpuGovernor = new CpuGovernor();
+    // single thread keeps apply and restore ordered and off the main thread
+    private final ExecutorService sysfsExecutor = Executors.newSingleThreadExecutor();
 
     private volatile boolean sleepActive = false;
     private volatile int activeLevel = SLEEP_OPT_NONE;
@@ -55,6 +60,8 @@ public class PowerOptimizer extends BroadcastReceiver {
                 Log.w(TAG, "exitSleep on destroy failed: " + e.getMessage());
             }
         }
+        // lets a queued restore finish before the executor goes away
+        sysfsExecutor.shutdown();
     }
 
     private int currentLevel() {
@@ -98,7 +105,7 @@ public class PowerOptimizer extends BroadcastReceiver {
         broadcastLevel(true, level);
 
         if (level >= SLEEP_OPT_STANDARD) {
-            cpuGovernor.applyLowPower();
+            sysfsExecutor.execute(cpuGovernor::applyLowPower);
         }
         if (level >= SLEEP_OPT_AGGRESSIVE) {
             if (mMQTTServer != null) mMQTTServer.setLowPowerMode(true);
@@ -122,7 +129,7 @@ public class PowerOptimizer extends BroadcastReceiver {
             if (mMQTTServer != null) mMQTTServer.setLowPowerMode(false);
         }
         if (level >= SLEEP_OPT_STANDARD) {
-            cpuGovernor.restore();
+            sysfsExecutor.execute(cpuGovernor::restore);
         }
     }
 

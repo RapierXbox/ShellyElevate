@@ -57,6 +57,7 @@ public class DeviceSensorManager implements SensorEventListener {
     private InputMonitor mInputMonitor;
     private ExecutorService proximityFallbackExecutor;
     private volatile Process proximityFallbackProcess;
+    private volatile boolean destroyed = false;
 
     public DeviceSensorManager(Context ctx) {
         context = ctx;
@@ -156,7 +157,7 @@ public class DeviceSensorManager implements SensorEventListener {
             long now = SystemClock.elapsedRealtime();
             boolean intervalOk = now - lastLuxBroadcastAtMs >= MIN_LUX_EVENT_INTERVAL_MS;
 
-            if (shouldPublish && mMQTTServer != null && mMQTTServer.shouldSend()) {
+            if (shouldPublish && intervalOk && mMQTTServer != null && mMQTTServer.shouldSend()) {
                 mMQTTServer.publishLux(lastMeasuredLux);
                 lastPublishedLux = lastMeasuredLux;
             }
@@ -244,7 +245,8 @@ public class DeviceSensorManager implements SensorEventListener {
             // keeps publishing on its own.
             if (usingGpioKeysProximity) {
                 usingGpioKeysProximity = false;
-                applyProximityFallback();
+                // dont re-register the sensor listener while tearing down
+                if (!destroyed) applyProximityFallback();
             }
         }
     }
@@ -335,6 +337,7 @@ public class DeviceSensorManager implements SensorEventListener {
     }
 
     public void onDestroy() {
+        destroyed = true;
         ((SensorManager) context.getSystemService(Context.SENSOR_SERVICE)).unregisterListener(this);
         if (mInputMonitor != null) {
             mInputMonitor.stop();
