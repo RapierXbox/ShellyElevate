@@ -190,6 +190,9 @@ public class ScreenManager extends BroadcastReceiver {
                 setScreenOn(false);
                 targetBrightness = 0;
                 currentBrightness = 0;
+                // cancel a running fade so it cannot drive the backlight back up
+                fadeHandler.removeCallbacks(fadeRunnable);
+                brightnessAnimator.cancel();
                 break;
             case INTENT_LIGHT_UPDATED:
                 float lux = intent.getFloatExtra(INTENT_LIGHT_KEY, 0.0f);

@@ -26,7 +26,7 @@ public class BrightnessAnimator {
 		try {
 			if (target == currentBrightness) return;
 
-			int start = (animator != null && animator.isRunning()) ? currentBrightness : currentBrightness;
+			int start = currentBrightness;
 			animate(start, target, onUpdate);
 		} finally {
 			lock.unlock();
@@ -63,6 +63,8 @@ public class BrightnessAnimator {
 		});
 
 		animator.addListener(new AnimatorListenerAdapter() {
+			private boolean cancelled = false;
+
 			@Override
 			public void onAnimationStart(Animator animation) {
 				lock.lock();
@@ -79,6 +81,11 @@ public class BrightnessAnimator {
 				try {
 					running = false;
 					animator = null;
+					// frame throttle can drop the last frame so force the end value
+					if (!cancelled && currentBrightness != to) {
+						currentBrightness = to;
+						onUpdate.accept(to);
+					}
 				} finally {
 					lock.unlock();
 				}
@@ -88,6 +95,7 @@ public class BrightnessAnimator {
 			public void onAnimationCancel(Animator animation) {
 				lock.lock();
 				try {
+					cancelled = true;
 					running = false;
 					animator = null;
 				} finally {

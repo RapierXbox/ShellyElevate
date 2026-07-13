@@ -39,6 +39,7 @@ public class DeviceHelper {
             "/sys/devices/platform/backlight/backlight/backlight/brightness"
     };
     private String screenBrightnessFile;
+    private boolean brightnessModeSet = false;
     private boolean screenOn = true;
     private int lastScreenBrightness;
     private final DeviceModel deviceModel;
@@ -82,7 +83,7 @@ public class DeviceHelper {
     }
 
     private void setScreenBrightnessInternal(int brightness){
-        mMQTTServer.publishScreenBrightness(brightness);
+        if (mMQTTServer != null) mMQTTServer.publishScreenBrightness(brightness);
 
         writeScreenBrightness(brightness);
     }
@@ -94,10 +95,13 @@ public class DeviceHelper {
         // SELinux denials for the sysfs write are expected and harmless on rooted
         // Shelly devices running permissive mode. WRITE_SETTINGS is requested in
         // MainActivity.onCreate so we can disable Android's automatic brightness.
-        if (!Settings.System.canWrite(mApplicationContext)) {
-            Log.i(TAG, "Please disable androids automatic brightness or give the app the change settings permission.");
-        } else {
-            Settings.System.putInt(mApplicationContext.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
+        // only needs to succeed once so skip the settings write on later frames
+        if (!brightnessModeSet) {
+            if (!Settings.System.canWrite(mApplicationContext)) {
+                Log.i(TAG, "Please disable androids automatic brightness or give the app the change settings permission.");
+            } else if (Settings.System.putInt(mApplicationContext.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)) {
+                brightnessModeSet = true;
+            }
         }
 
         writeFileContent(screenBrightnessFile, String.valueOf(brightness));
@@ -214,7 +218,7 @@ public class DeviceHelper {
                 content.append(line).append("\n");
             }
         } catch (IOException e) {
-            Log.e(TAG, "Error when reading file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
+            Log.e(TAG, "Error when reading file with path:" + filePath, e);
         }
         return content.toString();
     }
@@ -264,7 +268,7 @@ public class DeviceHelper {
         try (FileWriter writer = new FileWriter(filePath)) {
             writer.write(content);
         } catch (IOException e) {
-            Log.e(TAG, "Error when writing file with path:" + filePath + ":" + Objects.requireNonNull(e.getMessage()));
+            Log.e(TAG, "Error when writing file with path:" + filePath, e);
         }
     }
 }
