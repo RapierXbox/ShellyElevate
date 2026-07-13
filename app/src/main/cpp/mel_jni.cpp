@@ -39,6 +39,10 @@ struct Instance {
     FrontendConfig config;
     FrontendState state;
     bool state_initialised = false;
+    // reused across feed calls so steady state feeding does not allocate
+    std::vector<int16_t> samples;
+    std::vector<jbyte> out_bytes;
+    std::vector<jshort> out_shorts;
 };
 
 void initConfig(FrontendConfig& cfg) {
@@ -106,15 +110,16 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedInt8(
     if (pcmByteLen <= 0 || (pcmByteLen & 1) != 0) return 0;
     const jsize sample_count = pcmByteLen / 2;
 
-    // Copy into a transient int16 buffer; we need reinterpretation anyway, so a heap
-    // vector is simpler than juggling GetByteArrayElements.
-    std::vector<int16_t> samples(sample_count);
+    // reuse the member buffer to avoid a per call allocation
+    std::vector<int16_t>& samples = inst->samples;
+    samples.resize(sample_count);
     env->GetByteArrayRegion(pcm, 0, pcmByteLen,
                             reinterpret_cast<jbyte*>(samples.data()));
 
-    // Bulk-write into the output array under a critical region; released before returning.
-    jbyte* out_ptr = static_cast<jbyte*>(env->GetPrimitiveArrayCritical(outInt8Buffer, nullptr));
-    if (!out_ptr) return -1;
+    // compute into a member buffer then copy out once so no jni critical
+    // section is held across the dsp loop
+    inst->out_bytes.resize(outCapacityBytes > 0 ? static_cast<size_t>(outCapacityBytes) : 0);
+    jbyte* out_ptr = inst->out_bytes.data();
 
     int rows_written = 0;
     size_t cursor = 0;
@@ -146,7 +151,9 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedInt8(
         ++rows_written;
     }
 
-    env->ReleasePrimitiveArrayCritical(outInt8Buffer, out_ptr, 0);
+    if (rows_written > 0)
+        env->SetByteArrayRegion(outInt8Buffer, 0,
+                                rows_written * PREPROCESSOR_FEATURE_SIZE, out_ptr);
     return rows_written;
 }
 
@@ -163,12 +170,13 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedUint16(
     if (pcmByteLen <= 0 || (pcmByteLen & 1) != 0) return 0;
     const jsize sample_count = pcmByteLen / 2;
 
-    std::vector<int16_t> samples(sample_count);
+    std::vector<int16_t>& samples = inst->samples;
+    samples.resize(sample_count);
     env->GetByteArrayRegion(pcm, 0, pcmByteLen,
                             reinterpret_cast<jbyte*>(samples.data()));
 
-    jshort* out_ptr = static_cast<jshort*>(env->GetPrimitiveArrayCritical(outU16Buffer, nullptr));
-    if (!out_ptr) return -1;
+    inst->out_shorts.resize(outCapacityShorts > 0 ? static_cast<size_t>(outCapacityShorts) : 0);
+    jshort* out_ptr = inst->out_shorts.data();
 
     int rows_written = 0;
     size_t cursor = 0;
@@ -187,6 +195,8 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedUint16(
         ++rows_written;
     }
 
-    env->ReleasePrimitiveArrayCritical(outU16Buffer, out_ptr, 0);
+    if (rows_written > 0)
+        env->SetShortArrayRegion(outU16Buffer, 0,
+                                 rows_written * PREPROCESSOR_FEATURE_SIZE, out_ptr);
     return rows_written;
 }

@@ -35,19 +35,38 @@ static void* monitorLoop(void* arg) {
     args->jvm->AttachCurrentThread(&env, nullptr);
 
     while (g_running) {
+        if (pfds.empty()) {
+            __android_log_print(ANDROID_LOG_WARN, TAG, "No input devices left, monitor exiting");
+            break;
+        }
         int ret = poll(pfds.data(), (nfds_t)pfds.size(), 500);
         if (ret <= 0) continue;
 
-        for (size_t i = 0; i < pfds.size(); i++) {
-            if (!(pfds[i].revents & POLLIN)) continue;
-
-            struct input_event ev;
-            ssize_t n = read(pfds[i].fd, &ev, sizeof(ev));
-            if (n != (ssize_t)sizeof(ev)) continue;
-            if (ev.type != EV_KEY) continue;
-            // ev.value: 0=UP, 1=DOWN, 2=REPEAT (matches Android KeyEvent action values)
-            env->CallVoidMethod(args->callback, args->method,
-                                (jint)ev.code, (jint)ev.value, (jint)0);
+        for (size_t i = 0; i < pfds.size(); ) {
+            // drop dead fds so poll does not return instantly forever
+            if (pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
+                __android_log_print(ANDROID_LOG_WARN, TAG, "Input device fd=%d gone, closing", pfds[i].fd);
+                close(pfds[i].fd);
+                pfds.erase(pfds.begin() + i);
+                args->fds.erase(args->fds.begin() + i);
+                continue;
+            }
+            if (pfds[i].revents & POLLIN) {
+                struct input_event ev;
+                ssize_t n = read(pfds[i].fd, &ev, sizeof(ev));
+                if (n == (ssize_t)sizeof(ev) && ev.type == EV_KEY) {
+                    // ev.value: 0=UP, 1=DOWN, 2=REPEAT (matches Android KeyEvent action values)
+                    env->CallVoidMethod(args->callback, args->method,
+                                        (jint)ev.code, (jint)ev.value, (jint)0);
+                    // a throwing java callback must not leave the pending
+                    // exception across further jni calls
+                    if (env->ExceptionCheck()) {
+                        __android_log_print(ANDROID_LOG_ERROR, TAG, "Exception in key callback, clearing");
+                        env->ExceptionClear();
+                    }
+                }
+            }
+            ++i;
         }
     }
 
