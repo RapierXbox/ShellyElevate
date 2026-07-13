@@ -100,7 +100,9 @@ class SliderPref(
 ) : PrefBinding {
     init {
         if (live != null) {
-            view.addOnChangeListener { _, value, _ -> live(value.toInt()) }
+            // fromUser guard so load() setting the value doesnt fire the live preview
+            // otherwise loading the brightness sliders dims the settings screen
+            view.addOnChangeListener { _, value, fromUser -> if (fromUser) live(value.toInt()) }
         }
     }
     override fun load(prefs: SharedPreferences) {
