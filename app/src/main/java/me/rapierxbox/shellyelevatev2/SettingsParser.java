@@ -56,6 +56,8 @@ public class SettingsParser {
 
     public void setSettings(JSONObject settings) throws JSONException {
         SharedPreferences.Editor editor = mSharedPreferences.edit();
+        // snapshot once so number writes can preserve the stored type of each key
+        Map<String, ?> existingPrefs = mSharedPreferences.getAll();
         for (Iterator<String> it = settings.keys(); it.hasNext(); ) {
             String key = it.next();
             Object value = settings.get(key);
@@ -94,8 +96,14 @@ public class SettingsParser {
                 // Always use putFloat() for known Float pref keys, regardless of whether
                 // the current stored type is Float/Int/Long. This repairs any corruption
                 // caused by a previous write that stored a whole-number float as Integer.
-                if (FLOAT_PREF_KEYS.contains(key)) {
+                Object existing = existingPrefs.get(key);
+                if (FLOAT_PREF_KEYS.contains(key) || existing instanceof Float) {
                     editor.putFloat(key, (float) d);
+                } else if (existing instanceof Integer) {
+                    // keep the stored type or the next getInt would crash with a cast error
+                    editor.putInt(key, (int) Math.round(d));
+                } else if (existing instanceof Long) {
+                    editor.putLong(key, Math.round(d));
                 } else {
                     boolean isWhole = Math.floor(d) == d && !Double.isInfinite(d) && !Double.isNaN(d);
                     if (!isWhole) {
