@@ -35,6 +35,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 // Generic microWakeWord runner. Should accept any model that follows the mWW
@@ -71,9 +72,14 @@ public class WakeWordDetector {
     private final AtomicBoolean            running        = new AtomicBoolean(false);
     private final AtomicReference<AudioRecord> activeRecorder = new AtomicReference<>();
     private volatile CountDownLatch shutdownLatch;
+    // bumped on every start so a stale loop cannot clobber the next session
+    private final AtomicLong sessionId = new AtomicLong();
 
     private volatile ModelStatus modelStatus = ModelStatus.NOT_LOADED;
     private Interpreter tflite;
+    // true once a session ran the interpreter so its variable state is dirty
+    private volatile boolean tfliteUsed = false;
+    private volatile boolean vadTfliteUsed = false;
     // Remembered so we can rebuild the interpreter on start(); see listenLoop().
     private File modelFile;
     private int nFrames;
@@ -94,8 +100,9 @@ public class WakeWordDetector {
     private int outputCols;
 
     private float[][] frameRing;
-    private int frameRingPos = 0;
-    private int framesCollected = 0;
+    // long so ring index math never overflows on long uptimes
+    private long frameRingPos = 0;
+    private long framesCollected = 0;
     private int newFramesSinceInfer = 0;
     private volatile long lastTriggerAt = 0L;
 
@@ -142,8 +149,8 @@ public class WakeWordDetector {
     private int vadSlidingWindowSize = 5;
     private int vadNewFramesSinceInfer = 0;
     private float[][] vadFrameRing;
-    private int vadFrameRingPos = 0;
-    private int vadFramesCollected = 0;
+    private long vadFrameRingPos = 0;
+    private long vadFramesCollected = 0;
     private volatile boolean vadDetected = false;
 
     private int debugFrameCount = 0;
@@ -173,6 +180,7 @@ public class WakeWordDetector {
 
         try {
             tflite = buildInterpreter(loadMappedFile(file));
+            tfliteUsed = false;
             modelFile = file;
 
             int[] shape = tflite.getInputTensor(0).shape();
@@ -265,6 +273,7 @@ public class WakeWordDetector {
         }
         try {
             vadTflite = buildInterpreter(loadMappedFile(file));
+            vadTfliteUsed = false;
             vadModelFile = file;
 
             int[] shape = vadTflite.getInputTensor(0).shape();
@@ -466,6 +475,7 @@ public class WakeWordDetector {
             Log.w(TAG, "can't start: model not loaded (" + modelStatus + ")"); return;
         }
         if (running.getAndSet(true)) return;
+        sessionId.incrementAndGet();
         shutdownLatch = new CountDownLatch(1);
         executor.execute(this::listenLoop);
         Log.i(TAG, "detector started");
@@ -473,19 +483,28 @@ public class WakeWordDetector {
 
     /** Blocks until the mic is released or SHUTDOWN_TIMEOUT_MS elapses. */
     public boolean stopAndWait() {
-        if (!running.getAndSet(false)) return true;
+        if (!running.getAndSet(false)) {
+            // a loop stopped via stop() may still be unwinding so wait for it
+            return awaitShutdown();
+        }
         Log.i(TAG, "detector stopping (waiting for mic release)");
         // recorder.stop() is required to unblock a pending read() on the loop.
         AudioRecord r = activeRecorder.get();
         if (r != null) { try { r.stop(); } catch (Exception ignored) {} }
+        return awaitShutdown();
+    }
+
+    private boolean awaitShutdown() {
+        CountDownLatch latch = shutdownLatch;
+        if (latch == null) return true;
         try {
-            if (shutdownLatch != null) {
-                boolean ok = shutdownLatch.await(SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-                if (!ok) { Log.w(TAG, "shutdown timeout, force releasing"); forceReleaseRecorder(); }
-                return ok;
-            }
-        } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        return false;
+            boolean ok = latch.await(SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+            if (!ok) { Log.w(TAG, "shutdown timeout, force releasing"); forceReleaseRecorder(); }
+            return ok;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
+        }
     }
 
     /** Non-blocking variant; the listen loop unwinds on the executor thread. */
@@ -508,6 +527,10 @@ public class WakeWordDetector {
     }
 
     private void listenLoop() {
+        // capture this sessions token and latch so a stale loop can never
+        // clobber the flag or latch of a newer session
+        final long session = sessionId.get();
+        final CountDownLatch latch = shutdownLatch;
         AudioRecord recorder = null;
         try {
             if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
@@ -534,7 +557,8 @@ public class WakeWordDetector {
             // some models accumulate LSTM state across stop/start and gradually drift
             // the score upward on pure silence until they false-fire. Rebuilding the
             // interpreter from the file guarantees fresh variable state.
-            if (modelFile != null) {
+            // a fresh interpreter from loadModel is reused instead of rebuilt
+            if (modelFile != null && (tflite == null || tfliteUsed)) {
                 try {
                     if (tflite != null) { tflite.close(); tflite = null; }
                     tflite = buildInterpreter(loadMappedFile(modelFile));
@@ -543,7 +567,8 @@ public class WakeWordDetector {
                     return;
                 }
             }
-            if (vadModelFile != null) {
+            tfliteUsed = true;
+            if (vadModelFile != null && (vadTflite == null || vadTfliteUsed)) {
                 try {
                     if (vadTflite != null) { vadTflite.close(); vadTflite = null; }
                     vadTflite = buildInterpreter(loadMappedFile(vadModelFile));
@@ -552,6 +577,7 @@ public class WakeWordDetector {
                     vadModelFile = null;
                 }
             }
+            vadTfliteUsed = true;
             if (scoreWindow != null) {
                 java.util.Arrays.fill(scoreWindow, 0f);
                 scoreWindowPos = 0; scoreWindowSum = 0f;
@@ -572,11 +598,12 @@ public class WakeWordDetector {
             byte[] buf = new byte[CHUNK_BYTES];
 
             try {
-                while (running.get()) {
+                while (running.get() && session == sessionId.get()) {
                     int read;
                     try { read = recorder.read(buf, 0, CHUNK_BYTES); }
                     catch (IllegalStateException e) { break; }
-                    if (read <= 0) { if (read < 0) Log.e(TAG, "read error: " + read); continue; }
+                    if (read < 0) { Log.e(TAG, "read error: " + read); break; }
+                    if (read == 0) continue;
                     extractor.feed(buf, read, this::processFrame);
                 }
             } finally {
@@ -590,8 +617,8 @@ public class WakeWordDetector {
         } finally {
             activeRecorder.set(null);
             if (recorder != null) { try { recorder.release(); } catch (Exception ignored) {} }
-            running.set(false);
-            CountDownLatch latch = shutdownLatch;
+            // only clear the flag if no newer session took over
+            if (session == sessionId.get()) running.compareAndSet(true, false);
             if (latch != null) latch.countDown();
         }
     }
@@ -606,7 +633,7 @@ public class WakeWordDetector {
         }
 
         // melFrame is reused by the extractor, so copy into our ring buffer.
-        System.arraycopy(melFrame, 0, frameRing[frameRingPos % nFrames], 0, NativeMelExtractor.N_MELS);
+        System.arraycopy(melFrame, 0, frameRing[(int) (frameRingPos % nFrames)], 0, NativeMelExtractor.N_MELS);
         frameRingPos++;
         framesCollected++;
         newFramesSinceInfer++;
@@ -623,7 +650,7 @@ public class WakeWordDetector {
             if (skipNextInference) return;
         }
 
-        int base = frameRingPos % nFrames;
+        int base = (int) (frameRingPos % nFrames);
         try {
             if (inputIs8bit) {
                 inputBufferByte.rewind();
@@ -700,7 +727,7 @@ public class WakeWordDetector {
             boolean notable  = (avgScore > 0.05f);
             if (firstFew || periodic || notable) {
                 float melMin = Float.MAX_VALUE, melMax = -Float.MAX_VALUE;
-                float[] recent = frameRing[(frameRingPos - 1 + nFrames) % nFrames];
+                float[] recent = frameRing[(int) ((frameRingPos - 1 + nFrames) % nFrames)];
                 for (float v : recent) { if (v < melMin) melMin = v; if (v > melMax) melMax = v; }
                 String msg = (notable ? "!!! " : "    ")
                     + "avg=" + String.format("%.4f", avgScore)
@@ -758,7 +785,7 @@ public class WakeWordDetector {
     private void processVadFrame(float[] melFrame) {
         if (vadTflite == null || vadFrameRing == null) return;
 
-        System.arraycopy(melFrame, 0, vadFrameRing[vadFrameRingPos % vadNFrames], 0, NativeMelExtractor.N_MELS);
+        System.arraycopy(melFrame, 0, vadFrameRing[(int) (vadFrameRingPos % vadNFrames)], 0, NativeMelExtractor.N_MELS);
         vadFrameRingPos++;
         vadFramesCollected++;
         vadNewFramesSinceInfer++;
@@ -766,7 +793,7 @@ public class WakeWordDetector {
         if (vadFramesCollected < vadNFrames || vadNewFramesSinceInfer < vadNFrames) return;
         vadNewFramesSinceInfer = 0;
 
-        int base = vadFrameRingPos % vadNFrames;
+        int base = (int) (vadFrameRingPos % vadNFrames);
         try {
             if (vadInputIs8bit) {
                 vadInputBufferByte.rewind();

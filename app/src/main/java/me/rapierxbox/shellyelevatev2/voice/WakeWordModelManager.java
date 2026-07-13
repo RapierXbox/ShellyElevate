@@ -199,7 +199,16 @@ public class WakeWordModelManager {
     }
 
     public static void downloadFile(OkHttpClient client, String url, File destFile, ProgressCallback onProgress) throws IOException {
-        HttpDownloader.download(client, url, destFile, onProgress::onProgress);
+        // download to a temp file so an interrupted transfer never leaves a corrupt model
+        File tmp = new File(destFile.getParentFile(), destFile.getName() + ".part");
+        try {
+            HttpDownloader.download(client, url, tmp, onProgress::onProgress);
+            if (!tmp.renameTo(destFile))
+                throw new IOException("could not rename " + tmp + " to " + destFile);
+        } catch (Exception e) {
+            tmp.delete();
+            throw e;
+        }
     }
 
     public static String importCustomModel(Context context, Uri tfliteUri, File wakewordsDir) throws IOException {

@@ -156,7 +156,13 @@ public class StreamingVad {
         this.outputBufFloat = of;
         this.outputCols = outColsVal;
 
-        this.extractor = new NativeFeatureFrontend();
+        try {
+            this.extractor = new NativeFeatureFrontend();
+        } catch (RuntimeException | Error e) {
+            // close the interpreter so its native memory is not leaked
+            if (interp != null) { try { interp.close(); } catch (Exception ignored) {} }
+            throw e;
+        }
         this.frameRing = hasModel ? new float[nFrames][NativeMelExtractor.N_MELS] : null;
         this.scoreWindow = hasModel ? new float[Math.max(1, win)] : null;
     }

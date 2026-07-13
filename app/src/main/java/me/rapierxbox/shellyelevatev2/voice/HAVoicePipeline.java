@@ -14,6 +14,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
+import okio.Buffer;
 import okio.ByteString;
 
 /**
@@ -265,10 +266,11 @@ public class HAVoicePipeline {
     /** Stream a PCM chunk (16 kHz, 16-bit little-endian, mono). */
     public boolean sendAudio(byte[] pcmData, int length) {
         if (webSocket == null || sttBinaryHandlerId < 0) return false;
-        byte[] frame = new byte[length + 1];
-        frame[0] = (byte) sttBinaryHandlerId;
-        System.arraycopy(pcmData, 0, frame, 1, length);
-        return webSocket.send(ByteString.of(frame));
+        // okio buffer builds the prefixed frame with a single copy
+        return webSocket.send(new Buffer()
+                .writeByte(sttBinaryHandlerId)
+                .write(pcmData, 0, length)
+                .readByteString());
     }
 
     public void endAudio() {

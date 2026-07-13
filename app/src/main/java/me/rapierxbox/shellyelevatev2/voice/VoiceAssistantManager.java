@@ -23,6 +23,8 @@ import android.widget.Toast;
 import androidx.annotation.RequiresPermission;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -68,6 +70,8 @@ public class VoiceAssistantManager {
     private volatile String loadedModelName = "";
 
     private final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(2);
+    // single thread so settings broadcasts apply in order off the main thread
+    private final ExecutorService settingsExecutor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler   = new Handler(Looper.getMainLooper());
     private final TonePlayer tonePlayer = new TonePlayer(scheduler);
 
@@ -95,6 +99,12 @@ public class VoiceAssistantManager {
     }
 
     public void checkAndApplySettings() {
+        // stopAndWait and loadModel block so never run this on the main thread
+        if (settingsExecutor.isShutdown()) return;
+        settingsExecutor.execute(this::applySettingsNow);
+    }
+
+    private void applySettingsNow() {
         boolean wantEnabled = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false);
         String token = mSharedPreferences.getString(SP_VOICE_ASSISTANT_TOKEN, "");
         String haUrl = mSharedPreferences.getString(SP_WEBVIEW_URL, "");
@@ -261,10 +271,12 @@ public class VoiceAssistantManager {
         scheduler.execute(this::captureAndStream);
 
         int maxSec = mSharedPreferences.getInt(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10);
-        if (maxDurationFuture != null && !maxDurationFuture.isDone()) maxDurationFuture.cancel(false);
-        maxDurationFuture = scheduler.schedule(() -> {
-            if (state == State.LISTENING) { Log.i(TAG, "max duration reached"); stopAudioCapture(); }
-        }, maxSec, TimeUnit.SECONDS);
+        synchronized (this) {
+            if (maxDurationFuture != null && !maxDurationFuture.isDone()) maxDurationFuture.cancel(false);
+            maxDurationFuture = scheduler.schedule(() -> {
+                if (state == State.LISTENING) { Log.i(TAG, "max duration reached"); stopAudioCapture(); }
+            }, maxSec, TimeUnit.SECONDS);
+        }
     }
 
     private void onSessionEnded() {
@@ -437,7 +449,8 @@ public class VoiceAssistantManager {
         }
     }
 
-    private void stopAudioCapture() {
+    // synchronized so the future cancel and null swap is atomic across threads
+    private synchronized void stopAudioCapture() {
         audioStreaming.set(false);
         if (maxDurationFuture != null) { maxDurationFuture.cancel(false); maxDurationFuture = null; }
     }
@@ -482,6 +495,7 @@ public class VoiceAssistantManager {
         manuallyDisabled = true; enabled = false;
         shutdown();
         LocalBroadcastManager.getInstance(mApplicationContext).unregisterReceiver(settingsReceiver);
+        settingsExecutor.shutdownNow();
         scheduler.shutdownNow();
         okHttpClient.dispatcher().executorService().shutdown();
         okHttpClient.connectionPool().evictAll();
