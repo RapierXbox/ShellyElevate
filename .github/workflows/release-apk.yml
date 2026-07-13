@@ -62,17 +62,18 @@ jobs:
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          # on tag builds the apk version must equal the tag (see build.gradle.kts)
+          SE_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
         run: ./gradlew clean :app:assembleRelease --no-daemon --stacktrace
 
-      - name: Extract version from gradle
+      - name: Extract version
         id: version
         run: |
-          VERSION=$(grep 'versionName' app/build.gradle.kts | grep -oP 'v\d+\.\d+\.\d+\.\d+|\d+\.\d+\.\d+') | head -1
-          if [ -z "$VERSION" ]; then
-            # Generate version if extraction fails
-            DATE=$(date +%y%j)
-            TIME=$(date +%H%M)
-            VERSION="3.${DATE}.${TIME}"
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            # fallback matching the gradle date scheme for manual runs
+            VERSION="3.$(date +%y%j).$(date +%H%M)"
           fi
           echo "name=v${VERSION}" >> "$GITHUB_OUTPUT"
 
