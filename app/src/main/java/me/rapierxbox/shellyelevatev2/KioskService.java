@@ -21,6 +21,9 @@ import java.util.List;
 public class KioskService extends Service {
 	private static final String WATCHDOG_TAG = "KioskService";
 
+	private Handler watchdogHandler;
+	private Runnable watchdogTask;
+
 	@Override
 	public void onCreate() {
 		super.onCreate();
@@ -67,13 +70,14 @@ public class KioskService extends Service {
 	}
 
 	private void startWatchdog() {
-		Handler handler = new Handler(Looper.getMainLooper());
-		Runnable checkTask = new Runnable() {
+		if (watchdogHandler != null) return;
+		watchdogHandler = new Handler(Looper.getMainLooper());
+		watchdogTask = new Runnable() {
 			@Override
 			public void run() {
 				if (isLiteModeEnabled()) {
 					Log.i(WATCHDOG_TAG, "Lite mode enabled, skipping MainActivity relaunch");
-					handler.postDelayed(this, 30000);
+					watchdogHandler.postDelayed(this, 30000);
 					return;
 				}
 
@@ -83,10 +87,21 @@ public class KioskService extends Service {
 					activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
 					startActivity(activityIntent);
 				}
-				handler.postDelayed(this, 30000);
+				watchdogHandler.postDelayed(this, 30000);
 			}
 		};
-		handler.postDelayed(checkTask, 30000);
+		watchdogHandler.postDelayed(watchdogTask, 30000);
+	}
+
+	@Override
+	public void onDestroy() {
+		// without this a recreated service stacks another watchdog loop
+		if (watchdogHandler != null) {
+			watchdogHandler.removeCallbacksAndMessages(null);
+			watchdogHandler = null;
+			watchdogTask = null;
+		}
+		super.onDestroy();
 	}
 
 	private boolean isLiteModeEnabled() {
