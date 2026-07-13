@@ -32,7 +32,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private final ScreenSaver[] screenSavers;
 
     private long lastTouchEventTime;
-    private boolean screenSaverRunning;
+    private volatile boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
     private long lastProximityWakeTime = 0L;
     private volatile Boolean lastNearState = null;
@@ -78,12 +78,19 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
     public boolean onTouchEvent(MotionEvent event) {
         lastTouchEventTime = System.currentTimeMillis();
-        rescheduleIdleCheck();
-        if (event == null) return true;
+        if (event == null) {
+            rescheduleIdleCheck();
+            return true;
+        }
 
-        // wake on down so brightness restores as finger lands
-        if ((event.getAction() == ACTION_DOWN || event.getAction() == ACTION_UP) && isScreenSaverRunning()) {
-            stopScreenSaver();
+        // move events only need the timestamp since onIdleDeadline re-checks it
+        // and reschedules the remainder itself
+        if (event.getAction() == ACTION_DOWN || event.getAction() == ACTION_UP) {
+            rescheduleIdleCheck();
+            // wake on down so brightness restores as finger lands
+            if (isScreenSaverRunning()) {
+                stopScreenSaver();
+            }
         }
         return true;
     }
@@ -96,7 +103,10 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (ShellyElevateApplication.mSharedPreferences == null)
             return screenSavers[0];
 
-        int id = getCurrentScreenSaverId();
+        return getScreenSaverById(getCurrentScreenSaverId());
+    }
+
+    public ScreenSaver getScreenSaverById(int id) {
         return screenSavers[Math.max(0, Math.min(id, screenSavers.length - 1))];
     }
 
@@ -151,7 +161,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
 		}
 	}
 
-    public void startScreenSaver() {
+    // synchronized because paho scheduler and main threads all call this
+    public synchronized void startScreenSaver() {
         if (screenSaverRunning || !isScreenSaverEnabled()) return;
 
         screenSaverRunning = true;
@@ -185,18 +196,20 @@ public class ScreenSaverManager extends BroadcastReceiver {
                         .putExtra(EXTRA_SCREEN_SAVER_ID, activeId)));
     }
 
-    public void stopScreenSaver() {
+    public synchronized void stopScreenSaver() {
         if (!screenSaverRunning) return;
 
         screenSaverRunning = false;
-        ScreenSaver saver = getCurrentScreenSaver();
+        // end the saver that was started not the one currently selected in prefs
+        ScreenSaver saver = runningSaverId >= 0 ? getScreenSaverById(runningSaverId) : getCurrentScreenSaver();
         saver.onEnd(appContext);
 
         final int activeId = runningSaverId;
         runningSaverId = -1;
 
         scheduler.execute(() -> {
-            appContext.sendBroadcast(new Intent(INTENT_END_SCREENSAVER));
+            LocalBroadcastManager.getInstance(appContext)
+                    .sendBroadcast(new Intent(INTENT_END_SCREENSAVER));
             LocalBroadcastManager.getInstance(appContext)
                     .sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STOPPED)
                             .putExtra(EXTRA_SCREEN_SAVER_ID, activeId));

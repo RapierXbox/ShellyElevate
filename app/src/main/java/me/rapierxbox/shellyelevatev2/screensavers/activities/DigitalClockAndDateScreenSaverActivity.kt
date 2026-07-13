@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
 import androidx.core.view.isVisible
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_END_SCREENSAVER
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -67,14 +68,16 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
         }
 
         registerReceiver(mTimeTickBroadCastReciver, IntentFilter(Intent.ACTION_TIME_TICK))
-        registerReceiver(mEndScreenSaverReciever, IntentFilter(INTENT_END_SCREENSAVER))
+        // local broadcast so other apps cannot spoof the end intent
+        LocalBroadcastManager.getInstance(this)
+            .registerReceiver(mEndScreenSaverReciever, IntentFilter(INTENT_END_SCREENSAVER))
     }
 
     override fun onDestroy() {
         super.onDestroy()
 
         unregisterReceiver(mTimeTickBroadCastReciver)
-        unregisterReceiver(mEndScreenSaverReciever)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(mEndScreenSaverReciever)
         binding = null
     }
 }
