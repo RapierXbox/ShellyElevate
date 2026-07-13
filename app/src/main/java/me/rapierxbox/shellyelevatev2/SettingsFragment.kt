@@ -233,7 +233,8 @@ class SettingsFragment : Fragment() {
             +SliderPref(binding.minBrightness, SP_MIN_BRIGHTNESS, 48) { mDeviceHelper.setScreenBrightness(it) }
 
             +SwitchPref(binding.screenSaver, SP_SCREEN_SAVER_ENABLED, true)
-            +IntTextPref(binding.screenSaverDelay, SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY)
+            // min matches the ime action check so leaving settings cannot persist 0
+            +IntTextPref(binding.screenSaverDelay, SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY, min = 5)
             +SpinnerPref(binding.screenSaverType, SP_SCREEN_SAVER_ID, 0)
             +SpinnerPref(binding.sleepOptimizationLevel, SP_SLEEP_OPTIMIZATION_LEVEL, SLEEP_OPT_NONE)
             +IntTextPref(binding.proximityKeepAwakeSeconds, SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS, min = 0)
@@ -428,8 +429,9 @@ class SettingsFragment : Fragment() {
         }
 
         // The VAD model is required to suppress false wake triggers, so fetch
-        // it as soon as wake-word detection is enabled.
-        binding.voiceWakeEnabled.setOnCheckedChangeListener { _, isChecked ->
+        // it as soon as wake-word detection is enabled. registered via the binder
+        // so it does not clobber the visibility toggle listener
+        binder.onToggle(binding.voiceWakeEnabled) { isChecked ->
             if (isChecked && !WakeWordModelManager.isVadPresent(wakewordsDir)) {
                 ensureVadDownloaded(wakewordsDir)
             }

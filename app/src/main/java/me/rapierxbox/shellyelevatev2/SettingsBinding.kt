@@ -138,6 +138,10 @@ class SettingsBinder(private val prefs: SharedPreferences) {
         addToggle(switch) { checked -> targets.forEach { it.isVisible = !checked } }
     }
 
+    // register extra toggle actions through the binder because a raw
+    // setOnCheckedChangeListener would replace the listener loadAll installs
+    fun onToggle(switch: MaterialSwitch, action: (Boolean) -> Unit) = addToggle(switch, action)
+
     private fun addToggle(switch: MaterialSwitch, action: (Boolean) -> Unit) {
         toggleActions.getOrPut(switch) { mutableListOf() } += action
     }
