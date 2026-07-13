@@ -17,7 +17,12 @@ OUTPUT="${2:-backup_${DEVICE_IP}_${TIMESTAMP}.json}"
 
 echo "Fetching settings from http://${DEVICE_IP}:8080/settings ..."
 
-HTTP_CODE=$(curl -s -o "$OUTPUT" -w "%{http_code}" "http://${DEVICE_IP}:8080/settings")
+# curl failure must not leave a zero byte file behind under set -e
+HTTP_CODE=$(curl -s -o "$OUTPUT" -w "%{http_code}" "http://${DEVICE_IP}:8080/settings") || {
+  echo "Error: could not reach device at ${DEVICE_IP}." >&2
+  rm -f "$OUTPUT"
+  exit 1
+}
 
 if [[ "$HTTP_CODE" != "200" ]]; then
   echo "Error: received HTTP $HTTP_CODE from device." >&2

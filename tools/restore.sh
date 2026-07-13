@@ -21,12 +21,13 @@ fi
 
 # The backup file wraps settings under a "settings" key; extract that object
 # so we POST only the settings map (matching the POST /settings contract).
+# pass the path via argv so quotes in it cannot break the python source
 SETTINGS_JSON=$(python3 -c "
 import sys, json
-data = json.load(open('$BACKUP_FILE'))
+data = json.load(open(sys.argv[1]))
 settings = data.get('settings', data)  # fall back to root if already flat
 print(json.dumps(settings))
-" 2>/dev/null) || {
+" "$BACKUP_FILE") || {
   echo "Error: could not parse '$BACKUP_FILE' as JSON." >&2
   exit 1
 }
@@ -38,7 +39,8 @@ RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "http://${DEVICE_IP}:8080/setting
   -d "$SETTINGS_JSON")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
-BODY=$(echo "$RESPONSE" | head -n -1)
+# head -n -1 is gnu only so strip the last line portably
+BODY=$(echo "$RESPONSE" | sed '$d')
 
 if [[ "$HTTP_CODE" != "200" ]]; then
   echo "Error: received HTTP $HTTP_CODE from device." >&2
