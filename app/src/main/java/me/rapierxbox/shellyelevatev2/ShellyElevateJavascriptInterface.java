@@ -11,13 +11,14 @@ import android.webkit.JavascriptInterface;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 
 public class ShellyElevateJavascriptInterface {
-    private final Map<String, String> bindings = new HashMap<>();
+    // written from the webview js bridge thread and read from the main thread
+    private final Map<String, String> bindings = new ConcurrentHashMap<>();
 
     public ShellyElevateJavascriptInterface() {
         init();
@@ -33,7 +34,7 @@ public class ShellyElevateJavascriptInterface {
         return mSharedPreferences.getBoolean(SP_EXTENDED_JAVASCRIPT_INTERFACE, false);
     }
 
-    public String getDevice() {return DeviceModel.getReportedDevice().sku;}
+    @JavascriptInterface public String getDevice() {return DeviceModel.getReportedDevice().sku;}
 
     @JavascriptInterface public boolean getRelay(int num) {
         return mDeviceHelper.getRelay(num);
