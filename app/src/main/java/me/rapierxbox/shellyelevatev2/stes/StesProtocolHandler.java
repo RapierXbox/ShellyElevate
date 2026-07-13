@@ -127,6 +127,7 @@ public class StesProtocolHandler {
         byte[] payload = {(byte)(bri >> 8), (byte)(bri & 0xFF), 0, 0, (byte) DEFAULT_GAMMA};
         send(StesCommand.SET_DIMMER, payload, data -> {
             DimmerStatus s = parseStatus(data);
+            if (s == null) { if (cb != null) cb.onError("Short response"); return; }
             lastStatus = s;
             if (cb != null) cb.onResult(s);
         }, e -> { if (cb != null) cb.onError(e); });
@@ -143,6 +144,7 @@ public class StesProtocolHandler {
         if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
         send(StesCommand.GET_STATUS, new byte[0], data -> {
             DimmerStatus s = parseStatus(data);
+            if (s == null) { if (cb != null) cb.onError("Short response"); return; }
             lastStatus = s;
             if (cb != null) cb.onResult(s);
         }, e -> { if (cb != null) cb.onError(e); });
@@ -331,8 +333,9 @@ public class StesProtocolHandler {
     //   [0..1] reserved | [2] on flag | [3] warning bitmap
     //   [4..5] target brightness (BE) | [6..7] actual brightness (BE)
     private static DimmerStatus parseStatus(byte[] resp) {
+        // null instead of a zeroed status so callers dont publish a bogus off state
+        if (resp.length < 8) return null;
         DimmerStatus s = new DimmerStatus();
-        if (resp.length < 8) return s;
         s.on             = (resp[2] & 0x01) != 0;
         byte warn        = resp[3];
         s.overheat       = (warn & 0x01) != 0;
@@ -372,10 +375,12 @@ public class StesProtocolHandler {
         private static final byte BL_CMD_EXTEND_ERASE = 0x44;
         private static final byte BL_CMD_WRITE_MEMORY = 0x31;
 
+        private static final int FLASH_BASE         = 0x08000000;
         private static final int FLASH_APP_START    = 0x08010000;
         private static final int BL_PAGE_SIZE       = 2048;
         private static final int BL_CHUNK_SIZE      = 256;
-        private static final int BL_FIRST_APP_PAGE  = 12;
+        // derived from the write start address so erase and write cover the same pages
+        private static final int BL_FIRST_APP_PAGE  = (FLASH_APP_START - FLASH_BASE) / BL_PAGE_SIZE;
         private static final int BL_MAX_PAGES       = 40;
         private static final int BL_MAX_RETRIES     = 3;
 
@@ -388,6 +393,12 @@ public class StesProtocolHandler {
                 byte[] firmware = readFile(firmwareFile);
                 if (firmware == null || firmware.length == 0) {
                     listener.onError("Firmware file empty or unreadable");
+                    return;
+                }
+                int maxBytes = BL_MAX_PAGES * BL_PAGE_SIZE;
+                if (firmware.length > maxBytes) {
+                    listener.onError("Firmware too large: " + firmware.length
+                            + " bytes, max " + maxBytes + " bytes (" + BL_MAX_PAGES + " pages)");
                     return;
                 }
 
@@ -408,7 +419,6 @@ public class StesProtocolHandler {
                 if (!syncBootloader()) { listener.onError("BL re-sync failed"); return; }
 
                 int totalPages = (int)Math.ceil((double)firmware.length / BL_PAGE_SIZE);
-                totalPages = Math.min(totalPages, BL_MAX_PAGES);
                 if (!extendedErase(BL_FIRST_APP_PAGE, totalPages)) { listener.onError("BL erase failed"); return; }
 
                 int pagesWritten = 0;
