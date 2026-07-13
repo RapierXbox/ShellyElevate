@@ -38,6 +38,9 @@ public final class AdbHelper {
     private static void apply(boolean enabled) {
         String desired = enabled ? PORT_ON : PORT_OFF;
         String current = PrivilegedShell.runShell("getprop " + ADB_PORT_PROP).stdout.trim();
+        // an unset or 0/-1 port already means off so dont bounce adbd on the first
+        // settings open when the toggle is disabled
+        if (!enabled && (current.isEmpty() || current.equals("-1") || current.equals("0"))) return;
         if (desired.equals(current)) return;
 
         // semicolons so start always runs even if stop returns nonzero
