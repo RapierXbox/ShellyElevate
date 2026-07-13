@@ -40,6 +40,12 @@ public class HttpServer extends NanoHTTPD {
         // lifecycle start stop and restart on settings change is owned by ShellyElevateApplication
     }
 
+    // asserts are disabled on android so missing bodies need a real check
+    private static Response badRequest(String message) {
+        return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json",
+                "{\"success\":false,\"error\":\"" + message + "\"}");
+    }
+
     @Override
     public Response serve(IHTTPSession session) {
         Method method = session.getMethod();
@@ -61,7 +67,7 @@ public class HttpServer extends NanoHTTPD {
                     Map<String, String> files = new HashMap<>();
                     session.parseBody(files);
                     String postData = files.get("postData");
-                    assert postData != null;
+                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
                     JSONObject jsonObject = new JSONObject(postData);
 
                     mSettingsParser.setSettings(jsonObject);
@@ -124,7 +130,7 @@ public class HttpServer extends NanoHTTPD {
                     Map<String, String> files = new HashMap<>();
                     session.parseBody(files);
                     String postData = files.get("postData");
-                    assert postData != null;
+                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
                     JSONObject jsonObject = new JSONObject(postData);
 
                     String javascript = jsonObject.getString("javascript");
@@ -162,7 +168,7 @@ public class HttpServer extends NanoHTTPD {
                     Map<String, String> files = new HashMap<>();
                     session.parseBody(files);
                     String postData = files.get("postData");
-                    assert postData != null;
+                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
                     JSONObject jsonObject = new JSONObject(postData);
 
                     Uri mediaUri = Uri.parse(jsonObject.getString("url"));
@@ -218,7 +224,7 @@ public class HttpServer extends NanoHTTPD {
                     Map<String, String> files = new HashMap<>();
                     session.parseBody(files);
                     String postData = files.get("postData");
-                    assert postData != null;
+                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
                     JSONObject jsonObject = new JSONObject(postData);
 
                     double volume = jsonObject.getDouble("volume");
@@ -241,7 +247,7 @@ public class HttpServer extends NanoHTTPD {
                 break;
         }
 
-        return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
+        return newFixedLengthResponse(jsonResponse.optBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
 
     private Response handleDeviceRequest(IHTTPSession session) throws JSONException, IOException, InterruptedException {
@@ -265,19 +271,20 @@ public class HttpServer extends NanoHTTPD {
                 }
                 if (method.equals(Method.GET)) {
                     int num = GetNumParameter(params, 0);
-                    if (num == -999) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
+                    if (num == -999 || num < 0 || num >= device.relays) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
                     jsonResponse.put("success", true);
                     jsonResponse.put("state", mDeviceHelper.getRelay(num));
                 } else if (method.equals(Method.POST)) {
                     String postData = files.get("postData");
-                    assert postData != null;
+                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
                     JSONObject jsonObject = new JSONObject(postData);
 
                     int num = GetNumParameter(params, -1);
                     if (num == -999) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
                     // Fall back to the JSON body when ?num= isn't provided.
-                    if (num == -1 && jsonObject.getInt("num")>=0)
-                        num = jsonObject.getInt("num");
+                    if (num == -1) num = jsonObject.optInt("num", 0);
+                    if (num < 0 || num >= device.relays) return badRequest("Invalid relay number");
+                    if (!jsonObject.has("state")) return badRequest("Missing state");
 
                     mDeviceHelper.setRelay(num, jsonObject.getBoolean("state"));
 
@@ -300,7 +307,7 @@ public class HttpServer extends NanoHTTPD {
                         Log.e(TAG, "Invalid night_mode body", e);
                     }
                     String nmPostData = nmFiles.get("postData");
-                    assert nmPostData != null;
+                    if (nmPostData == null || nmPostData.isEmpty()) return badRequest("Missing JSON body");
                     JSONObject nmJson = new JSONObject(nmPostData);
                     boolean state = nmJson.getBoolean("state");
                     if (mNightModeManager != null) {
@@ -407,7 +414,10 @@ public class HttpServer extends NanoHTTPD {
                         }, "reboot-exec").start();
                         jsonResponse.put("success", true);
                     } else {
-                        Toast.makeText(mApplicationContext, "Please wait %s seconds before rebooting".replace("%s", String.valueOf(20 - deltaTime)), Toast.LENGTH_LONG).show();
+                        // nanohttpd threads have no looper so toast must run on main
+                        final String msg = "Please wait %s seconds before rebooting".replace("%s", String.valueOf(20 - deltaTime));
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
+                                Toast.makeText(mApplicationContext, msg, Toast.LENGTH_LONG).show());
                     }
                 }
                 break;
@@ -441,15 +451,14 @@ public class HttpServer extends NanoHTTPD {
                     }
 
                     String postData = dimmerFiles.get("postData");
-                    if (postData != null && !postData.isEmpty()) {
-                        JSONObject body = new JSONObject(postData);
-                        if (body.has("brightness")) {
-                            mDeviceHelper.setDimmerBrightness(body.getInt("brightness"), null);
-                        } else if (body.has("on")) {
-                            mDeviceHelper.setDimmerOn(body.getBoolean("on"));
-                        }
-                        jsonResponse.put("success", true);
+                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
+                    JSONObject body = new JSONObject(postData);
+                    if (body.has("brightness")) {
+                        mDeviceHelper.setDimmerBrightness(body.getInt("brightness"), null);
+                    } else if (body.has("on")) {
+                        mDeviceHelper.setDimmerOn(body.getBoolean("on"));
                     }
+                    jsonResponse.put("success", true);
                 } else {
                     jsonResponse.put("success", false);
                     jsonResponse.put("error", "Invalid request method");
@@ -458,8 +467,9 @@ public class HttpServer extends NanoHTTPD {
             case "free":
                 jsonResponse.put("success", false);
                 if (method.equals(Method.GET)) {
+                    Process process = null;
                     try {
-                        Process process = Runtime.getRuntime().exec("free -m");
+                        process = Runtime.getRuntime().exec("free -m");
                         BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
 
                         String line;
@@ -499,6 +509,9 @@ public class HttpServer extends NanoHTTPD {
                         process.waitFor();
                     } catch (IOException e) {
                         Log.e(TAG, "Error free command request", e);
+                    } finally {
+                        // destroy closes the three pipe fds which otherwise leak per request
+                        if (process != null) process.destroy();
                     }
                 }
                 break;
@@ -508,7 +521,7 @@ public class HttpServer extends NanoHTTPD {
                 break;
         }
 
-        return newFixedLengthResponse(jsonResponse.getBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
+        return newFixedLengthResponse(jsonResponse.optBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
     private static int GetNumParameter(Map<String, List<String>> params, int defaultValue) {
         List<String> numParam = params.get("num");
