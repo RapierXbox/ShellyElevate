@@ -16,12 +16,12 @@ import android.util.Log;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -98,9 +98,10 @@ public class ActiveBleConnection {
 
     // Single counter across services/chars/descriptors, matching ESPHome's flat ATT handle space.
     private int nextHandle = 1;
-    private final Map<Integer, BluetoothGattService>        handleToService = new HashMap<>();
-    private final Map<Integer, BluetoothGattCharacteristic> handleToChar    = new HashMap<>();
-    private final Map<Integer, BluetoothGattDescriptor>     handleToDesc    = new HashMap<>();
+    // concurrent because the gatt callback thread populates and the socket thread reads
+    private final Map<Integer, BluetoothGattService>        handleToService = new ConcurrentHashMap<>();
+    private final Map<Integer, BluetoothGattCharacteristic> handleToChar    = new ConcurrentHashMap<>();
+    private final Map<Integer, BluetoothGattDescriptor>     handleToDesc    = new ConcurrentHashMap<>();
     private final Map<BluetoothGattService,        Integer> serviceHandle  = new IdentityHashMap<>();
     private final Map<BluetoothGattCharacteristic, Integer> charHandle     = new IdentityHashMap<>();
     private final Map<BluetoothGattDescriptor,     Integer> descHandle     = new IdentityHashMap<>();
@@ -121,7 +122,8 @@ public class ActiveBleConnection {
     public int  getMtu()      { return negotiatedMtu; }
     public boolean isConnected() { return connected; }
 
-    public void connect() {
+    // false when connectGatt returned null meaning no callback will ever fire
+    public boolean connect() {
         BluetoothGatt g;
         // without TRANSPORT_LE the stack may pick BR/EDR on dual-mode devices
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -130,6 +132,7 @@ public class ActiveBleConnection {
             g = device.connectGatt(ctx, false, gattCallback);
         }
         this.gatt = g;
+        return g != null;
     }
 
     public void requestDisconnect() {

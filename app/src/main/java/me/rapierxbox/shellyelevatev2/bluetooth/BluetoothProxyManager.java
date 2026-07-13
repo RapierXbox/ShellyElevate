@@ -127,6 +127,8 @@ public class BluetoothProxyManager {
     // Android throttles at 5 scan starts/30s; stay one under
     private static final int  SCAN_START_BUDGET = 4;
     private static final long SCAN_START_WINDOW_MS = 30_000;
+    // stop the scan if no ha session comes back within this window
+    private static final long SCAN_IDLE_STOP_MS = 120_000;
 
     // batch raw ads to cut frame count and queue pressure
     private static final int  RAW_AD_BATCH_MAX = 16;
@@ -158,6 +160,7 @@ public class BluetoothProxyManager {
     private final BroadcastReceiver btStateReceiver;
 
     private ScheduledFuture<?> scanWatchdogTask;
+    private ScheduledFuture<?> scanIdleStopTask;
 
     private volatile int activeScanMode = ScanSettings.SCAN_MODE_LOW_LATENCY;
 
@@ -215,18 +218,22 @@ public class BluetoothProxyManager {
 
     private void startServer() {
         executor.execute(() -> {
+            // local capture so a quick disable enable toggle cannot make this loop
+            // adopt and then tear down the new servers socket
+            ServerSocket ss = null;
             try {
-                serverSocket = new ServerSocket(PORT, 1, InetAddress.getByName("0.0.0.0"));
+                ss = new ServerSocket(PORT, 1, InetAddress.getByName("0.0.0.0"));
+                serverSocket = ss;
                 Log.i(TAG, "listening on port " + PORT);
                 registerNsd();
 
-                while (enabled && !serverSocket.isClosed()) {
+                while (enabled && !ss.isClosed()) {
                     Socket client;
                     try {
-                        client = serverSocket.accept();
+                        client = ss.accept();
                     } catch (IOException e) {
                         // only bail on shutdown; transient accept() errors shouldn't kill the loop
-                        if (!enabled || serverSocket.isClosed()) break;
+                        if (!enabled || ss.isClosed()) break;
                         Log.w(TAG, "accept error, continuing: " + e.getMessage());
                         continue;
                     }
@@ -239,13 +246,19 @@ public class BluetoothProxyManager {
                     if (prev != null) prev.close("new connection");
                     ClientSession session = new ClientSession(client);
                     activeSession.set(session);
+                    cancelIdleScanStop();
                     executor.execute(session::run);
                 }
             } catch (IOException e) {
                 if (enabled) Log.e(TAG, "server error", e);
             } finally {
-                unregisterNsd();
-                closeServerSocket();
+                if (serverSocket == ss) {
+                    unregisterNsd();
+                    closeServerSocket();
+                } else if (ss != null && !ss.isClosed()) {
+                    // a newer server owns the field so only close our own socket
+                    try { ss.close(); } catch (IOException ignored) {}
+                }
             }
         });
     }
@@ -304,9 +317,29 @@ public class BluetoothProxyManager {
         if (ss != null && !ss.isClosed()) { try { ss.close(); } catch (IOException ignored) {} }
     }
 
+    // delayed stop so an immediate ha reconnect does not burn a scan start
+    // under the 5/30s throttle
+    private synchronized void scheduleIdleScanStop() {
+        if (scanIdleStopTask != null) scanIdleStopTask.cancel(false);
+        scanIdleStopTask = scheduler.schedule(() -> {
+            if (activeSession.get() == null) {
+                Log.i(TAG, "no HA session for " + SCAN_IDLE_STOP_MS + "ms, stopping idle BLE scan");
+                stopBleScanning();
+            }
+        }, SCAN_IDLE_STOP_MS, TimeUnit.MILLISECONDS);
+    }
+
+    private synchronized void cancelIdleScanStop() {
+        if (scanIdleStopTask != null) {
+            scanIdleStopTask.cancel(false);
+            scanIdleStopTask = null;
+        }
+    }
+
 
     private void shutdown() {
         if (scanWatchdogTask != null) { scanWatchdogTask.cancel(false); scanWatchdogTask = null; }
+        cancelIdleScanStop();
         stopBleScanning();
         ClientSession s = activeSession.getAndSet(null);
         if (s != null) s.close("shutdown");
@@ -384,6 +417,8 @@ public class BluetoothProxyManager {
         void run() {
             executor.execute(this::writeLoop);
             pingTask = scheduler.scheduleWithFixedDelay(this::runPingWatchdog, 30, 30, TimeUnit.SECONDS);
+            // close() may have run before pingTask was assigned so cancel here too
+            if (closed.get()) pingTask.cancel(false);
             try {
                 InputStream in = socket.getInputStream();
                 while (!closed.get() && enabled) {
@@ -402,6 +437,8 @@ public class BluetoothProxyManager {
                     // keep scan running; restarting on every HA reconnect trips the 5/30s throttle
                     if (scanTarget.compareAndSet(this, null))
                         Log.i(TAG, "session ended, scan kept running for next HA reconnect");
+                    // but stop it eventually if no ha session comes back
+                    scheduleIdleScanStop();
                     Log.i(TAG, "session cleaned up");
                 }
             }
@@ -621,7 +658,11 @@ public class BluetoothProxyManager {
                     ActiveBleConnection conn = new ActiveBleConnection(
                             mApplicationContext, device, this, clearBeforeDiscovery);
                     connections.put(addr, conn);
-                    conn.connect();
+                    if (!conn.connect()) {
+                        // connectGatt returned null so no callback will ever fire
+                        connections.remove(addr);
+                        sendConnectionStatus(addr, false, 0, -5);
+                    }
                     sendConnectionsFreeIfSubscribed();
                     break;
 
@@ -819,35 +860,36 @@ public class BluetoothProxyManager {
             encodeVarintField(out, 1, address);
             encodeVarintField(out, 2, connectedFlag ? 1 : 0);
             encodeVarintField(out, 3, mtu);
-            encodeZigzagField(out, 4, errorCode);
+            // error is int32 in api.proto so plain varint not zigzag
+            encodeVarintField(out, 4, errorCode);
             enqueue(buildFrame(MSG_BLUETOOTH_DEVICE_CONNECTION_RSP, out.toByteArray()));
         }
         private void sendGattError(long address, int handle, int errorCode) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             encodeVarintField(out, 1, address);
             encodeVarintField(out, 2, handle);
-            encodeZigzagField(out, 3, errorCode);
+            encodeVarintField(out, 3, errorCode);
             enqueue(buildFrame(MSG_GATT_ERROR_RESPONSE, out.toByteArray()));
         }
         private void sendClearCacheResponse(long address, boolean success, int errorCode) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             encodeVarintField(out, 1, address);
             encodeVarintField(out, 2, success ? 1 : 0);
-            encodeZigzagField(out, 3, errorCode);
+            encodeVarintField(out, 3, errorCode);
             enqueue(buildFrame(MSG_BT_DEVICE_CLEAR_CACHE_RESPONSE, out.toByteArray()));
         }
         private void sendPairingResponse(long address, boolean paired, int errorCode) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             encodeVarintField(out, 1, address);
             encodeVarintField(out, 2, paired ? 1 : 0);
-            encodeZigzagField(out, 3, errorCode);
+            encodeVarintField(out, 3, errorCode);
             enqueue(buildFrame(MSG_BT_DEVICE_PAIRING_RESPONSE, out.toByteArray()));
         }
         private void sendUnpairingResponse(long address, boolean success, int errorCode) {
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             encodeVarintField(out, 1, address);
             encodeVarintField(out, 2, success ? 1 : 0);
-            encodeZigzagField(out, 3, errorCode);
+            encodeVarintField(out, 3, errorCode);
             enqueue(buildFrame(MSG_BT_DEVICE_UNPAIRING_RESPONSE, out.toByteArray()));
         }
         private void sendConnectionsFreeIfSubscribed() {
@@ -1108,7 +1150,7 @@ public class BluetoothProxyManager {
         writeVarint(out, value);
     }
 
-    // zigzag-encode sint32 (needed for negative RSSI and error codes)
+    // zigzag-encode sint32 (rssi is the only sint32 field in the messages we send)
     private static void encodeZigzagField(ByteArrayOutputStream out, int field, int value) {
         encodeVarintField(out, field, (((long) value << 1)) ^ ((long) (value >> 31)));
     }
