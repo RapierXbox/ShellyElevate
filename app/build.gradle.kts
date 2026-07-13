@@ -6,7 +6,7 @@ import java.util.Base64
 
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.jetbrains.kotlin.android)
+    // kotlin support is built into agp 9 so the external kotlin plugin is dropped
 }
 
 // Dynamic versioning: Major.YearDayOfYear.HourMinute (e.g., 3.26111.1430)
@@ -47,7 +47,7 @@ fun versionCodeForBuild(): Int {
 
 android {
     namespace = "me.rapierxbox.shellyelevatev2"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "me.rapierxbox.shellyelevatev2"
@@ -83,10 +83,10 @@ android {
                         // Owner-only read/write (createTempFile already restricts, but be explicit)
                         it.setReadable(true, true)
                         it.setWritable(true, true)
+                        // deleteOnExit covers cleanup; buildFinished is deprecated and
+                        // breaks with the configuration cache
                         it.deleteOnExit()
                     }
-                // Register cleanup before decode/write so the file is always removed on build finish
-                gradle.buildFinished { keystoreFile.delete() }
                 try {
                     keystoreFile.writeBytes(
                         Base64.getDecoder()
@@ -125,9 +125,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -139,11 +136,20 @@ android {
     }
 }
 
+// kotlinOptions was removed in agp 9 so the jvm target moves to the kotlin dsl
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
 dependencies {
 
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.lifecycle.runtime.ktx)
+    // was transitive before the androidx bumps; declare it since we use it directly
+    implementation(libs.localbroadcastmanager)
     implementation(libs.preference)
     implementation(libs.nanohttpd)
     implementation(libs.org.eclipse.paho.mqttv5.client)
@@ -153,7 +159,6 @@ dependencies {
 
     implementation(platform(libs.okhttpbom))
     implementation(libs.okhttp)
-    implementation(libs.appcompat)
 
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
