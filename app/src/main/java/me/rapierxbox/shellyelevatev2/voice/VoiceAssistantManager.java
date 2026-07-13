@@ -66,7 +66,10 @@ public class VoiceAssistantManager {
 
     private final OkHttpClient okHttpClient;
     private HAVoicePipeline pipeline;
-    private WakeWordDetector wakeDetector;
+    // volatile for the status getters; mutations go through wakeLock so the settings
+    // executor and a mute toggle cant interleave and null it mid check-then-act
+    private volatile WakeWordDetector wakeDetector;
+    private final Object wakeLock = new Object();
     private volatile String loadedModelName = "";
 
     private final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(2);
@@ -131,36 +134,40 @@ public class VoiceAssistantManager {
     }
 
     private void applyWakeDetectorSettings() {
-        boolean wakeEnabled = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true);
+        // serialize with setMuted so a concurrent mute cant null wakeDetector
+        // between the checks below (this runs on the settings executor and the ws thread)
+        synchronized (wakeLock) {
+            boolean wakeEnabled = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true);
 
-        if (!wakeEnabled || muted) {
-            if (wakeDetector != null) {
-                wakeDetector.stop(); wakeDetector.onDestroy();
-                wakeDetector = null; loadedModelName = "";
+            if (!wakeEnabled || muted) {
+                if (wakeDetector != null) {
+                    wakeDetector.stop(); wakeDetector.onDestroy();
+                    wakeDetector = null; loadedModelName = "";
+                }
+                return;
             }
-            return;
-        }
 
-        String modelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "").trim();
+            String modelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "").trim();
 
-        if (wakeDetector == null) {
-            wakeDetector = new WakeWordDetector(mApplicationContext, this::onWakeDetected);
-            loadedModelName = "";
-        }
+            if (wakeDetector == null) {
+                wakeDetector = new WakeWordDetector(mApplicationContext, this::onWakeDetected);
+                loadedModelName = "";
+            }
 
-        if (!modelName.equals(loadedModelName)) {
-            if (wakeDetector.isRunning()) wakeDetector.stopAndWait();
-            loadedModelName = modelName;
-            Log.i(TAG, "loading wake model \"" + modelName + "\" -> " + wakeDetector.loadModel(modelName));
-        }
+            if (!modelName.equals(loadedModelName)) {
+                if (wakeDetector.isRunning()) wakeDetector.stopAndWait();
+                loadedModelName = modelName;
+                Log.i(TAG, "loading wake model \"" + modelName + "\" -> " + wakeDetector.loadModel(modelName));
+            }
 
-        wakeDetector.setSensitivity(mSharedPreferences.getInt(SP_VOICE_WAKE_SENSITIVITY, 50));
-        wakeDetector.setCooldown(mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5));
-        wakeDetector.setScoreBroadcastEnabled(mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false));
+            wakeDetector.setSensitivity(mSharedPreferences.getInt(SP_VOICE_WAKE_SENSITIVITY, 50));
+            wakeDetector.setCooldown(mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5));
+            wakeDetector.setScoreBroadcastEnabled(mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false));
 
-        if (state == State.IDLE && !wakeDetector.isRunning()
-                && wakeDetector.getModelStatus() == WakeWordDetector.ModelStatus.LOADED) {
-            wakeDetector.start();
+            if (state == State.IDLE && !wakeDetector.isRunning()
+                    && wakeDetector.getModelStatus() == WakeWordDetector.ModelStatus.LOADED) {
+                wakeDetector.start();
+            }
         }
     }
 
@@ -326,9 +333,11 @@ public class VoiceAssistantManager {
         if (mute) {
             stopAudioCapture();
             if (state == State.LISTENING || state == State.PROCESSING) onSessionEnded();
-            if (wakeDetector != null) {
-                wakeDetector.stop(); wakeDetector.onDestroy();
-                wakeDetector = null; loadedModelName = "";
+            synchronized (wakeLock) {
+                if (wakeDetector != null) {
+                    wakeDetector.stop(); wakeDetector.onDestroy();
+                    wakeDetector = null; loadedModelName = "";
+                }
             }
         } else {
             applyWakeDetectorSettings();
