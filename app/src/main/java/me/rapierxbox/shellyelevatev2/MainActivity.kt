@@ -71,6 +71,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.MainActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.ButtonPressDetector
+import me.rapierxbox.shellyelevatev2.helper.GestureInterceptLayout
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_UPDATE_PROMPTED
 import androidx.appcompat.app.AlertDialog
@@ -618,7 +619,7 @@ class MainActivity : ComponentActivity() {
                 val sm = ShellyElevateApplication.mScreenManager
                 val consumeForWake = sm?.shouldConsumeTouchForWake() == true
                 if (BuildConfig.DEBUG) Log.d("MainActivity", "Touch event detected on WebView, mScreenManager=$sm, consumeForWake=$consumeForWake")
-                mSwipeHelper?.onTouchEvent(event)
+                // SwipeHelper is fed exclusively by GestureInterceptLayout.
                 mScreenSaverManager.onTouchEvent(event)
                 sm?.onTouchEvent()
                 // Returning true consumes the event so it isn't delivered to the WebView.
@@ -798,7 +799,7 @@ class MainActivity : ComponentActivity() {
 
         configureWebView()
         setupSettingsButtons()
-        setupSwipeOverlay()
+        (binding.root as GestureInterceptLayout).swipeHelper = mSwipeHelper
 
         registerBroadcastReceivers()
         applyScoreBarSetting()
@@ -811,17 +812,6 @@ class MainActivity : ComponentActivity() {
             if (!isActivityInStack(SettingsActivity::class.java.name)) {
                 startActivity(Intent(this, SettingsActivity::class.java))
             }
-        }
-    }
-
-    @SuppressLint("ClickableViewAccessibility")
-    private fun setupSwipeOverlay() {
-        // forward so wake works when webview is invisible during sleep
-        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            mSwipeHelper?.onTouchEvent(event)
-            mScreenSaverManager.onTouchEvent(event)
-            ShellyElevateApplication.mScreenManager?.onTouchEvent()
-            false
         }
     }
 
