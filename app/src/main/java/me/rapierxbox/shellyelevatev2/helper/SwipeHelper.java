@@ -1,7 +1,19 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_UP;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_UP;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_SINGLE;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_DOWN;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_LEFT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_UP;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_DOWN;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_LEFT;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT;
@@ -23,6 +35,7 @@ public class SwipeHelper {
     // tracks across the full gesture; some fingers may have lifted before ACTION_UP
     private int maxPointerCount = 0;
     private long gestureStartTime = 0;
+    private long lastPointerJoinTime = 0;
 
     private static class PointerInfo {
         float startX, startY, endX, endY;
@@ -35,6 +48,7 @@ public class SwipeHelper {
         pointers.clear();
         maxPointerCount = 0;
         gestureStartTime = 0;
+        lastPointerJoinTime = 0;
     }
 
     public boolean onTouchEvent(MotionEvent event) {
@@ -55,6 +69,7 @@ public class SwipeHelper {
                 int pid = event.getPointerId(actionIndex);
                 pointers.put(pid, new PointerInfo(event.getX(actionIndex), event.getY(actionIndex)));
                 if (event.getPointerCount() > maxPointerCount) maxPointerCount = event.getPointerCount();
+                lastPointerJoinTime = event.getEventTime();
                 break;
             }
 
@@ -83,7 +98,10 @@ public class SwipeHelper {
     }
 
     private void evaluate(long endTime) {
-        long totalTime = Math.max(1, endTime - gestureStartTime);
+        // Measure velocity from the last finger-join timestamp for multi-touch,
+        // while still using gestureStartTime for single-finger gestures.
+        long refTime = (lastPointerJoinTime > 0) ? lastPointerJoinTime : gestureStartTime;
+        long totalTime = Math.max(1, endTime - refTime);
 
         if (maxPointerCount == 1) {
             PointerInfo p = pointers.size() > 0 ? pointers.valueAt(0) : null;
@@ -126,10 +144,38 @@ public class SwipeHelper {
 
         if (!mMQTTServer.shouldSend()) return;
 
-        if (vertical) {
-            mMQTTServer.publishSwipeEvent(meanDy < 0 ? SWIPE_EVENT_TYPE_TWO_FINGER_UP : SWIPE_EVENT_TYPE_TWO_FINGER_DOWN);
+        String eventUp;
+        String eventDown;
+        String eventLeft;
+        String eventRight;
+
+        if (maxPointerCount >= 5) {
+            eventUp = SWIPE_EVENT_TYPE_FIVE_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT;
+        } else if (maxPointerCount == 4) {
+            eventUp = SWIPE_EVENT_TYPE_FOUR_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT;
+        } else if (maxPointerCount == 3) {
+            eventUp = SWIPE_EVENT_TYPE_THREE_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_THREE_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_THREE_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT;
         } else {
-            mMQTTServer.publishSwipeEvent(meanDx < 0 ? SWIPE_EVENT_TYPE_TWO_FINGER_LEFT : SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT);
+            // maxPointerCount == 2
+            eventUp = SWIPE_EVENT_TYPE_TWO_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_TWO_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_TWO_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT;
+        }
+
+        if (vertical) {
+            mMQTTServer.publishSwipeEvent(meanDy < 0 ? eventUp : eventDown);
+        } else {
+            mMQTTServer.publishSwipeEvent(meanDx < 0 ? eventLeft : eventRight);
         }
     }
 }
