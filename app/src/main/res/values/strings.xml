@@ -3,7 +3,7 @@
 
     <!-- Sync Preferences -->
     <string name="findIPButtonText">Search for HA URL</string>
-    <string name="switchOnSwipeText">Switch on swipe</string>
+    <string name="switchOnSwipeText">Publish swipe events</string>
     <string name="power_button_auto_reboot">Power Button Auto-Reboot (long press)</string>
     <string name="automaticBrightnessText">Automatic Brightness</string>
     <string name="ScreenSaverText">Screen Saver</string>
