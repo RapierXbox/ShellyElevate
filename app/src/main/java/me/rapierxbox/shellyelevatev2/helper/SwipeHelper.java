@@ -57,8 +57,10 @@ public class SwipeHelper {
     }
 
     public boolean onTouchEvent(MotionEvent event) {
+        Log.i(TAG, "onTouchEvent action=" + event.getActionMasked() + " pointers=" + event.getPointerCount());
         if (!mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)) {
             if (BuildConfig.DEBUG) Log.d(TAG, "ignored reason=SP_SWITCH_ON_SWIPE_disabled");
+            Log.i(TAG, "ignored reason=SP_SWITCH_ON_SWIPE_disabled");
             return true;
         }
 
@@ -127,6 +129,8 @@ public class SwipeHelper {
         // while still using gestureStartTime for single-finger gestures.
         long refTime = (lastPointerJoinTime > 0) ? lastPointerJoinTime : gestureStartTime;
         long totalTime = Math.max(1, endTime - refTime);
+        Log.i(TAG, "evaluate totalTimeMs=" + totalTime + " trackedPointers=" + pointers.size()
+            + " maxPointerCount=" + maxPointerCount);
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "evaluate totalTimeMs=" + totalTime + " trackedPointers=" + pointers.size()
                 + " maxPointerCount=" + maxPointerCount);
