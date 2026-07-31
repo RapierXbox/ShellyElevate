@@ -20,6 +20,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGE
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_UP;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.util.Log;
@@ -239,11 +240,13 @@ public class SwipeHelper {
 
         if (vertical) {
             mMQTTServer.publishSwipeEvent(meanDy < 0 ? eventUp : eventDown);
+            if (mScreenSaverManager != null) mScreenSaverManager.onSwipeFired();
             if (BuildConfig.DEBUG) {
                 Log.d(TAG, "multi-finger accepted event=" + (meanDy < 0 ? eventUp : eventDown));
             }
         } else {
             mMQTTServer.publishSwipeEvent(meanDx < 0 ? eventLeft : eventRight);
+            if (mScreenSaverManager != null) mScreenSaverManager.onSwipeFired();
             if (BuildConfig.DEBUG) {
                 Log.d(TAG, "multi-finger accepted event=" + (meanDx < 0 ? eventLeft : eventRight));
             }

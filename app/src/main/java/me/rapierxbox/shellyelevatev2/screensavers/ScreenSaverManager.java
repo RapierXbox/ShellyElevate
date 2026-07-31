@@ -36,6 +36,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
 	private volatile boolean keepAliveFlag = false;
     // Tracks whether the current touch gesture became multi-touch.
     private volatile boolean gestureIsMultiTouch = false;
+    // Set by SwipeHelper when a multi-finger swipe was successfully recognized.
+    private volatile boolean swipeFired = false;
     private long lastProximityWakeTime = 0L;
     private volatile Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
@@ -90,6 +92,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (actionMasked == ACTION_DOWN) {
             // New gesture starts: assume single-touch until a second pointer joins.
             gestureIsMultiTouch = false;
+            swipeFired = false;
             rescheduleIdleCheck();
             // Do not wake on DOWN yet; wait for ACTION_UP so multi-touch gestures
             // can complete while the screensaver remains active.
@@ -103,12 +106,13 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (actionMasked == ACTION_UP) {
             rescheduleIdleCheck();
             if (isScreenSaverRunning()) {
-                if (!gestureIsMultiTouch) {
-                    // Single-finger tap should still wake the screensaver.
+                if (!swipeFired) {
+                    // Wake on taps (single- and multi-touch). Only keep running
+                    // when a swipe was explicitly recognized for this gesture.
                     stopScreenSaver();
                 }
-                // Multi-touch gesture: keep screensaver running intentionally.
             }
+            swipeFired = false;
             gestureIsMultiTouch = false;
         }
 
@@ -116,9 +120,14 @@ public class ScreenSaverManager extends BroadcastReceiver {
             if (isScreenSaverRunning()) {
                 stopScreenSaver();
             }
+            swipeFired = false;
             gestureIsMultiTouch = false;
         }
         return true;
+    }
+
+    public void onSwipeFired() {
+        swipeFired = true;
     }
 
     public boolean isScreenSaverRunning() {
