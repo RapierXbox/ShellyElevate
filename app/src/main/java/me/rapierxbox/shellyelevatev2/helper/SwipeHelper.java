@@ -23,15 +23,10 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
-import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 
-import me.rapierxbox.shellyelevatev2.BuildConfig;
-
 public class SwipeHelper {
-    private static final String TAG = "SwipeHelper";
-
     // Thresholds for "real swipe" vs. accidental drag. Velocity is px / ms;
     // distance is raw pixels, so values are tied to display density.
     public float minVel = 2.5F;
@@ -58,10 +53,7 @@ public class SwipeHelper {
     }
 
     public boolean onTouchEvent(MotionEvent event) {
-        if (!mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)) {
-            if (BuildConfig.DEBUG) Log.d(TAG, "ignored reason=SP_SWITCH_ON_SWIPE_disabled");
-            return true;
-        }
+        if (!mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)) return true;
 
         int actionMasked = event.getActionMasked();
         int actionIndex  = event.getActionIndex();
@@ -72,10 +64,6 @@ public class SwipeHelper {
                 pointers.put(event.getPointerId(0), new PointerInfo(event.getX(), event.getY()));
                 maxPointerCount = 1;
                 gestureStartTime = event.getEventTime();
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "ACTION_DOWN pointerId=" + event.getPointerId(0)
-                            + " x=" + event.getX() + " y=" + event.getY());
-                }
                 break;
 
             case MotionEvent.ACTION_POINTER_DOWN: {
@@ -83,11 +71,6 @@ public class SwipeHelper {
                 pointers.put(pid, new PointerInfo(event.getX(actionIndex), event.getY(actionIndex)));
                 if (event.getPointerCount() > maxPointerCount) maxPointerCount = event.getPointerCount();
                 lastPointerJoinTime = event.getEventTime();
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "ACTION_POINTER_DOWN pid=" + pid
-                            + " pointerCount=" + event.getPointerCount()
-                            + " maxPointerCount=" + maxPointerCount);
-                }
                 break;
             }
 
@@ -95,9 +78,6 @@ public class SwipeHelper {
                 int pid = event.getPointerId(actionIndex);
                 PointerInfo p = pointers.get(pid);
                 if (p != null) { p.endX = event.getX(actionIndex); p.endY = event.getY(actionIndex); }
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "ACTION_POINTER_UP pid=" + pid + " tracked=" + (p != null));
-                }
                 break;
             }
 
@@ -105,17 +85,12 @@ public class SwipeHelper {
                 int pid = event.getPointerId(0);
                 PointerInfo p = pointers.get(pid);
                 if (p != null) { p.endX = event.getX(); p.endY = event.getY(); }
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "ACTION_UP pid=" + pid + " trackedPointers=" + pointers.size()
-                            + " maxPointerCount=" + maxPointerCount);
-                }
                 evaluate(event.getEventTime());
                 clearState();
                 break;
             }
 
             case MotionEvent.ACTION_CANCEL:
-                if (BuildConfig.DEBUG) Log.d(TAG, "ACTION_CANCEL");
                 clearState();
                 break;
         }
@@ -128,39 +103,22 @@ public class SwipeHelper {
         // while still using gestureStartTime for single-finger gestures.
         long refTime = (lastPointerJoinTime > 0) ? lastPointerJoinTime : gestureStartTime;
         long totalTime = Math.max(1, endTime - refTime);
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "evaluate totalTimeMs=" + totalTime + " trackedPointers=" + pointers.size()
-                + " maxPointerCount=" + maxPointerCount);
-        }
 
         if (maxPointerCount == 1) {
             PointerInfo p = pointers.size() > 0 ? pointers.valueAt(0) : null;
-            if (p == null) {
-                if (BuildConfig.DEBUG) Log.d(TAG, "single-finger reject reason=noPointerData");
-                return;
-            }
+            if (p == null) return;
             float deltaY   = Math.abs(p.startY - p.endY);
             float velocity = deltaY / (float) totalTime;
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "single-finger metrics deltaY=" + deltaY + " velocity=" + velocity
-                        + " minDist=" + minDist + " minVel=" + minVel);
-            }
             if (velocity > minVel && deltaY > minDist) {
                 var numRelay = 0;
                 mDeviceHelper.setRelay(numRelay, !mDeviceHelper.getRelay(numRelay));
                 if (mMQTTServer.shouldSend()) mMQTTServer.publishSwipeEvent(SWIPE_EVENT_TYPE_SINGLE);
-                if (BuildConfig.DEBUG) Log.d(TAG, "single-finger accepted relayToggled=true");
-            } else if (BuildConfig.DEBUG) {
-                Log.d(TAG, "single-finger reject reason=threshold velocityOrDistance");
             }
             return;
         }
 
         int count = pointers.size();
-        if (count == 0) {
-            if (BuildConfig.DEBUG) Log.d(TAG, "multi-finger reject reason=noPointers");
-            return;
-        }
+        if (count == 0) return;
 
         float sumDx = 0, sumDy = 0;
         for (int i = 0; i < count; i++) {
@@ -174,37 +132,18 @@ public class SwipeHelper {
         boolean vertical = Math.abs(meanDy) >= Math.abs(meanDx);
         float meanDist   = Math.max(Math.abs(meanDx), Math.abs(meanDy));
         float velocity   = meanDist / (float) totalTime;
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "multi-finger metrics meanDx=" + meanDx + " meanDy=" + meanDy
-                    + " meanDist=" + meanDist + " velocity=" + velocity
-                    + " vertical=" + vertical + " count=" + count);
-        }
 
-        if (velocity <= minVel || meanDist <= minDist) {
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "multi-finger reject reason=threshold velocityOrDistance");
-            }
-            return;
-        }
+        if (velocity <= minVel || meanDist <= minDist) return;
 
         // reject pinch/divergent: every pointer must agree in sign on the dominant axis
         for (int i = 0; i < count; i++) {
             PointerInfo p = pointers.valueAt(i);
             float delta = vertical ? (p.endY - p.startY) : (p.endX - p.startX);
             float mean  = vertical ? meanDy : meanDx;
-            if (Math.signum(delta) != Math.signum(mean)) {
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "multi-finger reject reason=signMismatch pointerIndex=" + i
-                            + " delta=" + delta + " mean=" + mean);
-                }
-                return;
-            }
+            if (Math.signum(delta) != Math.signum(mean)) return;
         }
 
-        if (!mMQTTServer.shouldSend()) {
-            if (BuildConfig.DEBUG) Log.d(TAG, "multi-finger reject reason=mqttDisabled");
-            return;
-        }
+        if (!mMQTTServer.shouldSend()) return;
 
         String eventUp;
         String eventDown;
