@@ -34,6 +34,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private long lastTouchEventTime;
     private volatile boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
+    // Tracks whether the current touch gesture became multi-touch.
+    private volatile boolean gestureIsMultiTouch = false;
     private long lastProximityWakeTime = 0L;
     private volatile Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
@@ -83,14 +85,38 @@ public class ScreenSaverManager extends BroadcastReceiver {
             return true;
         }
 
-        // move events only need the timestamp since onIdleDeadline re-checks it
-        // and reschedules the remainder itself
-        if (event.getAction() == ACTION_DOWN || event.getAction() == ACTION_UP) {
+        int actionMasked = event.getActionMasked();
+
+        if (actionMasked == ACTION_DOWN) {
+            // New gesture starts: assume single-touch until a second pointer joins.
+            gestureIsMultiTouch = false;
             rescheduleIdleCheck();
-            // wake on down so brightness restores as finger lands
+            // Do not wake on DOWN yet; wait for ACTION_UP so multi-touch gestures
+            // can complete while the screensaver remains active.
+        }
+
+        if (actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+            // Second (or more) finger joined this gesture.
+            gestureIsMultiTouch = true;
+        }
+
+        if (actionMasked == ACTION_UP) {
+            rescheduleIdleCheck();
+            if (isScreenSaverRunning()) {
+                if (!gestureIsMultiTouch) {
+                    // Single-finger tap should still wake the screensaver.
+                    stopScreenSaver();
+                }
+                // Multi-touch gesture: keep screensaver running intentionally.
+            }
+            gestureIsMultiTouch = false;
+        }
+
+        if (actionMasked == MotionEvent.ACTION_CANCEL) {
             if (isScreenSaverRunning()) {
                 stopScreenSaver();
             }
+            gestureIsMultiTouch = false;
         }
         return true;
     }
