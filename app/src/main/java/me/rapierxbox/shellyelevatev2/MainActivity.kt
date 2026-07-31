@@ -618,7 +618,6 @@ class MainActivity : ComponentActivity() {
             setOnTouchListener { _, event ->
                 val sm = ShellyElevateApplication.mScreenManager
                 val consumeForWake = sm?.shouldConsumeTouchForWake() == true
-                Log.i("MainActivity", "WebView onTouch action=${event.actionMasked} pointers=${event.pointerCount} consumeForWake=$consumeForWake")
                 if (BuildConfig.DEBUG) Log.d("MainActivity", "Touch event detected on WebView, mScreenManager=$sm, consumeForWake=$consumeForWake")
                 // SwipeHelper is fed exclusively by GestureInterceptLayout.
                 mScreenSaverManager.onTouchEvent(event)
@@ -783,7 +782,6 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("ClickableViewAccessibility")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.i("MainActivity", "onCreate buildType=${BuildConfig.BUILD_TYPE} debug=${BuildConfig.DEBUG} version=${BuildConfig.VERSION_NAME}")
 
         ServiceHelper.ensureKioskService(applicationContext)
 

@@ -30,7 +30,6 @@ class GestureInterceptLayout @JvmOverloads constructor(
     private val downY = SparseArray<Float>()
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
-        Log.i(TAG, "onIntercept action=${ev.actionMasked} pointers=${ev.pointerCount} interceptingBefore=$intercepting")
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 intercepting = false
@@ -67,12 +66,10 @@ class GestureInterceptLayout @JvmOverloads constructor(
         } else if (BuildConfig.DEBUG && ev.actionMasked == MotionEvent.ACTION_MOVE) {
             Log.d(TAG, "Gesture intercepted by parent layout")
         }
-        Log.i(TAG, "onIntercept return intercepting=$intercepting")
         return intercepting
     }
 
     override fun onTouchEvent(ev: MotionEvent): Boolean {
-        Log.i(TAG, "onTouchEvent action=${ev.actionMasked} pointers=${ev.pointerCount} intercepting=$intercepting")
         swipeHelper?.onTouchEvent(ev)
         if (BuildConfig.DEBUG && (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL)) {
             Log.d(TAG, "onTouchEvent end action=${ev.actionMasked} intercepting=$intercepting")
