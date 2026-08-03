@@ -23,10 +23,15 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 
+import me.rapierxbox.shellyelevatev2.BuildConfig;
+
 public class SwipeHelper {
+    private static final String TAG = "SwipeHelper";
+
     // Thresholds for "real swipe" vs. accidental drag. Velocity is px / ms;
     // distance is raw pixels, so values are tied to display density.
     public float minVel = 2.5F;
