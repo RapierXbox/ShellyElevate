@@ -18,6 +18,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGE
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_LEFT;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_UP;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
@@ -34,8 +35,11 @@ public class SwipeHelper {
 
     // Thresholds for "real swipe" vs. accidental drag. Velocity is px / ms;
     // distance is raw pixels, so values are tied to display density.
-    public float minVel = 2.5F;
-    public float minDist = 250.0F;
+    public float minVel = 1.0F; // px/ms = 1000 px/s
+    public float minDist = Math.min(
+        mApplicationContext.getResources().getDisplayMetrics().widthPixels,
+        mApplicationContext.getResources().getDisplayMetrics().heightPixels
+    ) / 3.0F; // px
 
     private final SparseArray<PointerInfo> pointers = new SparseArray<>();
     // tracks across the full gesture; some fingers may have lifted before ACTION_UP
