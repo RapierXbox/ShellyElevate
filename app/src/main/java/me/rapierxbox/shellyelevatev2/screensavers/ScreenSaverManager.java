@@ -9,6 +9,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.MotionEvent;
 
@@ -34,6 +36,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private long lastTouchEventTime;
     private volatile boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private long gestureToken = 0L;
     // Tracks whether the current touch gesture became multi-touch.
     private volatile boolean gestureIsMultiTouch = false;
     // Set by SwipeHelper when a multi-finger swipe was successfully recognized.
@@ -91,6 +95,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
         if (actionMasked == ACTION_DOWN) {
             // New gesture starts: assume single-touch until a second pointer joins.
+            gestureToken++;
             gestureIsMultiTouch = false;
             swipeFired = false;
             rescheduleIdleCheck();
@@ -105,15 +110,19 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
         if (actionMasked == ACTION_UP) {
             rescheduleIdleCheck();
-            if (isScreenSaverRunning()) {
-                if (!swipeFired) {
+            final long tokenAtUp = gestureToken;
+            // Decide tap-vs-swipe at the end of this dispatch turn so SwipeHelper
+            // can still mark onSwipeFired() even if it receives ACTION_UP later.
+            mainHandler.post(() -> {
+                if (tokenAtUp != gestureToken) return;
+                if (isScreenSaverRunning() && !swipeFired) {
                     // Wake on taps (single- and multi-touch). Only keep running
                     // when a swipe was explicitly recognized for this gesture.
                     stopScreenSaver();
                 }
-            }
-            swipeFired = false;
-            gestureIsMultiTouch = false;
+                swipeFired = false;
+                gestureIsMultiTouch = false;
+            });
         }
 
         if (actionMasked == MotionEvent.ACTION_CANCEL) {
