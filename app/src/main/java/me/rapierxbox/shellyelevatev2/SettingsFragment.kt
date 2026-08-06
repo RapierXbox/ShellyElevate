@@ -297,6 +297,7 @@ class SettingsFragment : Fragment() {
             +SwitchPref(binding.mqttHaDiscovery, SP_MQTT_HA_DISCOVERY, true)
 
             +SwitchPref(binding.switchOnSwipe, SP_SWITCH_ON_SWIPE, true)
+            +SwitchPref(binding.publishSwipeEvents, SP_PUBLISH_SWIPE_EVENTS, true)
             +SwitchPref(binding.powerButtonAutoReboot, SP_POWER_BUTTON_AUTO_REBOOT, true)
             +SwitchPref(binding.mediaEnabled, SP_MEDIA_ENABLED, false)
 

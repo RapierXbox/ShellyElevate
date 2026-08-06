@@ -18,6 +18,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGE
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_LEFT;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_UP;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_PUBLISH_SWIPE_EVENTS;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
@@ -62,8 +63,6 @@ public class SwipeHelper {
     }
 
     public boolean onTouchEvent(MotionEvent event) {
-        if (!mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)) return true;
-
         int actionMasked = event.getActionMasked();
         int actionIndex  = event.getActionIndex();
 
@@ -108,6 +107,9 @@ public class SwipeHelper {
     }
 
     private void evaluate(long endTime) {
+        boolean switchOnSwipe = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true);
+        boolean publishSwipeEvents = mSharedPreferences.getBoolean(SP_PUBLISH_SWIPE_EVENTS, true);
+
         // Measure velocity from the last finger-join timestamp for multi-touch,
         // while still using gestureStartTime for single-finger gestures.
         long refTime = (lastPointerJoinTime > 0) ? lastPointerJoinTime : gestureStartTime;
@@ -118,7 +120,7 @@ public class SwipeHelper {
             if (p == null) return;
             float deltaY   = Math.abs(p.startY - p.endY);
             float velocity = deltaY / (float) totalTime;
-            if (velocity > minVel && deltaY > minDist) {
+            if (switchOnSwipe && velocity > minVel && deltaY > minDist) {
                 var numRelay = 0;
                 mDeviceHelper.setRelay(numRelay, !mDeviceHelper.getRelay(numRelay));
                 if (mMQTTServer.shouldSend()) mMQTTServer.publishSwipeEvent(SWIPE_EVENT_TYPE_SINGLE);
@@ -152,7 +154,7 @@ public class SwipeHelper {
             if (Math.signum(delta) != Math.signum(mean)) return;
         }
 
-        if (!mMQTTServer.shouldSend()) return;
+        if (!publishSwipeEvents || !mMQTTServer.shouldSend()) return;
 
         String eventUp;
         String eventDown;
