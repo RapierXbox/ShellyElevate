@@ -5,7 +5,9 @@ import android.util.AttributeSet
 import android.util.SparseArray
 import android.view.MotionEvent
 import android.view.ViewConfiguration
+import android.webkit.WebView
 import androidx.constraintlayout.widget.ConstraintLayout
+import me.rapierxbox.shellyelevatev2.R
 import kotlin.math.abs
 
 class GestureInterceptLayout @JvmOverloads constructor(
@@ -42,6 +44,9 @@ class GestureInterceptLayout @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 if (ev.pointerCount >= 2 && !intercepting) {
                     intercepting = shouldStealGesture(ev)
+                    if (intercepting) {
+                        cancelWebViewTouchStream(ev)
+                    }
                 }
             }
         }
@@ -58,6 +63,18 @@ class GestureInterceptLayout @JvmOverloads constructor(
             intercepting = false
         }
         return true
+    }
+
+    private fun cancelWebViewTouchStream(sourceEvent: MotionEvent) {
+        // Explicitly forward a cancel into the WebView's input pipeline when we steal
+        // the gesture mid-sequence. Android's ViewGroup sends this automatically on
+        // the *next* event, but dispatching it immediately avoids a one-frame gap
+        // where the WebView still considers itself the active touch target.
+        val webView = findViewById<WebView?>(R.id.myWebView) ?: return
+        val cancel = MotionEvent.obtain(sourceEvent)
+        cancel.action = MotionEvent.ACTION_CANCEL
+        webView.dispatchTouchEvent(cancel)
+        cancel.recycle()
     }
 
     private fun shouldStealGesture(ev: MotionEvent): Boolean {
