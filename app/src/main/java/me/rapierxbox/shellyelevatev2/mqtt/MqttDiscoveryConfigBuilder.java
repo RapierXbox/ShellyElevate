@@ -9,6 +9,8 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.Locale;
+
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
@@ -134,6 +136,15 @@ class MqttDiscoveryConfigBuilder {
             sw.put("unique_id", clientId + "_switch" + suffix);
             sw.put("object_id", "shelly_walldisplay_" + clientId + "_switch" + suffix);
             components.put(clientId + "_switch" + suffix, sw);
+
+            // in button mode the input also emits press gestures on button/10x,
+            // mirroring the touch button event entities
+            int mode = prefs.getInt(String.format(Locale.US, SP_SW_INPUT_MODE_FORMAT, num), SW_INPUT_MODE_BUTTON);
+            if (mode == SW_INPUT_MODE_BUTTON) {
+                String eventTopic = parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + (100 + num);
+                String eventId = clientId + "_switch" + suffix + "_events";
+                components.put(eventId, buttonEventConfig(("Switch" + nameTrailer + " Events").trim(), eventTopic, eventId));
+            }
         }
     }
 

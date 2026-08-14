@@ -67,6 +67,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwInputHandler
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.MainActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
@@ -847,9 +848,8 @@ class MainActivity : ComponentActivity() {
                 }
                 return true
             }
-            // 141/142: physical switch inputs, edge-triggered on release.
-            141 -> { if (event.action == KeyEvent.ACTION_UP) switchInput(0, true); return true }
-            142 -> { if (event.action == KeyEvent.ACTION_UP) switchInput(1, true); return true }
+            // 141/142: physical sw inputs, handled centrally so every activity shares one path
+            141, 142 -> { mSwInputHandler?.onKeyEvent(event); return true }
 
             // 131..134: capacitive Shelly buttons 0..3; same press-type handling as power.
             131 -> {
@@ -893,13 +893,6 @@ class MainActivity : ComponentActivity() {
 
             else -> return false
         }
-    }
-
-    private fun switchInput(i: Int, state: Boolean) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            mMQTTServer.publishSwitch(i, state)
-        }
-        mShellyElevateJavascriptInterface.onButtonPressed(100 + i)
     }
 
     private fun toggleMappedRelay(buttonId: Int) {

@@ -6,4 +6,12 @@
         <item>@string/sleep_opt_standard</item>
         <item>@string/sleep_opt_aggressive</item>
     </string-array>
+
+    <!-- order must match the SW_INPUT_MODE_* int constants -->
+    <string-array name="sw_input_modes">
+        <item>@string/sw_input_mode_detached</item>
+        <item>@string/sw_input_mode_button</item>
+        <item>@string/sw_input_mode_switch_edge</item>
+        <item>@string/sw_input_mode_switch_follow</item>
+    </string-array>
 </resources>

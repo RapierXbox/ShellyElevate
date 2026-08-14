@@ -16,6 +16,14 @@ public class Constants {
     public static final String SP_POWER_BUTTON_AUTO_REBOOT = "powerButtonAutoReboot";
     public static final String SP_BUTTON_RELAY_ENABLED = "buttonRelayEnabled";
     public static final String SP_BUTTON_RELAY_MAP_FORMAT = "buttonRelayMap%d";
+    // sw terminal input behavior; mirrors the stock firmware input type setting
+    public static final String SP_SW_INPUT_MODE_FORMAT = "swInputMode%d";
+    public static final String SP_SW_INPUT_RELAY_MAP_FORMAT = "swInputRelayMap%d";
+    public static final String SP_SW_INPUT_INVERT_FORMAT = "swInputInvert%d";
+    public static final int SW_INPUT_MODE_DETACHED = 0;
+    public static final int SW_INPUT_MODE_BUTTON = 1;
+    public static final int SW_INPUT_MODE_SWITCH_EDGE = 2;
+    public static final int SW_INPUT_MODE_SWITCH_FOLLOW = 3;
 
     //Webserver SP Keys
     public static final String SP_HTTP_SERVER_ENABLED = "httpServer";

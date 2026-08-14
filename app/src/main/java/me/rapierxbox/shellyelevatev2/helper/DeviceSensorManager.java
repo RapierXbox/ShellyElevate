@@ -5,6 +5,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.INTENT_LIGHT_UPDATED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_KEY;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwInputHandler;
 
 import android.content.Context;
 import android.content.Intent;
@@ -193,6 +194,12 @@ public class DeviceSensorManager implements SensorEventListener {
     }
 
     private void handleNativeKeyEvent(int keyCode, int action, int repeatCount) {
+        // 87/88 = key_f11/key_f12: rising/falling edge pulses of the sw
+        // terminal; this path stays alive regardless of which activity holds focus
+        if (SwInputHandler.isNativeSwInputCode(keyCode)) {
+            if (mSwInputHandler != null) mSwInputHandler.onNativeKey(keyCode, action);
+            return;
+        }
         // 63 = key_f5 (near), 64 = key_f6 (far)
         if (action == 1) { // down
             if (keyCode == 63) onGpioProximityEvent(true);
@@ -279,7 +286,21 @@ public class DeviceSensorManager implements SensorEventListener {
     // toggle the value back.
     private void handleProximityKeyLine(String line) {
         String normalized = line.toUpperCase(Locale.US);
-        if (!normalized.contains(" DOWN")) {
+        boolean isDown = normalized.contains(" DOWN");
+
+        // f11/f12 are rising/falling edge pulses of the sw terminal; like the
+        // proximity keys, only the pulse's down line carries the transition
+        if (normalized.contains("KEY_F11") || normalized.contains("KEY_F12")) {
+            if (mSwInputHandler != null && isDown) {
+                int code = normalized.contains("KEY_F11")
+                        ? SwInputStateMachine.LINUX_KEY_SW_RISING
+                        : SwInputStateMachine.LINUX_KEY_SW_FALLING;
+                mSwInputHandler.onNativeKey(code, 1);
+            }
+            return;
+        }
+
+        if (!isDown) {
             return;
         }
 
