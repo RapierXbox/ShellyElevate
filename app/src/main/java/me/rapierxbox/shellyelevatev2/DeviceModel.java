@@ -26,9 +26,14 @@ public enum DeviceModel {
             .proximity().powerButton().io(0, 1, 1).panelMinBacklight(5)
             .initRelay("cloud.shelly.maverick.relay1", "cloud.shelly.maverick.relay2")),
     JENNA   (new Config("Jenna",    "Shelly Wall Display X2i", "SAWD-5A1XX10EU0")
-            .proximity().powerButton().io(0, 1, 2).panelMinBacklight(3)
+            .proximity().invertProximity().powerButton().io(0, 1, 2).panelMinBacklight(3)
             .initRelay("cloud.shelly.jenna.relay1", "cloud.shelly.jenna.relay2")
             // event4 is JENNA's proximity gpio_keys node; event5/event7 carry the regular keys.
+            // NOTE: JENNA's proximity sensor reports ~1 cm when an object is detected and 0 cm
+            // when no object is detected, which is the inverse of the standard convention
+            // (small value = near).  The invertProximity flag causes DeviceSensorManager to
+            // mirror the raw value (normalized = max - raw) before broadcasting so all
+            // downstream consumers see the standard near-is-small, far-is-large semantics.
             .inputEvents("/dev/input/event4", "/dev/input/event5", "/dev/input/event7")),
     CALLY   (new Config("Cally",    "Shelly Wall Display XLi", "SAWD-6A1XX10EU0")
             .proximity().powerButton().io(4, 1, 2).panelMinBacklight(3)
@@ -48,6 +53,15 @@ public enum DeviceModel {
     public final int     inputs;
     public final int     relays;
     public final boolean invertRelay;
+    /**
+     * When true the hardware reports proximity with inverted polarity: the raw
+     * sensor value is large when an object is near and small (0) when no object
+     * is detected.  DeviceSensorManager normalizes the raw reading to the
+     * standard convention (0 = near, max = far) before broadcasting so all
+     * downstream consumers (ScreenSaverManager, MQTT, JS interface, HTTP API)
+     * do not need to be aware of the hardware quirk.
+     */
+    public final boolean invertProximity;
     public final String[] initRelayScripts;
     public final String[] inputEventPaths;
     // lowest 0..255 backlight value at which the panel stays lit
@@ -67,6 +81,7 @@ public enum DeviceModel {
         this.inputs             = c.inputs;
         this.relays             = c.relays;
         this.invertRelay        = c.invertRelay;
+        this.invertProximity    = c.invertProximity;
         this.initRelayScripts   = c.initRelayScripts;
         this.inputEventPaths    = c.inputEventPaths;
         this.panelMinBacklight  = c.panelMinBacklight;
@@ -117,7 +132,7 @@ public enum DeviceModel {
 
     static final class Config {
         final String  codename, displayName, sku;
-        boolean hasProximitySensor, hasPowerButton, invertRelay;
+        boolean hasProximitySensor, hasPowerButton, invertRelay, invertProximity;
         double  temperatureOffset, humidityOffset;
         int     buttons, inputs, relays;
         String[] initRelayScripts;
@@ -131,6 +146,7 @@ public enum DeviceModel {
         }
 
         Config proximity()                             { hasProximitySensor = true; return this; }
+        Config invertProximity()                       { invertProximity = true;    return this; }
         Config powerButton()                           { hasPowerButton = true;     return this; }
         Config invertRelay()                           { invertRelay = true;        return this; }
         Config offsets(double temp, double humidity)   { temperatureOffset = temp; humidityOffset = humidity; return this; }
