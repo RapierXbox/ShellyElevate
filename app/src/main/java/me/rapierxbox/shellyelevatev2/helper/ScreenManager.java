@@ -130,6 +130,9 @@ public class ScreenManager extends BroadcastReceiver {
         mDeviceHelper.setScreenOn(on);
         if (!on) {
             applyBrightness(0, "screen off");
+            // X2i uses Android PowerManager for reliable panel blanking in addition to
+            // setting brightness=0 (which remains meaningful for MQTT/UI state).
+            mDeviceHelper.requestAndroidSleep();
         }
     }
 
@@ -331,6 +334,9 @@ public class ScreenManager extends BroadcastReceiver {
                             applyBrightness(0, "screen-off screensaver second write", true);
                         }
                     }, 300L);
+                    // X2i: also request Android PowerManager sleep so the panel actually
+                    // blanks even when brightness=0 alone is not sufficient.
+                    mDeviceHelper.requestAndroidSleep();
                 }
             }
         } else {
@@ -348,6 +354,8 @@ public class ScreenManager extends BroadcastReceiver {
      * 3-second lux-jitter guard fires.
      */
     private synchronized void wakeScreen(String reason) {
+        // X2i uses Android PowerManager to turn the display on before restoring brightness.
+        mDeviceHelper.requestAndroidWake();
         int desiredBrightness = computeDesiredBrightness();
         targetBrightness = desiredBrightness;
         currentBrightness = desiredBrightness;

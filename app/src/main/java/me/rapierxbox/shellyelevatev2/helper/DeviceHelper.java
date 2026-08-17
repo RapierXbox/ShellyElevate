@@ -5,6 +5,8 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicatio
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
+import android.content.Context;
+import android.os.PowerManager;
 import android.provider.Settings;
 import android.util.Log;
 
@@ -13,7 +15,10 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
@@ -44,19 +49,24 @@ public class DeviceHelper {
     private int lastScreenBrightness;
     private final DeviceModel deviceModel;
 
+    // Executor for off-thread shell commands (sleep/wake via root shell fallback)
+    private static final ExecutorService POWER_EXEC = Executors.newSingleThreadExecutor();
+
     private static final String TAG = "DeviceHelper";
 
     public DeviceHelper() {
         this.deviceModel = DeviceModel.getReportedDevice();
-        for (String brightnessFile : screenBrightnessFiles) {
-            if (new File(brightnessFile).exists()) {
-                screenBrightnessFile = brightnessFile;
-                break;
+        if (!deviceModel.usesAndroidBrightness) {
+            for (String brightnessFile : screenBrightnessFiles) {
+                if (new File(brightnessFile).exists()) {
+                    screenBrightnessFile = brightnessFile;
+                    break;
+                }
             }
-        }
-        if (screenBrightnessFile == null) {
-            Log.wtf(TAG, "No brightness file found");
-            screenBrightnessFile = "";
+            if (screenBrightnessFile == null) {
+                Log.wtf(TAG, "No brightness file found");
+                screenBrightnessFile = "";
+            }
         }
     }
 
@@ -92,6 +102,28 @@ public class DeviceHelper {
         brightness = Math.max(0, Math.min(brightness, 255));
         if (BuildConfig.DEBUG) Log.d(TAG, "Set brightness to: " + brightness);
 
+        if (deviceModel.usesAndroidBrightness) {
+            // X2i (JENNA, SKU SAWD-5A1XX10EU0): sysfs backlight node is EACCES; use the
+            // Android Settings.System API instead.  WRITE_SETTINGS is requested in
+            // MainActivity.onCreate; if it is not granted we log and skip.
+            if (!Settings.System.canWrite(mApplicationContext)) {
+                Log.w(TAG, "Cannot set Android screen brightness: WRITE_SETTINGS is not granted");
+                return;
+            }
+            if (!brightnessModeSet) {
+                if (Settings.System.putInt(mApplicationContext.getContentResolver(),
+                        Settings.System.SCREEN_BRIGHTNESS_MODE,
+                        Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)) {
+                    brightnessModeSet = true;
+                }
+            }
+            Settings.System.putInt(
+                    mApplicationContext.getContentResolver(),
+                    Settings.System.SCREEN_BRIGHTNESS,
+                    brightness);
+            return;
+        }
+
         // SELinux denials for the sysfs write are expected and harmless on rooted
         // Shelly devices running permissive mode. WRITE_SETTINGS is requested in
         // MainActivity.onCreate so we can disable Android's automatic brightness.
@@ -108,6 +140,15 @@ public class DeviceHelper {
     }
 
     public int getScreenBrightness() {
+        if (deviceModel.usesAndroidBrightness) {
+            try {
+                return Settings.System.getInt(
+                        mApplicationContext.getContentResolver(),
+                        Settings.System.SCREEN_BRIGHTNESS);
+            } catch (Settings.SettingNotFoundException ignored) {
+                return lastScreenBrightness;
+            }
+        }
         String raw = sanitizeString(readFileContent(screenBrightnessFile));
         if (raw.isEmpty()) return lastScreenBrightness;
         try {
@@ -115,6 +156,98 @@ public class DeviceHelper {
         } catch (NumberFormatException e) {
             return lastScreenBrightness;
         }
+    }
+
+    /**
+     * Requests an Android PowerManager sleep on devices that use the Android power path
+     * (currently X2i / JENNA).  For other devices this is a no-op; sleep is handled by
+     * setting brightness to 0.
+     *
+     * <p>Primary path: reflection call to {@code PowerManager.goToSleep()} which requires the
+     * {@code DEVICE_POWER} permission (granted to system/privileged apps on a rooted device).
+     * Fallback: {@code cmd power sleep} via root shell.
+     */
+    public void requestAndroidSleep() {
+        if (!deviceModel.usesAndroidPowerManager) return;
+        POWER_EXEC.execute(() -> {
+            if (tryPowerManagerSleep()) return;
+            // Fallback: root shell – works on rooted devices even without DEVICE_POWER
+            PrivilegedShell.Result r = PrivilegedShell.runShell("cmd power sleep");
+            if (!r.ok()) {
+                Log.w(TAG, "requestAndroidSleep shell fallback failed: " + r.stderr.trim());
+            } else {
+                Log.i(TAG, "requestAndroidSleep: display off via shell fallback");
+            }
+        });
+    }
+
+    /**
+     * Requests an Android PowerManager wake on devices that use the Android power path
+     * (currently X2i / JENNA).  For other devices this is a no-op.
+     *
+     * <p>A short, auto-releasing {@code FULL_WAKE_LOCK} with {@code ACQUIRE_CAUSES_WAKEUP}
+     * is used to turn on the display.  The lock is released immediately after acquisition
+     * so the app does not permanently hold a wake lock.
+     *
+     * <p>Primary path: reflection call to {@code PowerManager.wakeUp()} (API 20+).
+     * Fallback: {@code input keyevent 26} via root shell (simulate power-button press).
+     */
+    public void requestAndroidWake() {
+        if (!deviceModel.usesAndroidPowerManager) return;
+        POWER_EXEC.execute(() -> {
+            if (tryPowerManagerWake()) return;
+            // Fallback: simulate power-button keyevent via root shell
+            PrivilegedShell.Result r = PrivilegedShell.runShell("input keyevent 26");
+            if (!r.ok()) {
+                Log.w(TAG, "requestAndroidWake shell fallback failed: " + r.stderr.trim());
+            } else {
+                Log.i(TAG, "requestAndroidWake: display on via keyevent fallback");
+            }
+        });
+    }
+
+    /** @return true if PowerManager.goToSleep succeeded */
+    private boolean tryPowerManagerSleep() {
+        try {
+            PowerManager pm = (PowerManager) mApplicationContext.getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return false;
+            Method goToSleep = PowerManager.class.getMethod("goToSleep", long.class);
+            goToSleep.invoke(pm, System.currentTimeMillis());
+            Log.i(TAG, "requestAndroidSleep: display off via PowerManager.goToSleep");
+            return true;
+        } catch (SecurityException e) {
+            Log.w(TAG, "requestAndroidSleep: DEVICE_POWER not granted, using shell fallback: " + e.getMessage());
+        } catch (Exception e) {
+            Log.w(TAG, "requestAndroidSleep: PowerManager.goToSleep unavailable: " + e.getMessage());
+        }
+        return false;
+    }
+
+    /** @return true if PowerManager.wakeUp succeeded */
+    private boolean tryPowerManagerWake() {
+        try {
+            PowerManager pm = (PowerManager) mApplicationContext.getSystemService(Context.POWER_SERVICE);
+            if (pm == null) return false;
+            // wakeUp(long time, String reason) is available from API 20; ACQUIRE_CAUSES_WAKEUP
+            // is used through the PARTIAL_WAKE_LOCK acquire path, so we use the wakeUp API
+            // directly to avoid permanently holding a FULL_WAKE_LOCK.
+            Method wakeUp;
+            try {
+                wakeUp = PowerManager.class.getMethod("wakeUp", long.class, String.class);
+                wakeUp.invoke(pm, System.currentTimeMillis(), "ShellyElevate:X2i:wake");
+            } catch (NoSuchMethodException nsme) {
+                // API < 20 fallback — plain wakeUp(long)
+                wakeUp = PowerManager.class.getMethod("wakeUp", long.class);
+                wakeUp.invoke(pm, System.currentTimeMillis());
+            }
+            Log.i(TAG, "requestAndroidWake: display on via PowerManager.wakeUp");
+            return true;
+        } catch (SecurityException e) {
+            Log.w(TAG, "requestAndroidWake: DEVICE_POWER not granted, using shell fallback: " + e.getMessage());
+        } catch (Exception e) {
+            Log.w(TAG, "requestAndroidWake: PowerManager.wakeUp unavailable: " + e.getMessage());
+        }
+        return false;
     }
 
     public boolean getRelay(int num) {
