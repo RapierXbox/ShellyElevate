@@ -219,7 +219,7 @@ public class DeviceHelper {
             PowerManager pm = (PowerManager) mApplicationContext.getSystemService(Context.POWER_SERVICE);
             if (pm == null) return false;
             Method goToSleep = PowerManager.class.getMethod("goToSleep", long.class);
-            goToSleep.invoke(pm, System.currentTimeMillis());
+            goToSleep.invoke(pm, android.os.SystemClock.uptimeMillis());
             Log.i(TAG, "requestAndroidSleep: display off via PowerManager.goToSleep");
             return true;
         } catch (SecurityException e) {
