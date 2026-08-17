@@ -117,10 +117,11 @@ public class DeviceHelper {
                     brightnessModeSet = true;
                 }
             }
-            Settings.System.putInt(
+            boolean ok = Settings.System.putInt(
                     mApplicationContext.getContentResolver(),
                     Settings.System.SCREEN_BRIGHTNESS,
                     brightness);
+            if (!ok) Log.w(TAG, "Failed to set Android screen brightness via Settings.System");
             return;
         }
 
