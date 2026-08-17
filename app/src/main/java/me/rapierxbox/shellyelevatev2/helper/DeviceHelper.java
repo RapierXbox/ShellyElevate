@@ -186,9 +186,9 @@ public class DeviceHelper {
      * Requests an Android PowerManager wake on devices that use the Android power path
      * (currently X2i / JENNA).  For other devices this is a no-op.
      *
-     * <p>A short, auto-releasing {@code FULL_WAKE_LOCK} with {@code ACQUIRE_CAUSES_WAKEUP}
-     * is used to turn on the display.  The lock is released immediately after acquisition
-     * so the app does not permanently hold a wake lock.
+     * <p>Uses {@code PowerManager.wakeUp()} (via reflection) to turn on the display without
+     * holding a wake lock. If that fails, falls back to a root-shell power-button keyevent.
+     * The app does not retain any wake lock after the call completes.
      *
      * <p>Primary path: reflection call to {@code PowerManager.wakeUp()} (API 20+).
      * Fallback: {@code input keyevent 26} via root shell (simulate power-button press).
