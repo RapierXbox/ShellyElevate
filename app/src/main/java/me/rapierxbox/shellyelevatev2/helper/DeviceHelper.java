@@ -195,9 +195,12 @@ public class DeviceHelper {
      */
     public void requestAndroidWake() {
         if (!deviceModel.usesAndroidPowerManager) return;
+
+        // Try the PowerManager path synchronously so callers can rely on ordering.
+        if (tryPowerManagerWake()) return;
+
+        // Fallback: simulate power-button keyevent via root shell (run off-thread).
         POWER_EXEC.execute(() -> {
-            if (tryPowerManagerWake()) return;
-            // Fallback: simulate power-button keyevent via root shell
             PrivilegedShell.Result r = PrivilegedShell.runShell("input keyevent 26");
             if (!r.ok()) {
                 Log.w(TAG, "requestAndroidWake shell fallback failed: " + r.stderr.trim());
