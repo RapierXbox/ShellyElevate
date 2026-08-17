@@ -170,9 +170,12 @@ public class DeviceHelper {
      */
     public void requestAndroidSleep() {
         if (!deviceModel.usesAndroidPowerManager) return;
+
+        // Try the PowerManager path synchronously so callers can rely on ordering.
+        if (tryPowerManagerSleep()) return;
+
+        // Fallback: root shell – run off-thread to avoid blocking callers.
         POWER_EXEC.execute(() -> {
-            if (tryPowerManagerSleep()) return;
-            // Fallback: root shell – works on rooted devices even without DEVICE_POWER
             PrivilegedShell.Result r = PrivilegedShell.runShell("cmd power sleep");
             if (!r.ok()) {
                 Log.w(TAG, "requestAndroidSleep shell fallback failed: " + r.stderr.trim());
