@@ -18,6 +18,9 @@ public class SwipeHelper {
     // distance is raw pixels, so values are tied to display density.
     public float minVel = 2.5F;
     public float minDist = 250.0F;
+    // Maximum ratio of spread change to mean travel before a 2-finger gesture is
+    // classified as a pinch-to-zoom rather than a swipe.
+    public float pinchSpreadRatioThreshold = 0.25F;
 
     private final SparseArray<PointerInfo> pointers = new SparseArray<>();
     // tracks across the full gesture; some fingers may have lifted before ACTION_UP
@@ -123,7 +126,7 @@ public class SwipeHelper {
             PointerInfo p1 = pointers.valueAt(1);
             float startSpread = (float) Math.hypot(p0.startX - p1.startX, p0.startY - p1.startY);
             float endSpread   = (float) Math.hypot(p0.endX   - p1.endX,   p0.endY   - p1.endY);
-            if (Math.abs(endSpread - startSpread) > 0.25f * meanDist) return;
+            if (Math.abs(endSpread - startSpread) > pinchSpreadRatioThreshold * meanDist) return;
         }
 
         // reject pinch/divergent: every pointer must agree in sign on the dominant axis
