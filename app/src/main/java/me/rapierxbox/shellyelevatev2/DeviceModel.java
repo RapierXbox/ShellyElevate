@@ -27,6 +27,11 @@ public enum DeviceModel {
             .initRelay("cloud.shelly.maverick.relay1", "cloud.shelly.maverick.relay2")),
     JENNA   (new Config("Jenna",    "Shelly Wall Display X2i", "SAWD-5A1XX10EU0")
             .proximity().invertProximity().powerButton().io(0, 1, 2).panelMinBacklight(3)
+            // X2i (SKU SAWD-5A1XX10EU0): direct sysfs writes to the backlight node are denied
+            // with EACCES; brightness is controlled via Android Settings.System instead.
+            // Android PowerManager is used for sleep/wake because keyevent-26 is more reliable
+            // than brightness=0 for actually blanking the panel on this hardware.
+            .androidBrightness().androidPowerManager()
             .initRelay("cloud.shelly.jenna.relay1", "cloud.shelly.jenna.relay2")
             // event4 is JENNA's proximity gpio_keys node; event5/event7 carry the regular keys.
             // NOTE: JENNA's proximity sensor reports ~1 cm when an object is detected and 0 cm
@@ -66,25 +71,39 @@ public enum DeviceModel {
     public final String[] inputEventPaths;
     // lowest 0..255 backlight value at which the panel stays lit
     public final int     panelMinBacklight;
+    /**
+     * When true, brightness is controlled via Android's {@code Settings.System.SCREEN_BRIGHTNESS}
+     * API rather than a direct sysfs write.  Required on devices where the backlight sysfs node
+     * is not accessible to the app (e.g. X2i / JENNA, SKU SAWD-5A1XX10EU0).
+     */
+    public final boolean usesAndroidBrightness;
+    /**
+     * When true, screen sleep and wake are driven through Android's {@code PowerManager}
+     * (or a root shell fallback) rather than relying solely on brightness=0.  Required on
+     * the X2i / JENNA where setting brightness to 0 alone does not reliably blank the panel.
+     */
+    public final boolean usesAndroidPowerManager;
 
     private final String codename;
 
     DeviceModel(Config c) {
-        this.codename           = c.codename;
-        this.displayName        = c.displayName;
-        this.sku                = c.sku;
-        this.hasProximitySensor = c.hasProximitySensor;
-        this.hasPowerButton     = c.hasPowerButton;
-        this.temperatureOffset  = c.temperatureOffset;
-        this.humidityOffset     = c.humidityOffset;
-        this.buttons            = c.buttons;
-        this.inputs             = c.inputs;
-        this.relays             = c.relays;
-        this.invertRelay        = c.invertRelay;
-        this.invertProximity    = c.invertProximity;
-        this.initRelayScripts   = c.initRelayScripts;
-        this.inputEventPaths    = c.inputEventPaths;
-        this.panelMinBacklight  = c.panelMinBacklight;
+        this.codename              = c.codename;
+        this.displayName           = c.displayName;
+        this.sku                   = c.sku;
+        this.hasProximitySensor    = c.hasProximitySensor;
+        this.hasPowerButton        = c.hasPowerButton;
+        this.temperatureOffset     = c.temperatureOffset;
+        this.humidityOffset        = c.humidityOffset;
+        this.buttons               = c.buttons;
+        this.inputs                = c.inputs;
+        this.relays                = c.relays;
+        this.invertRelay           = c.invertRelay;
+        this.invertProximity       = c.invertProximity;
+        this.initRelayScripts      = c.initRelayScripts;
+        this.inputEventPaths       = c.inputEventPaths;
+        this.panelMinBacklight     = c.panelMinBacklight;
+        this.usesAndroidBrightness = c.usesAndroidBrightness;
+        this.usesAndroidPowerManager = c.usesAndroidPowerManager;
     }
 
     public boolean usesInitScriptRelay() {
@@ -133,6 +152,7 @@ public enum DeviceModel {
     static final class Config {
         final String  codename, displayName, sku;
         boolean hasProximitySensor, hasPowerButton, invertRelay, invertProximity;
+        boolean usesAndroidBrightness, usesAndroidPowerManager;
         double  temperatureOffset, humidityOffset;
         int     buttons, inputs, relays;
         String[] initRelayScripts;
@@ -154,5 +174,7 @@ public enum DeviceModel {
         Config initRelay(String... scripts)            { this.initRelayScripts = scripts; return this; }
         Config inputEvents(String... paths)            { this.inputEventPaths = paths;    return this; }
         Config panelMinBacklight(int v)                { this.panelMinBacklight = v;      return this; }
+        Config androidBrightness()                     { this.usesAndroidBrightness = true;     return this; }
+        Config androidPowerManager()                   { this.usesAndroidPowerManager = true;   return this; }
     }
 }
