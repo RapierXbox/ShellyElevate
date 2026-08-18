@@ -33,6 +33,7 @@ import me.rapierxbox.shellyelevatev2.BuildConfig;
 
 public class SwipeHelper {
     private static final String TAG = "SwipeHelper";
+    private static final float PINCH_SPREAD_RATIO_THRESHOLD = 0.35F;
 
     // Thresholds for "real swipe" vs. accidental drag. Velocity is px / ms;
     // distance is raw pixels, so values are tied to display density.
@@ -147,12 +148,13 @@ public class SwipeHelper {
         if (velocity <= minVel || meanDist <= minDist) return;
 
         // reject pinch/spread: if the inter-pointer distance changed by more than
-        // pinchSpreadRatioThreshold × meanDist, treat it as pinch-to-zoom (not a swipe)
+        // PINCH_SPREAD_RATIO_THRESHOLD × meanDist, treat it as pinch-to-zoom (not a swipe)
         if (count == 2) {
+            PointerInfo p0 = pointers.valueAt(0);
             PointerInfo p1 = pointers.valueAt(1);
             float startSpread = (float) Math.hypot(p0.startX - p1.startX, p0.startY - p1.startY);
             float endSpread   = (float) Math.hypot(p0.endX   - p1.endX,   p0.endY   - p1.endY);
-            if (Math.abs(endSpread - startSpread) > pinchSpreadRatioThreshold * meanDist) return;
+            if (Math.abs(endSpread - startSpread) > PINCH_SPREAD_RATIO_THRESHOLD * meanDist) return;
         }
 
         // reject pinch/divergent: every pointer must agree in sign on the dominant axis
