@@ -151,11 +151,23 @@ class MqttDiscoveryConfigBuilder {
         swipe.put("state_topic", parseTopic(MQTT_TOPIC_SWIPE_EVENT));
         swipe.put("device_class", "button");
         swipe.put("event_types", new JSONArray()
-                .put(SWIPE_EVENT_TYPE_SINGLE)
-                .put(SWIPE_EVENT_TYPE_TWO_FINGER_UP)
-                .put(SWIPE_EVENT_TYPE_TWO_FINGER_DOWN)
-                .put(SWIPE_EVENT_TYPE_TWO_FINGER_LEFT)
-                .put(SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT));
+            .put(SWIPE_EVENT_TYPE_SINGLE)
+            .put(SWIPE_EVENT_TYPE_TWO_FINGER_UP)
+            .put(SWIPE_EVENT_TYPE_TWO_FINGER_DOWN)
+            .put(SWIPE_EVENT_TYPE_TWO_FINGER_LEFT)
+            .put(SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT)
+            .put(SWIPE_EVENT_TYPE_THREE_FINGER_UP)
+            .put(SWIPE_EVENT_TYPE_THREE_FINGER_DOWN)
+            .put(SWIPE_EVENT_TYPE_THREE_FINGER_LEFT)
+            .put(SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT)
+            .put(SWIPE_EVENT_TYPE_FOUR_FINGER_UP)
+            .put(SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN)
+            .put(SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT)
+            .put(SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT)
+            .put(SWIPE_EVENT_TYPE_FIVE_FINGER_UP)
+            .put(SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN)
+            .put(SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT)
+            .put(SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT));
         swipe.put("unique_id", clientId + "_swipe_event");
         swipe.put("object_id", "shelly_walldisplay_" + clientId + "_swipe_event");
         components.put(clientId + "_swipe_event", swipe);

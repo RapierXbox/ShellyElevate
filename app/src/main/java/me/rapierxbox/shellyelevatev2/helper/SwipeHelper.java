@@ -1,31 +1,52 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FIVE_FINGER_UP;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_FOUR_FINGER_UP;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_SINGLE;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_DOWN;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_LEFT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT;
+import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_THREE_FINGER_UP;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_DOWN;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_LEFT;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT;
 import static me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_UP;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_PUBLISH_SWIPE_EVENTS;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 
+import me.rapierxbox.shellyelevatev2.BuildConfig;
+
 public class SwipeHelper {
+    private static final String TAG = "SwipeHelper";
+
     // Thresholds for "real swipe" vs. accidental drag. Velocity is px / ms;
     // distance is raw pixels, so values are tied to display density.
-    public float minVel = 2.5F;
-    public float minDist = 250.0F;
-    // Maximum ratio of spread change to mean travel before a 2-finger gesture is
-    // classified as a pinch-to-zoom rather than a swipe.
-    public float pinchSpreadRatioThreshold = 0.25F;
+    public float minVel = 1.0F; // px/ms = 1000 px/s
+    public float minDist = Math.min(
+        mApplicationContext.getResources().getDisplayMetrics().widthPixels,
+        mApplicationContext.getResources().getDisplayMetrics().heightPixels
+    ) / 3.0F; // px
 
     private final SparseArray<PointerInfo> pointers = new SparseArray<>();
     // tracks across the full gesture; some fingers may have lifted before ACTION_UP
     private int maxPointerCount = 0;
     private long gestureStartTime = 0;
+    private long lastPointerJoinTime = 0;
 
     private static class PointerInfo {
         float startX, startY, endX, endY;
@@ -38,11 +59,10 @@ public class SwipeHelper {
         pointers.clear();
         maxPointerCount = 0;
         gestureStartTime = 0;
+        lastPointerJoinTime = 0;
     }
 
     public boolean onTouchEvent(MotionEvent event) {
-        if (!mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)) return true;
-
         int actionMasked = event.getActionMasked();
         int actionIndex  = event.getActionIndex();
 
@@ -58,6 +78,7 @@ public class SwipeHelper {
                 int pid = event.getPointerId(actionIndex);
                 pointers.put(pid, new PointerInfo(event.getX(actionIndex), event.getY(actionIndex)));
                 if (event.getPointerCount() > maxPointerCount) maxPointerCount = event.getPointerCount();
+                lastPointerJoinTime = event.getEventTime();
                 break;
             }
 
@@ -86,14 +107,20 @@ public class SwipeHelper {
     }
 
     private void evaluate(long endTime) {
-        long totalTime = Math.max(1, endTime - gestureStartTime);
+        boolean switchOnSwipe = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true);
+        boolean publishSwipeEvents = mSharedPreferences.getBoolean(SP_PUBLISH_SWIPE_EVENTS, true);
+
+        // Measure velocity from the last finger-join timestamp for multi-touch,
+        // while still using gestureStartTime for single-finger gestures.
+        long refTime = (lastPointerJoinTime > 0) ? lastPointerJoinTime : gestureStartTime;
+        long totalTime = Math.max(1, endTime - refTime);
 
         if (maxPointerCount == 1) {
             PointerInfo p = pointers.size() > 0 ? pointers.valueAt(0) : null;
             if (p == null) return;
             float deltaY   = Math.abs(p.startY - p.endY);
             float velocity = deltaY / (float) totalTime;
-            if (velocity > minVel && deltaY > minDist) {
+            if (switchOnSwipe && velocity > minVel && deltaY > minDist) {
                 var numRelay = 0;
                 mDeviceHelper.setRelay(numRelay, !mDeviceHelper.getRelay(numRelay));
                 if (mMQTTServer.shouldSend()) mMQTTServer.publishSwipeEvent(SWIPE_EVENT_TYPE_SINGLE);
@@ -136,12 +163,48 @@ public class SwipeHelper {
             if (Math.signum(delta) != Math.signum(mean)) return;
         }
 
-        if (!mMQTTServer.shouldSend()) return;
+        if (!publishSwipeEvents || !mMQTTServer.shouldSend()) return;
+
+        String eventUp;
+        String eventDown;
+        String eventLeft;
+        String eventRight;
+
+        if (maxPointerCount >= 5) {
+            eventUp = SWIPE_EVENT_TYPE_FIVE_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT;
+        } else if (maxPointerCount == 4) {
+            eventUp = SWIPE_EVENT_TYPE_FOUR_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT;
+        } else if (maxPointerCount == 3) {
+            eventUp = SWIPE_EVENT_TYPE_THREE_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_THREE_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_THREE_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT;
+        } else {
+            // maxPointerCount == 2
+            eventUp = SWIPE_EVENT_TYPE_TWO_FINGER_UP;
+            eventDown = SWIPE_EVENT_TYPE_TWO_FINGER_DOWN;
+            eventLeft = SWIPE_EVENT_TYPE_TWO_FINGER_LEFT;
+            eventRight = SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT;
+        }
 
         if (vertical) {
-            mMQTTServer.publishSwipeEvent(meanDy < 0 ? SWIPE_EVENT_TYPE_TWO_FINGER_UP : SWIPE_EVENT_TYPE_TWO_FINGER_DOWN);
+            mMQTTServer.publishSwipeEvent(meanDy < 0 ? eventUp : eventDown);
+            if (mScreenSaverManager != null) mScreenSaverManager.onSwipeFired();
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "multi-finger accepted event=" + (meanDy < 0 ? eventUp : eventDown));
+            }
         } else {
-            mMQTTServer.publishSwipeEvent(meanDx < 0 ? SWIPE_EVENT_TYPE_TWO_FINGER_LEFT : SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT);
+            mMQTTServer.publishSwipeEvent(meanDx < 0 ? eventLeft : eventRight);
+            if (mScreenSaverManager != null) mScreenSaverManager.onSwipeFired();
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "multi-finger accepted event=" + (meanDx < 0 ? eventLeft : eventRight));
+            }
         }
     }
 }

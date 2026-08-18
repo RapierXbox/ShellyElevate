@@ -13,6 +13,7 @@ public class Constants {
 
     //IO SP Keys
     public static final String SP_SWITCH_ON_SWIPE = "switchOnSwipe";
+    public static final String SP_PUBLISH_SWIPE_EVENTS = "publishSwipeEvents";
     public static final String SP_POWER_BUTTON_AUTO_REBOOT = "powerButtonAutoReboot";
     public static final String SP_BUTTON_RELAY_ENABLED = "buttonRelayEnabled";
     public static final String SP_BUTTON_RELAY_MAP_FORMAT = "buttonRelayMap%d";
@@ -193,6 +194,18 @@ public class Constants {
     public static final String SWIPE_EVENT_TYPE_TWO_FINGER_DOWN     = "two_finger_swipe_down";
     public static final String SWIPE_EVENT_TYPE_TWO_FINGER_LEFT     = "two_finger_swipe_left";
     public static final String SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT    = "two_finger_swipe_right";
+    public static final String SWIPE_EVENT_TYPE_THREE_FINGER_UP     = "three_finger_swipe_up";
+    public static final String SWIPE_EVENT_TYPE_THREE_FINGER_DOWN   = "three_finger_swipe_down";
+    public static final String SWIPE_EVENT_TYPE_THREE_FINGER_LEFT   = "three_finger_swipe_left";
+    public static final String SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT  = "three_finger_swipe_right";
+    public static final String SWIPE_EVENT_TYPE_FOUR_FINGER_UP      = "four_finger_swipe_up";
+    public static final String SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN    = "four_finger_swipe_down";
+    public static final String SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT    = "four_finger_swipe_left";
+    public static final String SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT   = "four_finger_swipe_right";
+    public static final String SWIPE_EVENT_TYPE_FIVE_FINGER_UP      = "five_finger_swipe_up";
+    public static final String SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN    = "five_finger_swipe_down";
+    public static final String SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT    = "five_finger_swipe_left";
+    public static final String SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT   = "five_finger_swipe_right";
 
     //Dimmer MQTT Topics
     public static final String MQTT_TOPIC_DIMMER_STATE   = "shellyelevatev2/%s/dimmer";

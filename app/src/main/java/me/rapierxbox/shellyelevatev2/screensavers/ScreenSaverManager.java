@@ -9,6 +9,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 import android.view.MotionEvent;
 
@@ -34,6 +36,12 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private long lastTouchEventTime;
     private volatile boolean screenSaverRunning;
 	private volatile boolean keepAliveFlag = false;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private long gestureToken = 0L;
+    // Tracks whether the current touch gesture became multi-touch.
+    private volatile boolean gestureIsMultiTouch = false;
+    // Set by SwipeHelper when a multi-finger swipe was successfully recognized.
+    private volatile boolean swipeFired = false;
     private long lastProximityWakeTime = 0L;
     private volatile Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
@@ -83,16 +91,52 @@ public class ScreenSaverManager extends BroadcastReceiver {
             return true;
         }
 
-        // move events only need the timestamp since onIdleDeadline re-checks it
-        // and reschedules the remainder itself
-        if (event.getAction() == ACTION_DOWN || event.getAction() == ACTION_UP) {
+        int actionMasked = event.getActionMasked();
+
+        if (actionMasked == ACTION_DOWN) {
+            // New gesture starts: assume single-touch until a second pointer joins.
+            gestureToken++;
+            gestureIsMultiTouch = false;
+            swipeFired = false;
             rescheduleIdleCheck();
-            // wake on down so brightness restores as finger lands
+            // Do not wake on DOWN yet; wait for ACTION_UP so multi-touch gestures
+            // can complete while the screensaver remains active.
+        }
+
+        if (actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
+            // Second (or more) finger joined this gesture.
+            gestureIsMultiTouch = true;
+        }
+
+        if (actionMasked == ACTION_UP) {
+            rescheduleIdleCheck();
+            final long tokenAtUp = gestureToken;
+            // Decide tap-vs-swipe at the end of this dispatch turn so SwipeHelper
+            // can still mark onSwipeFired() even if it receives ACTION_UP later.
+            mainHandler.post(() -> {
+                if (tokenAtUp != gestureToken) return;
+                if (isScreenSaverRunning() && !swipeFired) {
+                    // Wake on taps (single- and multi-touch). Only keep running
+                    // when a swipe was explicitly recognized for this gesture.
+                    stopScreenSaver();
+                }
+                swipeFired = false;
+                gestureIsMultiTouch = false;
+            });
+        }
+
+        if (actionMasked == MotionEvent.ACTION_CANCEL) {
             if (isScreenSaverRunning()) {
                 stopScreenSaver();
             }
+            swipeFired = false;
+            gestureIsMultiTouch = false;
         }
         return true;
+    }
+
+    public void onSwipeFired() {
+        swipeFired = true;
     }
 
     public boolean isScreenSaverRunning() {
