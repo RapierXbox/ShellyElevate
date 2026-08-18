@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import android.view.Menu
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -40,6 +41,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwInputHandler
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.SettingsActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
@@ -70,4 +72,8 @@ class SettingsActivity : AppCompatActivity() {
         onBackPressedDispatcher.onBackPressed()
         return true
     }
+
+    // sw terminal edges must keep working while the settings screen holds focus
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        (mSwInputHandler?.onKeyEvent(event) == true) || super.dispatchKeyEvent(event)
 }

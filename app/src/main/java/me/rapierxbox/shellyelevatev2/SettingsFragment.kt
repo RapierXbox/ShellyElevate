@@ -123,6 +123,7 @@ class SettingsFragment : Fragment() {
 
         binding.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
         binding.sleepOptimizationLevel.adapter = getSleepOptimizationSpinnerAdapter()
+        binding.swInputMode.adapter = getSwInputModeSpinnerAdapter()
 
         buildBinder()
         binder.loadAll()
@@ -271,6 +272,7 @@ class SettingsFragment : Fragment() {
         hasProximitySensor = device.hasProximitySensor
         val defaultClientId = "shellyelevate-" + UUID.randomUUID().toString().replace("-".toRegex(), "").substring(2, 6)
         val hasButtonRelayCapability = device.buttons > 0 && device.relays > 0
+        val hasSwInput = device.inputs > 0
 
         binder = SettingsBinder(mSharedPreferences).apply {
             +SwitchPref(binding.liteMode, SP_LITE_MODE, false)
@@ -300,6 +302,12 @@ class SettingsFragment : Fragment() {
             +SwitchPref(binding.publishSwipeEvents, SP_PUBLISH_SWIPE_EVENTS, true)
             +SwitchPref(binding.powerButtonAutoReboot, SP_POWER_BUTTON_AUTO_REBOOT, true)
             +SwitchPref(binding.mediaEnabled, SP_MEDIA_ENABLED, false)
+
+            if (hasSwInput) {
+                // ui edits input 0; every current model has at most one sw input
+                +SpinnerPref(binding.swInputMode, String.format(Locale.US, SP_SW_INPUT_MODE_FORMAT, 0), SW_INPUT_MODE_BUTTON)
+                +SwitchPref(binding.swInputInvert, String.format(Locale.US, SP_SW_INPUT_INVERT_FORMAT, 0), false)
+            }
 
             +SwitchPref(binding.automaticBrightness, SP_AUTOMATIC_BRIGHTNESS, true)
             visibleWhenNot(binding.automaticBrightness, binding.brightnessSettingLayout)
@@ -356,6 +364,36 @@ class SettingsFragment : Fragment() {
         } else {
             binding.buttonRelayMappingLayout.isVisible = false
         }
+
+        binding.swInputModeLayout.isVisible = hasSwInput
+        binding.swInputInvert.isVisible = hasSwInput
+        binding.swInputModeHint.isVisible = hasSwInput
+        if (hasSwInput) {
+            setupSwInputRelaySpinner(device.relays)
+        } else {
+            binding.swInputRelayLayout.isVisible = false
+        }
+    }
+
+    private fun setupSwInputRelaySpinner(relayCount: Int) {
+        val options = mutableListOf(getString(R.string.button_relay_none))
+        for (i in 0 until relayCount) options.add(getString(R.string.button_relay_relay_label, i))
+        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, options)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.swInputRelay.adapter = adapter
+        // Stored value: -1 = None (position 0), 0 = Relay 0 (position 1), etc.
+        val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), 0)
+        binding.swInputRelay.setSelection((storedRelay + 1).coerceIn(0, options.size - 1))
+
+        // the relay row only applies while the input actually drives a relay
+        binding.swInputMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                binding.swInputRelayLayout.isVisible = relayCount > 0 && position != SW_INPUT_MODE_DETACHED
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        val storedMode = mSharedPreferences.getInt(String.format(Locale.US, SP_SW_INPUT_MODE_FORMAT, 0), SW_INPUT_MODE_BUTTON)
+        binding.swInputRelayLayout.isVisible = relayCount > 0 && storedMode != SW_INPUT_MODE_DETACHED
     }
 
     private fun loadInlineValues() {
@@ -766,6 +804,11 @@ class SettingsFragment : Fragment() {
                 for (i in 0 until device.buttons.coerceAtMost(4))
                     putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), spinners[i].selectedItemPosition - 1)
             }
+
+            // SW input relay target; spinner position 0 = None = -1
+            if (device.inputs > 0) {
+                putInt(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), binding.swInputRelay.selectedItemPosition - 1)
+            }
         }
 
         // http server lifecycle is owned by the application settings receiver
@@ -788,6 +831,13 @@ class SettingsFragment : Fragment() {
     fun getSleepOptimizationSpinnerAdapter(): ArrayAdapter<CharSequence> {
         val ctx = ShellyElevateApplication.mApplicationContext
         val adapter = ArrayAdapter.createFromResource(ctx, R.array.sleep_optimization_levels, android.R.layout.simple_spinner_item)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        return adapter
+    }
+
+    fun getSwInputModeSpinnerAdapter(): ArrayAdapter<CharSequence> {
+        val ctx = ShellyElevateApplication.mApplicationContext
+        val adapter = ArrayAdapter.createFromResource(ctx, R.array.sw_input_modes, android.R.layout.simple_spinner_item)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         return adapter
     }

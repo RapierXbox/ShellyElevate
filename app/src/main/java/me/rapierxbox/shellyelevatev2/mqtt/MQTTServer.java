@@ -367,6 +367,14 @@ public class MQTTServer {
                     for (int num = 0; num < DeviceModel.getReportedDevice().relays; num++) {
                         publishRelay(num, mDeviceHelper.getRelay(num));
                     }
+                    // re-sync the input binary_sensors after a reconnect; the level
+                    // stays unknown until the first edge after app start
+                    if (mSwInputHandler != null) {
+                        for (int num = 0; num < DeviceModel.getReportedDevice().inputs; num++) {
+                            Boolean level = mSwInputHandler.getLevel(num);
+                            if (level != null) publishSwitch(num, level);
+                        }
+                    }
                 }, 100, TimeUnit.MILLISECONDS);
 
                 scheduler.schedule(() -> {

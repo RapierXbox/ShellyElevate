@@ -10,6 +10,7 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelpe
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mNightModeManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwInputHandler;
 
 import android.content.Intent;
 import android.content.pm.PackageInfo;
@@ -290,6 +291,20 @@ public class HttpServer extends NanoHTTPD {
 
                     jsonResponse.put("success", true);
                     jsonResponse.put("state", mDeviceHelper.getRelay(num));
+                } else {
+                    jsonResponse.put("success", false);
+                    jsonResponse.put("error", "Invalid request method");
+                }
+                break;
+            case "input":
+                if (method.equals(Method.GET)) {
+                    int num = GetNumParameter(session.getParameters(), 0);
+                    if (num == -999 || num < 0 || num >= device.inputs) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
+                    Boolean level = mSwInputHandler != null ? mSwInputHandler.getLevel(num) : null;
+                    jsonResponse.put("success", true);
+                    // state stays null until the first edge after app start
+                    jsonResponse.put("state", level == null ? JSONObject.NULL : level);
+                    jsonResponse.put("mode", mSwInputHandler != null ? mSwInputHandler.getMode(num) : 0);
                 } else {
                     jsonResponse.put("success", false);
                     jsonResponse.put("error", "Invalid request method");
