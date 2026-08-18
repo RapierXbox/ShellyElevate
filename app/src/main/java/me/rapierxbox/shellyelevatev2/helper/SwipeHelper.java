@@ -146,6 +146,15 @@ public class SwipeHelper {
 
         if (velocity <= minVel || meanDist <= minDist) return;
 
+        // reject pinch/spread: if the inter-pointer distance changed by more than
+        // pinchSpreadRatioThreshold × meanDist, treat it as pinch-to-zoom (not a swipe)
+        if (count == 2) {
+            PointerInfo p1 = pointers.valueAt(1);
+            float startSpread = (float) Math.hypot(p0.startX - p1.startX, p0.startY - p1.startY);
+            float endSpread   = (float) Math.hypot(p0.endX   - p1.endX,   p0.endY   - p1.endY);
+            if (Math.abs(endSpread - startSpread) > pinchSpreadRatioThreshold * meanDist) return;
+        }
+
         // reject pinch/divergent: every pointer must agree in sign on the dominant axis
         for (int i = 0; i < count; i++) {
             PointerInfo p = pointers.valueAt(i);

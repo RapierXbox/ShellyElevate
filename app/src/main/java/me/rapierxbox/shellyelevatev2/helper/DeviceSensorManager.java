@@ -54,6 +54,8 @@ public class DeviceSensorManager implements SensorEventListener {
     private volatile boolean gpioProximityConfirmed = false;
     private volatile boolean sensorManagerProximitySuppressed = false;
     private final String[] inputEventPaths;
+    /** True when the hardware reports large values when near and 0 when far (e.g. JENNA/X2i). */
+    private final boolean invertProximity;
     private InputMonitor mInputMonitor;
     private ExecutorService proximityFallbackExecutor;
     private volatile Process proximityFallbackProcess;
@@ -74,12 +76,15 @@ public class DeviceSensorManager implements SensorEventListener {
             sensorManager.registerListener(this, lightSensor, SensorManager.SENSOR_DELAY_NORMAL);
         }
 
-        inputEventPaths = DeviceModel.getReportedDevice().getInputEventPaths();
+        DeviceModel model = DeviceModel.getReportedDevice();
+        inputEventPaths = model.getInputEventPaths();
+        invertProximity = model.invertProximity;
 
         proximitySensor = sensorManager.getDefaultSensor(Sensor.TYPE_PROXIMITY);
         if (proximitySensor != null) {
-            sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
             fallbackProximityMaxRange = proximitySensor.getMaximumRange();
+            maxProximitySensorValue = fallbackProximityMaxRange;
+            sensorManager.registerListener(this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
             Log.i(TAG, "SensorManager proximity sensor registered (max range " + fallbackProximityMaxRange + ")");
         }
 
@@ -170,7 +175,11 @@ public class DeviceSensorManager implements SensorEventListener {
             }
         } else if (event.sensor.getType() == Sensor.TYPE_PROXIMITY) {
             if (sensorManagerProximitySuppressed) return;
-            lastMeasuredDistance = event.values[0];
+            float raw = event.values[0];
+            // Normalize to the standard convention where 0 = near and max = far.
+            // JENNA (X2i) hardware reports the opposite polarity (large value when
+            // near, 0 when far), indicated by the invertProximity flag.
+            lastMeasuredDistance = invertProximity ? (maxProximitySensorValue - raw) : raw;
             publishProximity(lastMeasuredDistance);
         }
     }
