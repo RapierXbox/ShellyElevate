@@ -40,7 +40,8 @@ public enum DeviceModel {
             // mirror the raw value (normalized = max - raw) before broadcasting so all
             // downstream consumers see the standard near-is-small, far-is-large semantics.
             .inputEvents("/dev/input/event4", "/dev/input/event5", "/dev/input/event7")),
-    CALLY   (new Config("Cally",    "Shelly Wall Display XLi", "SAWD-6A1XX10EU0")
+    // SAWD-6A1XX10EU0 is the Wall Display X1i per the official knowledge base
+    CALLY   (new Config("Cally",    "Shelly Wall Display X1i", "SAWD-6A1XX10EU0")
             .proximity().powerButton().io(4, 1, 2).panelMinBacklight(3)
             .initRelay("cloud.shelly.cally.relay1", "cloud.shelly.cally.relay2")
             .inputEvents("/dev/input/event3", "/dev/input/event5")),

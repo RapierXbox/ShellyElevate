@@ -13,6 +13,7 @@ https://github.com/user-attachments/assets/adf46edd-9bf1-45da-b553-bf7781d17fbd
 - MQTT with full Home Assistant auto-discovery (temperature, humidity, light, proximity, relays, inputs, buttons, swipe events, screen brightness and night mode control) — and entities now go `unavailable` in HA when the display drops off the network
 - A REST API on port 8080 for everything the device can do
 - A JavaScript bridge so your dashboard can read sensors and flip relays without going through HA
+- External wall switches and push-buttons on the SW terminal work like stock: Button/Switch input modes with local relay control ([details](docs/sw-input.md))
 - Auto-brightness from the light sensor, screensavers, wake-on-proximity
 - In-app updates for both the app and the WebView, with optional self-install as a system app so updates don't need a cable
 - ADB over Wi-Fi you can toggle from settings, handy once the display is on the wall with no USB reachable

@@ -28,6 +28,7 @@ import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.NightModeManager;
 import me.rapierxbox.shellyelevatev2.helper.PowerOptimizer;
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager;
+import me.rapierxbox.shellyelevatev2.helper.SwInputHandler;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
@@ -42,6 +43,7 @@ public class ShellyElevateApplication extends Application {
     public static HttpServer mHttpServer;
 
     public static DeviceHelper mDeviceHelper;
+    public static SwInputHandler mSwInputHandler;
     public static DeviceSensorManager mDeviceSensorManager;
     public static SwipeHelper mSwipeHelper;
     public static ShellyElevateJavascriptInterface mShellyElevateJavascriptInterface;
@@ -105,6 +107,8 @@ public class ShellyElevateApplication extends Application {
             Log.i("ShellyElevateApplication", "Device: " + deviceModel.sku);
 
             mDeviceHelper = new DeviceHelper();
+            // built before DeviceSensorManager so native input events never hit a null handler
+            mSwInputHandler = new SwInputHandler();
             StesProtocolHandler.init();
             mScreenSaverManager = new ScreenSaverManager(this);
             mScreenManager = new ScreenManager(this);
@@ -264,6 +268,7 @@ public class ShellyElevateApplication extends Application {
     public void onTerminate() {
         mHttpServer.onDestroy();
         mDeviceSensorManager.onDestroy();
+        if (mSwInputHandler != null) mSwInputHandler.onDestroy();
 
         mScreenSaverManager.stopScreenSaver();
         mScreenSaverManager.onDestroy();

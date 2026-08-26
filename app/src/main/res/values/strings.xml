@@ -112,6 +112,14 @@
     <string name="button_relay_button_label">Button %1$d</string>
     <string name="button_relay_none">None</string>
     <string name="button_relay_relay_label">Relay %1$d</string>
+    <string name="sw_input_mode_title">External switch input (SW)</string>
+    <string name="sw_input_mode_hint">Behavior of the SW terminal on the mounting base. Button toggles the relay on each press, the switch modes react to the contact position, detached only reports to MQTT/JS.</string>
+    <string name="sw_input_mode_detached">Detached (report only)</string>
+    <string name="sw_input_mode_button">Button: press toggles relay</string>
+    <string name="sw_input_mode_switch_edge">Switch: every flip toggles relay</string>
+    <string name="sw_input_mode_switch_follow">Switch: relay follows position</string>
+    <string name="sw_input_relay_title">Controlled relay</string>
+    <string name="sw_input_invert">Invert input</string>
     <string name="bt_proxy_enabled">Bluetooth Proxy (ESPHome API)</string>
     <string name="bt_proxy_name">Device Name</string>
     <string name="bt_proxy_name_hint">ShellyElevate</string>

@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Bundle
 import android.util.Log
+import android.view.KeyEvent
 import androidx.core.view.isVisible
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_END_SCREENSAVER
@@ -78,4 +79,8 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(mEndScreenSaverReciever)
         binding = null
     }
+
+    // sw terminal edges must keep working while the screensaver holds focus
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean =
+        (ShellyElevateApplication.mSwInputHandler?.onKeyEvent(event) == true) || super.dispatchKeyEvent(event)
 }
