@@ -52,6 +52,32 @@ Bug reports and PRs are welcome. If you're sending a PR, test on actual hardware
 
 For issues, the [issue tracker](https://github.com/RapierXbox/ShellyElevate/issues) is the right place. If you're stuck on setup, check [Troubleshooting](https://github.com/RapierXbox/ShellyElevate/wiki/Troubleshooting) first. Most setup problems are covered there.
 
+### Reporting a bug
+
+Use this template for bugs. Suggestions, improvements, and feature requests do not need it.
+
+**Device:**
+*e.g., Shelly Wall Display X2*
+
+**Build and Version:**
+*If you downloaded the app from releases include the version, if you built it yourself include the tag of the latest commit*
+
+**Logs:**
+If the issue occurs while the app is running:
+
+```
+adb logcat --pid=$(adb shell pidof me.rapierxbox.shellyelevatev2)
+```
+
+If it happens before the app starts:
+
+```
+adb logcat
+```
+
+**Description:**
+*Clearly describe the issue you're experiencing.*
+
 ## License
 
 See [LICENSE](LICENSE). Provided "as is", at your own risk.
