@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.net.http.SslError
 import android.os.Bundle
 import android.util.Log
@@ -18,6 +19,7 @@ import android.webkit.RenderProcessGoneDetail
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
 import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
@@ -601,6 +603,25 @@ class MainActivity : ComponentActivity() {
             }
 
             webChromeClient = object : WebChromeClient() {
+                // A page may use the microphone when the app itself holds
+                // RECORD_AUDIO. Audio only: these displays have no camera, and
+                // nothing else is granted here.
+                override fun onPermissionRequest(request: PermissionRequest) {
+                    if (!request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                        request.deny()
+                        return
+                    }
+                    if (ContextCompat.checkSelfPermission(
+                            this@MainActivity, Manifest.permission.RECORD_AUDIO
+                        ) != PackageManager.PERMISSION_GRANTED
+                    ) {
+                        Log.w("MainActivity", "audio capture requested but RECORD_AUDIO is not granted")
+                        request.deny()
+                        return
+                    }
+                    request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+                }
+
                 override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
                     val message = consoleMessage.message()
 
