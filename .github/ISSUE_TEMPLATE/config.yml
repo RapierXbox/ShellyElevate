@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Troubleshooting guide
+    url: https://github.com/RapierXbox/ShellyElevate/wiki/Troubleshooting
+    about: Most common problems are solved here. Please check before opening an issue.
+  - name: Documentation and setup guides
+    url: https://github.com/RapierXbox/ShellyElevate/wiki
+    about: Installation, jailbreak, configuration, MQTT, HTTP API and more.
+  - name: Questions and general discussion
+    url: https://github.com/RapierXbox/ShellyElevate/discussions
+    about: Not sure whether it's a bug? Ask here first.
