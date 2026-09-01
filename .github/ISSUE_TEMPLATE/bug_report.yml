@@ -1,0 +1,135 @@
+name: Bug Report
+description: Something in ShellyElevate is broken or behaves incorrectly
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug!
+
+        Please fill out this template completely — it helps me resolve issues much more efficiently.
+
+        **Note:** Only use this template for bugs. Suggestions, improvements, and feature requests do not require this format.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Before you start
+      options:
+        - label: I have read the [Troubleshooting](https://github.com/RapierXbox/ShellyElevate/wiki/Troubleshooting) page and it did not solve my problem
+          required: true
+        - label: I searched the existing issues and this bug has not been reported yet
+          required: true
+        - label: I am running the latest [release](https://github.com/RapierXbox/ShellyElevate/releases) (or a newer build from source)
+          required: true
+
+  - type: dropdown
+    id: device
+    attributes:
+      label: Device
+      description: Shown on the label on the back of the unit, and in the app under the device info.
+      options:
+        - Wall Display (STARGATE)
+        - Wall Display 2 (ATLANTIS)
+        - Wall Display X2 (PEGASUS)
+        - Wall Display XL (BLAKE)
+        - Wall Display U1 (MAVERICK)
+        - Wall Display X2i (JENNA)
+        - Wall Display XLi (CALLY)
+        - Wall Display D1 (DAYNA)
+        - Other / not listed
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-source
+    attributes:
+      label: How did you install ShellyElevate?
+      options:
+        - Downloaded the APK from Releases
+        - Built it from source
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Build and version
+      description: If you downloaded the app from Releases, give the version tag. If you built it yourself, give the tag or commit hash you built from.
+      placeholder: e.g., v3.26170.1522 — or commit a1b2c3d
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of ShellyElevate is affected?
+      description: Best guess is fine.
+      options:
+        - Kiosk / WebView / dashboard display
+        - MQTT or Home Assistant discovery
+        - HTTP API (port 8080)
+        - JavaScript interface
+        - Relays, buttons, or wired switch input
+        - Sensors (temperature, humidity, light)
+        - Screensaver, auto-brightness, or proximity wake
+        - Voice assistant
+        - Bluetooth proxy
+        - Lite mode
+        - Installation, jailbreak, or updating
+        - Something else / not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Clearly describe the issue you're experiencing, and what you expected to happen instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: The exact steps someone else can follow to see the same problem.
+      placeholder: |
+        1. Open ...
+        2. Tap ...
+        3. The display ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        If the issue occurs **while the app is running**, use:
+
+        ```
+        adb logcat --pid=$(adb shell pidof me.rapierxbox.shellyelevatev2)
+        ```
+
+        If the issue happens **before the app starts**, use:
+
+        ```
+        adb logcat
+        ```
+
+        Paste the output below — no code fences needed, this box formats it automatically.
+
+        ⚠️ Logs can contain your Wi-Fi details, MQTT credentials, or Home Assistant tokens. Please redact anything sensitive before posting.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Screenshots, a recording, relevant parts of your configuration, or anything else that might help. Optional.
+    validations:
+      required: false
