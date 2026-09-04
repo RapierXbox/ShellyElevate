@@ -15,6 +15,7 @@ import java.io.File;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
@@ -49,8 +50,16 @@ public class DeviceHelper {
     private int lastScreenBrightness;
     private final DeviceModel deviceModel;
 
-    // Executor for off-thread shell commands (sleep/wake via root shell fallback)
+    // true between a requestAndroidSleep() and its matching wake. screenmanager calls wakeScreen() on every screensaver exit. but the panel is only autally asleep when we put it there. iissueing wake for a display that is already lit used to blank it troughthey keyevent fallback #102
+    private volatile boolean androidSleepIssued = false;
+
+    // Executor for off-thread shell commands 
     private static final ExecutorService POWER_EXEC = Executors.newSingleThreadExecutor();
+
+    // PowerManager.GO_TO_SLEEP_REASON_APPLICATION / WAKE_REASON_APPLICATION
+    private static final int GO_TO_SLEEP_REASON_APPLICATION = 0;
+    private static final int WAKE_REASON_APPLICATION = 0;
+    private static final String WAKE_REASON_TAG = "ShellyElevate:X2i:wake";
 
     private static final String TAG = "DeviceHelper";
 
@@ -166,21 +175,32 @@ public class DeviceHelper {
      *
      * <p>Primary path: reflection call to {@code PowerManager.goToSleep()} which requires the
      * {@code DEVICE_POWER} permission (granted to system/privileged apps on a rooted device).
-     * Fallback: {@code cmd power sleep} via root shell.
+     * Fallback: {@code cmd power sleep} then {@code input keyevent 223} KEYCODE_SLEEP via root shell.
      */
     public void requestAndroidSleep() {
         if (!deviceModel.usesAndroidPowerManager) return;
+
+        // rcord the intent before attempting it even if every path below fails the matching wake must still be allowed through
+        androidSleepIssued = true;
 
         // Try the PowerManager path synchronously so callers can rely on ordering.
         if (tryPowerManagerSleep()) return;
 
         // Fallback: root shell – run off-thread to avoid blocking callers.
+        // cmd power sleep first then KEYCODE_SLEEP for build whose power service has no such subcommand, KEYCODE_SLEEP rather than KEYCODE_POWER: it only ever turns the display off, so the duplicate request this path receives (both INTENT_TURN_SCREEN_OFF and the screen-off saver ask for sleep) cannot toggle a blanked panel back on.
         POWER_EXEC.execute(() -> {
             PrivilegedShell.Result r = PrivilegedShell.runShell("cmd power sleep");
-            if (!r.ok()) {
-                Log.w(TAG, "requestAndroidSleep shell fallback failed: " + r.stderr.trim());
-            } else {
+            if (r.ok()) {
                 Log.i(TAG, "requestAndroidSleep: display off via shell fallback");
+                return;
+            }
+            Log.w(TAG, "requestAndroidSleep shell fallback failed: " + r.stderr.trim());
+
+            r = PrivilegedShell.runShell("input keyevent 223");
+            if (!r.ok()) {
+                Log.w(TAG, "requestAndroidSleep keyevent fallback failed: " + r.stderr.trim());
+            } else {
+                Log.i(TAG, "requestAndroidSleep: display off via keyevent fallback");
             }
         });
     }
@@ -190,21 +210,27 @@ public class DeviceHelper {
      * (currently X2i / JENNA).  For other devices this is a no-op.
      *
      * <p>Uses {@code PowerManager.wakeUp()} (via reflection) to turn on the display without
-     * holding a wake lock. If that fails, falls back to a root-shell power-button keyevent.
+     * holding a wake lock. If that fails, falls back to a root-shell wake keyevent.
      * The app does not retain any wake lock after the call completes.
      *
      * <p>Primary path: reflection call to {@code PowerManager.wakeUp()} (API 20+).
-     * Fallback: {@code input keyevent 26} via root shell (simulate power-button press).
+     * Fallback: {@code input keyevent 224} (KEYCODE_WAKEUP) via root shell.
      */
     public void requestAndroidWake() {
         if (!deviceModel.usesAndroidPowerManager) return;
 
+        // nothing to wake when the panel is already lit and we never put it to sleep. without this the fallback below ran on EVERY screensaver exit and, being a power button toggle back then, blanked the display about a second later #102
+        // isInteractive() still catches a display that android or the power button put to sleep behind our back
+        if (!androidSleepIssued && isDisplayInteractive()) return;
+        androidSleepIssued = false;
+
         // Try the PowerManager path synchronously so callers can rely on ordering.
         if (tryPowerManagerWake()) return;
 
-        // Fallback: simulate power-button keyevent via root shell (run off-thread).
+        // fallback: root shell, off thread so callers dont block
+        // KEYCODE_WAKEUP only ever turns the display ON unlike KEYCODE_POWER, so it stays safe even if the display woke on its own before the shell call lands
         POWER_EXEC.execute(() -> {
-            PrivilegedShell.Result r = PrivilegedShell.runShell("input keyevent 26");
+            PrivilegedShell.Result r = PrivilegedShell.runShell("input keyevent 224");
             if (!r.ok()) {
                 Log.w(TAG, "requestAndroidWake shell fallback failed: " + r.stderr.trim());
             } else {
@@ -213,46 +239,82 @@ public class DeviceHelper {
         });
     }
 
-    /** @return true if PowerManager.goToSleep succeeded */
-    private boolean tryPowerManagerSleep() {
+    // true when the display is on. defaults to true when powermanager cant be reached so an unknown state never triggers a wake we cant justify
+    private boolean isDisplayInteractive() {
         try {
             PowerManager pm = (PowerManager) mApplicationContext.getSystemService(Context.POWER_SERVICE);
-            if (pm == null) return false;
-            Method goToSleep = PowerManager.class.getMethod("goToSleep", long.class);
-            goToSleep.invoke(pm, android.os.SystemClock.uptimeMillis());
-            Log.i(TAG, "requestAndroidSleep: display off via PowerManager.goToSleep");
-            return true;
-        } catch (SecurityException e) {
-            Log.w(TAG, "requestAndroidSleep: DEVICE_POWER not granted, using shell fallback: " + e.getMessage());
+            return pm == null || pm.isInteractive();
         } catch (Exception e) {
-            Log.w(TAG, "requestAndroidSleep: PowerManager.goToSleep unavailable: " + e.getMessage());
+            Log.w(TAG, "isInteractive check failed, assuming the display is on: " + e.getMessage());
+            return true;
         }
-        return false;
+    }
+
+    /** @return true if PowerManager.goToSleep succeeded */
+    private boolean tryPowerManagerSleep() {
+        PowerManager pm = (PowerManager) mApplicationContext.getSystemService(Context.POWER_SERVICE);
+        if (pm == null) return false;
+
+        long now = android.os.SystemClock.uptimeMillis();
+        // goToSleep(long, int, int) is the current hidden signature, goToSleep(long) is there for older builds. both need DEVICE_POWER
+        boolean ok = invokeHidden(pm, "goToSleep",
+                        new Class<?>[]{long.class, int.class, int.class},
+                        new Object[]{now, GO_TO_SLEEP_REASON_APPLICATION, 0}, "requestAndroidSleep")
+                || invokeHidden(pm, "goToSleep",
+                        new Class<?>[]{long.class},
+                        new Object[]{now}, "requestAndroidSleep");
+
+        if (ok) {
+            Log.i(TAG, "requestAndroidSleep: display off via PowerManager.goToSleep");
+        } else {
+            Log.w(TAG, "requestAndroidSleep: no usable PowerManager.goToSleep, using shell fallback");
+        }
+        return ok;
     }
 
     /** @return true if PowerManager.wakeUp succeeded */
     private boolean tryPowerManagerWake() {
-        try {
-            PowerManager pm = (PowerManager) mApplicationContext.getSystemService(Context.POWER_SERVICE);
-            if (pm == null) return false;
-            // wakeUp(long time, String reason) is available from API 20; ACQUIRE_CAUSES_WAKEUP
-            // is used through the PARTIAL_WAKE_LOCK acquire path, so we use the wakeUp API
-            // directly to avoid permanently holding a FULL_WAKE_LOCK.
-            Method wakeUp;
-            try {
-                wakeUp = PowerManager.class.getMethod("wakeUp", long.class, String.class);
-                wakeUp.invoke(pm, System.currentTimeMillis(), "ShellyElevate:X2i:wake");
-            } catch (NoSuchMethodException nsme) {
-                // API < 20 fallback — plain wakeUp(long)
-                wakeUp = PowerManager.class.getMethod("wakeUp", long.class);
-                wakeUp.invoke(pm, System.currentTimeMillis());
-            }
+        PowerManager pm = (PowerManager) mApplicationContext.getSystemService(Context.POWER_SERVICE);
+        if (pm == null) return false;
+
+        long now = System.currentTimeMillis();
+        // android 10 replaced wakeUp(long, String) with wakeUp(long, int, String) and only the old overload was ever probed, so on the X2i (android 11) EVERY wake fell through to the shell fallback
+        // wakeUp() and not a FULL_WAKE_LOCK so nothing is held once the call returns
+        boolean ok = invokeHidden(pm, "wakeUp",
+                        new Class<?>[]{long.class, int.class, String.class},
+                        new Object[]{now, WAKE_REASON_APPLICATION, WAKE_REASON_TAG}, "requestAndroidWake")
+                || invokeHidden(pm, "wakeUp",
+                        new Class<?>[]{long.class, String.class},
+                        new Object[]{now, WAKE_REASON_TAG}, "requestAndroidWake")
+                || invokeHidden(pm, "wakeUp",
+                        new Class<?>[]{long.class},
+                        new Object[]{now}, "requestAndroidWake");
+
+        if (ok) {
             Log.i(TAG, "requestAndroidWake: display on via PowerManager.wakeUp");
+        } else {
+            Log.w(TAG, "requestAndroidWake: no usable PowerManager.wakeUp, using shell fallback");
+        }
+        return ok;
+    }
+
+    // reflection call into a hidden powermanager method. returns true when it went through, a missing signature stays silent so the caller can probe the next one
+    // whatever the target throws comes back wrapped in InvocationTargetException so the real cause (usually SecurityException for the missing DEVICE_POWER) has to be unwrapped for the log
+    // the old catch (SecurityException) could never match a wrapped throw, thats why the log only ever said "unavailable: null" and never named the cause
+    private static boolean invokeHidden(PowerManager pm, String name, Class<?>[] paramTypes,
+                                        Object[] args, String logPrefix) {
+        try {
+            Method method = PowerManager.class.getMethod(name, paramTypes);
+            method.invoke(pm, args);
             return true;
-        } catch (SecurityException e) {
-            Log.w(TAG, "requestAndroidWake: DEVICE_POWER not granted, using shell fallback: " + e.getMessage());
+        } catch (NoSuchMethodException e) {
+            // expected while probing, caller moves on to the next signature
+        } catch (InvocationTargetException e) {
+            Throwable cause = e.getCause() != null ? e.getCause() : e;
+            Log.w(TAG, logPrefix + ": " + name + "/" + paramTypes.length + " threw "
+                    + cause.getClass().getSimpleName() + ": " + cause.getMessage());
         } catch (Exception e) {
-            Log.w(TAG, "requestAndroidWake: PowerManager.wakeUp unavailable: " + e.getMessage());
+            Log.w(TAG, logPrefix + ": " + name + "/" + paramTypes.length + " unavailable: " + e);
         }
         return false;
     }
