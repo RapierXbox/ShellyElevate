@@ -13,6 +13,7 @@ import java.util.Locale;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
+import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
@@ -77,8 +78,11 @@ class MqttDiscoveryConfigBuilder {
     }
 
     private void addSensorComponents(JSONObject components) throws JSONException {
-        components.put(clientId + "_temp", sensor("Temperature", parseTopic(MQTT_TOPIC_TEMP_SENSOR), "temperature", "°C", "_temp"));
-        components.put(clientId + "_hum",  sensor("Humidity",    parseTopic(MQTT_TOPIC_HUM_SENSOR),  "humidity",    "%",  "_hum"));
+        // no sht3x on newer hardware, so dont hand HA two entities that stay unavailable forever #104
+        if (DeviceHelper.hasTempAndHumSensor()) {
+            components.put(clientId + "_temp", sensor("Temperature", parseTopic(MQTT_TOPIC_TEMP_SENSOR), "temperature", "°C", "_temp"));
+            components.put(clientId + "_hum",  sensor("Humidity",    parseTopic(MQTT_TOPIC_HUM_SENSOR),  "humidity",    "%",  "_hum"));
+        }
         components.put(clientId + "_lux",  sensor("Light",       parseTopic(MQTT_TOPIC_LUX_SENSOR),  "illuminance", "lx", "_lux"));
 
         if (device.hasProximitySensor) {

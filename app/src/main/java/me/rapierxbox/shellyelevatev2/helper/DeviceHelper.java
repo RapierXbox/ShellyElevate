@@ -39,6 +39,11 @@ public class DeviceHelper {
     };
 
     private static final String tempAndHumFile = "/sys/devices/platform/sht3x-user/sht3x_access";
+
+    // newer hardware dropped the sht3x entirely (x2i confirmed #104) and the node then throws ENOENT on every read.
+    // probed once at class load, a sysfs node the kernel makes at boot cant show up later
+    private static final boolean TEMP_AND_HUM_SENSOR_PRESENT = new File(tempAndHumFile).exists();
+
     private static final String[] screenBrightnessFiles = {
             "/sys/devices/platform/leds-mt65xx/leds/lcd-backlight/brightness",
             "/sys/devices/platform/sprd_backlight/backlight/sprd_backlight/brightness",
@@ -365,7 +370,13 @@ public class DeviceHelper {
         return "";
     }
 
+    // true when this device actually has the sht3x. mqtt discovery uses it to not offer entities that can never report
+    public static boolean hasTempAndHumSensor() {
+        return TEMP_AND_HUM_SENSOR_PRESENT;
+    }
+
     public double getTemperature() {
+        if (!TEMP_AND_HUM_SENSOR_PRESENT) return -999;
         try {
             var content = readFileContent(tempAndHumFile);
             if (content.isEmpty()) return -999;
@@ -395,6 +406,7 @@ public class DeviceHelper {
     }
 
     public double getHumidity() {
+        if (!TEMP_AND_HUM_SENSOR_PRESENT) return -999;
         try {
             var content = readFileContent(tempAndHumFile);
             if (content.isEmpty()) return -999;
@@ -420,7 +432,8 @@ public class DeviceHelper {
                 content.append(line).append("\n");
             }
         } catch (IOException e) {
-            Log.e(TAG, "Error when reading file with path:" + filePath, e);
+            // no stack trace. the path is already in the message and a missing sysfs node used to dump four full traces a minute #104
+            Log.w(TAG, "Error when reading file with path:" + filePath + " " + e);
         }
         return content.toString();
     }
