@@ -822,22 +822,20 @@ class SettingsFragment : Fragment() {
         NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { it.isSiteLocalAddress }?.hostAddress
 
     fun getScreenSaverSpinnerAdapter(): ArrayAdapter<String?> {
-        val adapter = ArrayAdapter<String?>(ShellyElevateApplication.mApplicationContext, android.R.layout.simple_spinner_item)
+        val adapter = ArrayAdapter<String?>(requireContext(), android.R.layout.simple_spinner_item)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         for (screenSaver in ScreenSaverManager.getAvailableScreenSavers()) adapter.add(screenSaver.getName())
         return adapter
     }
 
     fun getSleepOptimizationSpinnerAdapter(): ArrayAdapter<CharSequence> {
-        val ctx = ShellyElevateApplication.mApplicationContext
-        val adapter = ArrayAdapter.createFromResource(ctx, R.array.sleep_optimization_levels, android.R.layout.simple_spinner_item)
+        val adapter = ArrayAdapter.createFromResource(requireContext(), R.array.sleep_optimization_levels, android.R.layout.simple_spinner_item)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         return adapter
     }
 
     fun getSwInputModeSpinnerAdapter(): ArrayAdapter<CharSequence> {
-        val ctx = ShellyElevateApplication.mApplicationContext
-        val adapter = ArrayAdapter.createFromResource(ctx, R.array.sw_input_modes, android.R.layout.simple_spinner_item)
+        val adapter = ArrayAdapter.createFromResource(requireContext(), R.array.sw_input_modes, android.R.layout.simple_spinner_item)
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         return adapter
     }
