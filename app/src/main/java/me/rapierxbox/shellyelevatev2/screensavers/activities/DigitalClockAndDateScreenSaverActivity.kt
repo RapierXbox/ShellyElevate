@@ -82,5 +82,7 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
 
     // sw terminal edges must keep working while the screensaver holds focus
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        (ShellyElevateApplication.mSwInputHandler?.onKeyEvent(event) == true) || super.dispatchKeyEvent(event)
+        (ShellyElevateApplication.mSwInputHandler?.onKeyEvent(event) == true)
+                || (ShellyElevateApplication.mButtonHandler?.onKeyEvent(event) == true)
+                || super.dispatchKeyEvent(event)
 }

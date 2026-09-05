@@ -64,7 +64,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SETTINGS_EVER_SHOWN
 import me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL
 import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_NONE
 import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mButtonHandler
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
@@ -73,15 +73,12 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwInputHandler
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwipeHelper
 import me.rapierxbox.shellyelevatev2.databinding.MainActivityBinding
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
-import me.rapierxbox.shellyelevatev2.helper.ButtonPressDetector
 import me.rapierxbox.shellyelevatev2.helper.GestureInterceptLayout
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_UPDATE_PROMPTED
 import androidx.appcompat.app.AlertDialog
-import me.rapierxbox.shellyelevatev2.Constants.SP_POWER_BUTTON_AUTO_REBOOT
 import android.provider.Settings
 import android.net.Uri
-import java.io.IOException
 
 class MainActivity : ComponentActivity() {
     private var initialLoadDone = false
@@ -96,12 +93,6 @@ class MainActivity : ComponentActivity() {
 
     private var clicksButtonRight: Int = 0
     private var clicksButtonLeft: Int = 0
-
-    private lateinit var buttonPressDetector0: ButtonPressDetector
-    private lateinit var buttonPressDetector1: ButtonPressDetector
-    private lateinit var buttonPressDetector2: ButtonPressDetector
-    private lateinit var buttonPressDetector3: ButtonPressDetector
-    private lateinit var powerButtonPressDetector: ButtonPressDetector
 
     private val settingsChangedBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -355,52 +346,6 @@ class MainActivity : ComponentActivity() {
     private fun loadDashboard(url: String) {
         lastRequestedUrl = url
         webView.loadUrl(url)
-    }
-
-    private fun initializeButtonPressDetectors() {
-        val pressCallback = ButtonPressDetector.Callback { buttonId, pressType ->
-            onButtonPressTypeDetected(buttonId, pressType)
-        }
-
-        buttonPressDetector0 = ButtonPressDetector(0, pressCallback)
-        buttonPressDetector1 = ButtonPressDetector(1, pressCallback)
-        buttonPressDetector2 = ButtonPressDetector(2, pressCallback)
-        buttonPressDetector3 = ButtonPressDetector(3, pressCallback)
-        powerButtonPressDetector = ButtonPressDetector(140, pressCallback)
-    }
-
-    private fun onButtonPressTypeDetected(buttonId: Int, pressType: String) {
-        Log.d("MainActivity", "Button $buttonId press type detected: $pressType")
-
-        if (buttonId == 140) {
-            handlePowerButtonPress(pressType)
-        } else {
-            publishButtonPress(buttonId, pressType)
-        }
-    }
-
-    private fun handlePowerButtonPress(pressType: String) {
-        publishButtonPress(140, pressType)
-
-        if (pressType == Constants.BUTTON_PRESS_TYPE_LONG) {
-            val autoReboot = mSharedPreferences.getBoolean(SP_POWER_BUTTON_AUTO_REBOOT, true)
-            if (autoReboot) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    try {
-                        Runtime.getRuntime().exec("reboot")
-                    } catch (e: IOException) {
-                        Log.e("MainActivity", "Error rebooting:", e)
-                    }
-                }
-            }
-        }
-    }
-
-    private fun publishButtonPress(buttonId: Int, pressType: String) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            mMQTTServer.publishButton(buttonId, pressType)
-        }
-        mShellyElevateJavascriptInterface.onButtonPressed(buttonId)
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -817,8 +762,6 @@ class MainActivity : ComponentActivity() {
         window.setBackgroundDrawable(null)
         webView = binding.myWebView
 
-        initializeButtonPressDetectors()
-
         configureWebView()
         setupSettingsButtons()
         (binding.root as GestureInterceptLayout).swipeHelper = mSwipeHelper
@@ -852,45 +795,13 @@ class MainActivity : ComponentActivity() {
         }
         when (keyCode) {
             // Power button (140): supports short/long/double/triple press types.
-            140 -> {
-                when (event.action) {
-                    KeyEvent.ACTION_DOWN -> powerButtonPressDetector.onPressDown()
-                    KeyEvent.ACTION_UP -> powerButtonPressDetector.onPressUp()
-                }
-                return true
-            }
+            140 -> { mButtonHandler?.onKeyEvent(event); return true }
             // 141/142: physical sw inputs, handled centrally so every activity shares one path
             141, 142 -> { mSwInputHandler?.onKeyEvent(event); return true }
 
-            // 131..134: capacitive Shelly buttons 0..3; same press-type handling as power.
-            131 -> {
-                when (event.action) {
-                    KeyEvent.ACTION_DOWN -> buttonPressDetector0.onPressDown()
-                    KeyEvent.ACTION_UP -> { toggleMappedRelay(0); buttonPressDetector0.onPressUp() }
-                }
-                return true
-            }
-            132 -> {
-                when (event.action) {
-                    KeyEvent.ACTION_DOWN -> buttonPressDetector1.onPressDown()
-                    KeyEvent.ACTION_UP -> { toggleMappedRelay(1); buttonPressDetector1.onPressUp() }
-                }
-                return true
-            }
-            133 -> {
-                when (event.action) {
-                    KeyEvent.ACTION_DOWN -> buttonPressDetector2.onPressDown()
-                    KeyEvent.ACTION_UP -> { toggleMappedRelay(2); buttonPressDetector2.onPressUp() }
-                }
-                return true
-            }
-            134 -> {
-                when (event.action) {
-                    KeyEvent.ACTION_DOWN -> buttonPressDetector3.onPressDown()
-                    KeyEvent.ACTION_UP -> { toggleMappedRelay(3); buttonPressDetector3.onPressUp() }
-                }
-                return true
-            }
+            // 131..134 capacitive buttons 0..3 and 140 power, same deal. app scoped since the native monitor has to
+            // drive them too, otherwise lite mode has no foreground activity to catch them #101
+            131, 132, 133, 134 -> { mButtonHandler?.onKeyEvent(event); return true }
 
             // 135 = near, 136 = mid; mapped to broadcastProximity values.
             135 -> { if (event.action == KeyEvent.ACTION_UP) { broadcastProximity(0f); return true }; return false }
@@ -903,19 +814,6 @@ class MainActivity : ComponentActivity() {
             KeyEvent.KEYCODE_MEDIA_PREVIOUS -> { if (event.action == KeyEvent.ACTION_UP) return true; return false }
 
             else -> return false
-        }
-    }
-
-    private fun toggleMappedRelay(buttonId: Int) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val relayEnabled = mSharedPreferences.getBoolean(Constants.SP_BUTTON_RELAY_ENABLED, false)
-            if (!relayEnabled) return@launch
-            val relayIndex = mSharedPreferences.getInt(String.format(java.util.Locale.US, Constants.SP_BUTTON_RELAY_MAP_FORMAT, buttonId), -1)
-            if (relayIndex < 0) return@launch
-            if (relayIndex >= DeviceModel.getReportedDevice().relays) return@launch
-            val deviceHelper = ShellyElevateApplication.mDeviceHelper ?: return@launch
-            val currentState = deviceHelper.getRelay(relayIndex)
-            deviceHelper.setRelay(relayIndex, !currentState)
         }
     }
 

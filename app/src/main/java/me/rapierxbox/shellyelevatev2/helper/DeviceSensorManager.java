@@ -4,6 +4,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.INTENT_LIGHT_KEY;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_LIGHT_UPDATED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_KEY;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mButtonHandler;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwInputHandler;
 
@@ -209,6 +210,12 @@ public class DeviceSensorManager implements SensorEventListener {
             if (mSwInputHandler != null) mSwInputHandler.onNativeKey(keyCode, action);
             return;
         }
+        // 59..62 = key_f1..key_f4 (capacitive buttons), 68 = key_f10 (power). this path is the whole point of #101,
+        // it keeps working while lite mode has some other app in the foreground
+        if (ButtonHandler.isNativeButtonCode(keyCode)) {
+            if (mButtonHandler != null) mButtonHandler.onNativeKey(keyCode, action);
+            return;
+        }
         // 63 = key_f5 (near), 64 = key_f6 (far)
         if (action == 1) { // down
             if (keyCode == 63) onGpioProximityEvent(true);
@@ -309,6 +316,16 @@ public class DeviceSensorManager implements SensorEventListener {
             return;
         }
 
+        // capacitive and power buttons off the same node. exact token match, contains() would let KEY_F1 eat KEY_F10
+        String keyToken = keyTokenOf(normalized);
+        if (keyToken != null) {
+            int buttonCode = ButtonHandler.linuxCodeForKeyName(keyToken);
+            if (buttonCode >= 0) {
+                if (mButtonHandler != null) mButtonHandler.onNativeKey(buttonCode, isDown ? 1 : 0);
+                return;
+            }
+        }
+
         if (!isDown) {
             return;
         }
@@ -320,6 +337,14 @@ public class DeviceSensorManager implements SensorEventListener {
         } else {
             Log.i(TAG, "Unhandled gpio key line on proximity event path: " + line.trim());
         }
+    }
+
+    // the KEY_ token out of one `getevent -l` line, null when there is none
+    private static String keyTokenOf(String normalizedLine) {
+        for (String token : normalizedLine.trim().split("\\s+")) {
+            if (token.startsWith("KEY_")) return token;
+        }
+        return null;
     }
 
     // gpio_keys is the wide-range proximity source. once it actually fires, treat it

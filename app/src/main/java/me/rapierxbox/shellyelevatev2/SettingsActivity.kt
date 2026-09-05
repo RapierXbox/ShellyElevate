@@ -37,6 +37,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ID
 import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
 import me.rapierxbox.shellyelevatev2.Constants.SP_WAKE_ON_PROXIMITY
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mButtonHandler
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mHttpServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -75,5 +76,7 @@ class SettingsActivity : AppCompatActivity() {
 
     // sw terminal edges must keep working while the settings screen holds focus
     override fun dispatchKeyEvent(event: KeyEvent): Boolean =
-        (mSwInputHandler?.onKeyEvent(event) == true) || super.dispatchKeyEvent(event)
+        (mSwInputHandler?.onKeyEvent(event) == true)
+                || (mButtonHandler?.onKeyEvent(event) == true)
+                || super.dispatchKeyEvent(event)
 }
