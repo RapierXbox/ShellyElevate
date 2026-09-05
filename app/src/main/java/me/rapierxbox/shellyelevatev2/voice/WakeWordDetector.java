@@ -879,15 +879,11 @@ public class WakeWordDetector {
     }
 
     static Interpreter buildInterpreter(MappedByteBuffer model) {
-        try {
-            Interpreter.Options opts = new Interpreter.Options();
+        Interpreter.Options opts = new Interpreter.Options().setNumThreads(1);
+        if (Build.VERSION.SDK_INT >= 30) {
             opts.setUseNNAPI(true);
-            opts.setNumThreads(1);
-            return new Interpreter(model, opts);
-        } catch (Throwable t) {
-            Log.w(TAG, "NNAPI init failed, using CPU: " + t.getMessage());
-            return new Interpreter(model, new Interpreter.Options().setNumThreads(1));
         }
+        return new Interpreter(model, opts);
     }
 
     public void onDestroy() {
