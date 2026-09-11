@@ -304,15 +304,10 @@ public class ScreenSaverManager extends BroadcastReceiver {
         }
         lastNearState = isNear;
 
-        if (screenSaverRunning && isNear) {
-            // Force a wake even when SP_WAKE_ON_PROXIMITY is off, otherwise the
-            // user would be left with a black screen they can't recover from.
-            stopScreenSaver();
-            lastProximityWakeTime = now;
-            keepAwakeAfterProximity(now, keepAwakeMs);
-        } else if (wakeOnProximity && isNear) {
+        if (wakeOnProximity && isNear) {
             if (now - lastProximityWakeTime < 1000L) return;
             lastProximityWakeTime = now;
+            if (screenSaverRunning) stopScreenSaver();
             keepAwakeAfterProximity(now, keepAwakeMs);
         }
     }
