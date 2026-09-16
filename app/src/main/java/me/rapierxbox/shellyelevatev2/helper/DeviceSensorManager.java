@@ -204,8 +204,9 @@ public class DeviceSensorManager implements SensorEventListener {
     }
 
     private void handleNativeKeyEvent(int keyCode, int action, int repeatCount) {
-        // 87/88 = key_f11/key_f12: rising/falling edge pulses of the sw
-        // terminal; this path stays alive regardless of which activity holds focus
+        // 87/88 = key_f11/key_f12 (rising/falling edge pulses) and 2 = key_1 (level
+        // coded contact) are the two sw terminal schemes; this path stays alive
+        // regardless of which activity holds focus
         if (SwInputHandler.isNativeSwInputCode(keyCode)) {
             if (mSwInputHandler != null) mSwInputHandler.onNativeKey(keyCode, action);
             return;
@@ -318,6 +319,15 @@ public class DeviceSensorManager implements SensorEventListener {
 
         // capacitive and power buttons off the same node. exact token match, contains() would let KEY_F1 eat KEY_F10
         String keyToken = keyTokenOf(normalized);
+
+        // KEY_1 is the level coded sw terminal: down closes the contact, up opens it
+        if ("KEY_1".equals(keyToken)) {
+            if (mSwInputHandler != null) {
+                mSwInputHandler.onNativeKey(SwInputStateMachine.LINUX_KEY_SW_LEVEL, isDown ? 1 : 0);
+            }
+            return;
+        }
+
         if (keyToken != null) {
             int buttonCode = ButtonHandler.linuxCodeForKeyName(keyToken);
             if (buttonCode >= 0) {

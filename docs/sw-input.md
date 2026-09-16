@@ -8,12 +8,25 @@ working while the screensaver or the settings screen is open.
 
 ## How the hardware reports the input
 
-The device does not deliver the SW contact as a held key. Each contact
-*transition* arrives as a short (~5 ms) down+up key pulse, and the keycode
-encodes the direction: keycode 141 (`KEY_F11`) = the line went active,
-keycode 142 (`KEY_F12`) = the line went inactive. Verified on a Wall Display
-X1i; every supported model has exactly one SW terminal. ShellyElevate decodes
-those pulses into a contact level and applies the configured mode to it.
+The hardware uses one of two schemes; ShellyElevate decodes both, so no
+per-model configuration is involved. Every supported model has exactly one SW
+terminal.
+
+**Edge coded** (verified on a Wall Display X1i): the contact is not delivered as
+a held key. Each contact *transition* arrives as a short (~5 ms) down+up key
+pulse, and the keycode encodes the direction: keycode 141 (`KEY_F11`) = the line
+went active, keycode 142 (`KEY_F12`) = the line went inactive.
+
+**Level coded** (verified on a Wall Display "Stargate", `SAWD-0A1XX10EU1`): the
+`gpio_keys` node declares a single code, `KEY_1` (scan code 2, Android keycode
+8), and the contact level *is* the key state — down while the line is active,
+up when it goes inactive, with Android auto-repeating the down while it is
+held. The repeats carry no transition and are dropped. Because `KEYCODE_1` is
+an ordinary digit on a real keyboard, it is only taken as the SW terminal when
+the reporting input device has no letter keys; anything that can type text
+keeps its digit.
+
+Either way the result is a contact level, to which the configured mode applies.
 
 ## Modes
 

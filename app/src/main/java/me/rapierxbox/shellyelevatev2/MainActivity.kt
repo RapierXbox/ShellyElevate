@@ -791,13 +791,23 @@ class MainActivity : ComponentActivity() {
         // key auto repeat resends ACTION_DOWN while held which would reset the
         // press timers and inflate click counts in the detectors
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount > 0) {
-            return when (keyCode) { 140, 131, 132, 133, 134, 141, 142 -> true; else -> false }
+            return when (keyCode) {
+                140, 131, 132, 133, 134, 141, 142 -> true
+                // the level coded sw input is held down, so it auto repeats. the handler
+                // swallows the repeat, but only when the event really is the sw terminal
+                KeyEvent.KEYCODE_1 -> mSwInputHandler?.onKeyEvent(event) == true
+                else -> false
+            }
         }
         when (keyCode) {
             // Power button (140): supports short/long/double/triple press types.
             140 -> { mButtonHandler?.onKeyEvent(event); return true }
             // 141/142: physical sw inputs, handled centrally so every activity shares one path
             141, 142 -> { mSwInputHandler?.onKeyEvent(event); return true }
+            // 8/KEYCODE_1: the same sw input on hardware that codes the contact level in
+            // the key state instead of the keycode. the handler decides whether it is the
+            // terminal or a real keyboards digit, which is passed on untouched
+            KeyEvent.KEYCODE_1 -> return mSwInputHandler?.onKeyEvent(event) == true
 
             // 131..134 capacitive buttons 0..3 and 140 power, same deal. app scoped since the native monitor has to
             // drive them too, otherwise lite mode has no foreground activity to catch them #101
