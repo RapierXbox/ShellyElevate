@@ -881,9 +881,14 @@ public class WakeWordDetector {
 
     static Interpreter buildInterpreter(MappedByteBuffer model) {
         Interpreter.Options opts = new Interpreter.Options().setNumThreads(1);
-        if (Build.VERSION.SDK_INT >= 30) {
-            opts.setUseNNAPI(true);
-        }
+        // Plain CPU kernels only (#105):
+        // - XNNPACK's aarch32 qs8 gemm kernel segfaults on the 32-bit Wall Displays
+        //   (X2/PEGASUS, Gen1/STARGATE) as soon as a model runs on live audio.
+        // - NNAPI on these SoCs spawns a thread and leaks memory mappings per
+        //   inference until pthread_create fails (~3 min on the X2), and brings
+        //   nothing for these tiny models.
+        opts.setUseXNNPACK(false);
+        opts.setUseNNAPI(false);
         return new Interpreter(model, opts);
     }
 
