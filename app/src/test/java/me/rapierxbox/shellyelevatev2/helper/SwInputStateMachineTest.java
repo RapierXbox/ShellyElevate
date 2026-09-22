@@ -40,7 +40,8 @@ public class SwInputStateMachineTest {
         machine = new SwInputStateMachine(2, actions);
     }
 
-    // --- keymap: 141/KEY_F11 = rising edge, 142/KEY_F12 = falling edge ---
+    // --- keymap: 141/KEY_F11 = rising edge, 142/KEY_F12 = falling edge,
+    //     8/KEY_1 = level coded contact ---
 
     @Test
     public void androidKeymapDecodesEdgeDirection() {
@@ -56,6 +57,20 @@ public class SwInputStateMachineTest {
         assertEquals(Boolean.FALSE, SwInputStateMachine.levelForLinuxKey(88));
         assertNull(SwInputStateMachine.levelForLinuxKey(63));
         assertNull(SwInputStateMachine.levelForLinuxKey(64));
+    }
+
+    @Test
+    public void levelKeyIsSeparateFromTheEdgeCodes() {
+        assertTrue(SwInputStateMachine.isAndroidSwLevelKey(8));
+        assertTrue(SwInputStateMachine.isLinuxSwLevelKey(2));
+        // the level code carries no direction, the caller derives it from the key state
+        assertNull(SwInputStateMachine.levelForAndroidKey(8));
+        assertNull(SwInputStateMachine.levelForLinuxKey(2));
+        // and the edge codes are not level keys
+        assertFalse(SwInputStateMachine.isAndroidSwLevelKey(141));
+        assertFalse(SwInputStateMachine.isLinuxSwLevelKey(87));
+        assertFalse(SwInputStateMachine.isAndroidSwLevelKey(131));
+        assertFalse(SwInputStateMachine.isLinuxSwLevelKey(59));
     }
 
     // --- dedup: only same-level events inside the duplicate window are dropped ---
