@@ -53,7 +53,7 @@ android {
         applicationId = "me.rapierxbox.shellyelevatev2"
         minSdk = 24
         //noinspection ExpiredTargetSdkVersion
-        targetSdk = 24
+        targetSdk = 28
         versionCode = versionCodeForBuild()
         versionName = versionNameForBuild()
 
