@@ -9,6 +9,7 @@ import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.http.SslError
 import android.os.Bundle
+import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
 import android.view.MotionEvent
@@ -93,6 +94,7 @@ class MainActivity : ComponentActivity() {
 
     private var clicksButtonRight: Int = 0
     private var clicksButtonLeft: Int = 0
+    private var lastSettingsTapAtMs: Long = 0
 
     private val settingsChangedBroadcastReceiver: BroadcastReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -351,16 +353,32 @@ class MainActivity : ComponentActivity() {
     @SuppressLint("ClickableViewAccessibility")
     private fun setupSettingsButtons() {
         binding.settingButtonOverlayRight.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) clicksButtonRight++
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                expireStaleSettingsTaps()
+                clicksButtonRight++
+            }
             false
         }
         binding.settingButtonOverlayLeft.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
-                if (clicksButtonRight == 10) clicksButtonLeft++ else resetClicks()
-                if (clicksButtonLeft == 10) startSettingsActivity()
+                expireStaleSettingsTaps()
+                // >= not ==: the overlays pass the touch on to the dashboard underneath, so a
+                // tap meant for a card in that corner counts too. overshooting the threshold
+                // used to wedge the sequence for good, since every later tap hit the reset
+                if (clicksButtonRight >= SETTINGS_TAPS) clicksButtonLeft++ else resetClicks()
+                if (clicksButtonLeft >= SETTINGS_TAPS) startSettingsActivity()
             }
             false
         }
+    }
+
+    // the counters used to live forever, so taps from ordinary dashboard use accumulated
+    // between attempts and the sequence started from an unknown state. a pause longer than
+    // the timeout was never someone entering it
+    private fun expireStaleSettingsTaps() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSettingsTapAtMs > SETTINGS_TAP_TIMEOUT_MS) resetClicks()
+        lastSettingsTapAtMs = now
     }
 
     private fun startSettingsActivity() {
@@ -904,5 +922,11 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         cancelRetry()
         super.onStop()
+    }
+
+    companion object {
+        // taps per corner, bottom right first then bottom left
+        private const val SETTINGS_TAPS = 10
+        private const val SETTINGS_TAP_TIMEOUT_MS = 2000L
     }
 }
