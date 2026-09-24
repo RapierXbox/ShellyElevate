@@ -31,18 +31,19 @@ import java.util.concurrent.Executors;
 
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 
-// Single owner of the SW terminal input. Two hardware reporting schemes exist
-// for the one SW terminal (every supported model declares a single input):
+// single owner of the sw terminal input
+// two hardware reporting schemes exist for the one sw terminal (every
+// supported model declares a single input)
 //   edge coded  - each contact transition is a short down+up key pulse whose
-//                 KEYCODE carries the direction, 141/KEY_F11 = rising,
-//                 142/KEY_F12 = falling (verified on the X1i)
-//   level coded - one keycode, 8/KEY_1, held down while the contact is closed
-//                 and released when it opens (verified on the Stargate, whose
+//                 keycode carries the direction: 141/key_f11 rising
+//                 142/key_f12 falling (verified on the x1i)
+//   level coded - one keycode (8/key_1) held down while the contact is closed
+//                 and released when it opens (verified on the stargate whose
 //                 gpio_keys node declares that single code)
-// Both are decoded here, so a model reporting either one works without a
-// per-model flag. Edges arrive via both the focused activity's KeyEvents and
-// the native input monitor; SwInputStateMachine drops the duplicate delivery
-// and applies the configured input mode.
+// both are decoded here so a model reporting either one works without a
+// per-model flag. edges arrive via both the focused activity keyevents and
+// the native input monitor. SwInputStateMachine drops the duplicate delivery
+// and applies the configured input mode
 public class SwInputHandler {
     private static final String TAG = "SwInputHandler";
 
@@ -62,7 +63,7 @@ public class SwInputHandler {
     // thread keeps press/release ordering intact
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
     private final BroadcastReceiver settingsReceiver;
-    // memo for the level key's source check below; key events are main thread only
+    // memo for the level key source check below; key events are main thread only
     private int levelKeySourceId = Integer.MIN_VALUE;
     private boolean levelKeySourceIsTerminal;
 
@@ -98,14 +99,13 @@ public class SwInputHandler {
                 .registerReceiver(settingsReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
     }
 
-    /** Handles sw input keycodes; returns false for anything else so callers can pass those on. */
+    // handles sw input keycodes returns false for anything else so callers can pass those on
     public boolean onKeyEvent(KeyEvent event) {
         Boolean swLevel = SwInputStateMachine.levelForAndroidKey(event.getKeyCode());
         if (swLevel != null) {
-            // the level is coded in the keycode, so only the pulse's ACTION_DOWN
-            // carries a transition; the pulse tail (up) and auto repeats are
-            // swallowed, as is everything on models without an input, so sw
-            // keycodes never leak into the webview
+            // the level is coded in the keycode so only the pulses action_down carries
+            // a transition. the pulse tail (up) and auto repeats are swallowed same as
+            // everything on models without an input so sw keycodes never leak to the webview
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0
                     && SW_INPUT_INDEX < device.inputs) {
                 submitEdge(SW_INPUT_INDEX, swLevel);
@@ -113,9 +113,9 @@ public class SwInputHandler {
             return true;
         }
         if (isSwTerminalLevelKey(event)) {
-            // the key state is the contact: down closes it, up opens it. android
-            // auto repeats the down while it is held, which changes nothing and is
-            // swallowed along with the rest so the code never reaches the webview
+            // the key state is the contact: down closes it up opens it. android auto
+            // repeats the down while held which changes nothing and is swallowed along
+            // with the rest so the code never reaches the webview
             if (event.getAction() == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
                 submitEdge(SW_INPUT_INDEX, true);
             } else if (event.getAction() == KeyEvent.ACTION_UP) {
@@ -126,33 +126,33 @@ public class SwInputHandler {
         return false;
     }
 
-    /** Intake for the native input monitor. action: 0=UP, 1=DOWN, 2=REPEAT. */
+    // intake for the native input monitor action: 0=up 1=down 2=repeat
     public void onNativeKey(int linuxCode, int action) {
         if (SW_INPUT_INDEX >= device.inputs) return;
         Boolean swLevel = SwInputStateMachine.levelForLinuxKey(linuxCode);
         if (swLevel != null) {
-            // only the pulse's down event carries the transition (see onKeyEvent)
+            // only the pulses down event carries the transition (see onKeyEvent)
             if (action == 1) submitEdge(SW_INPUT_INDEX, swLevel);
             return;
         }
-        // level coded: down closes the contact, up opens it, repeat (2) changes nothing
+        // level coded: down closes the contact up opens it repeat (2) changes nothing
         if (SwInputStateMachine.isLinuxSwLevelKey(linuxCode)) {
             if (action == 1) submitEdge(SW_INPUT_INDEX, true);
             else if (action == 0) submitEdge(SW_INPUT_INDEX, false);
         }
     }
 
-    /** True while the linux code is a sw terminal key the handler consumes. */
+    // true while the linux code is a sw terminal key the handler consumes
     public static boolean isNativeSwInputCode(int linuxCode) {
         return SwInputStateMachine.levelForLinuxKey(linuxCode) != null
                 || SwInputStateMachine.isLinuxSwLevelKey(linuxCode);
     }
 
-    // unlike the f11/f12 pulses, the level code (KEYCODE_1) is an ordinary digit on
-    // a real keyboard, so it is only claimed when it can actually be the terminal:
-    // the model has an input and the event comes off a device that cannot type
-    // letters. gpio_keys declares the one sw code and nothing else; a usb or
-    // bluetooth keyboard keeps its digit and passes on to the webview
+    // unlike the f11/f12 pulses the level code (keycode_1) is an ordinary digit
+    // on a real keyboard so it is only claimed when it can actually be the
+    // terminal: the model has an input and the event comes off a device that
+    // cannot type letters. gpio_keys declares the one sw code and nothing else
+    // a usb or bluetooth keyboard keeps its digit and passes it on to the webview
     private boolean isSwTerminalLevelKey(KeyEvent event) {
         if (!SwInputStateMachine.isAndroidSwLevelKey(event.getKeyCode())) return false;
         if (SW_INPUT_INDEX >= device.inputs) return false;
@@ -169,17 +169,13 @@ public class SwInputHandler {
         return levelKeySourceIsTerminal;
     }
 
-    /** Logical contact level of input i, null until the first edge after start. */
+    // logical contact level of input i null until the first edge after start
     public Boolean getLevel(int input) {
         return stateMachine.getLevel(input);
     }
 
     public int getMode(int input) {
         return stateMachine.getMode(input);
-    }
-
-    public int getInputCount() {
-        return device.inputs;
     }
 
     private void submitEdge(int input, boolean level) {
@@ -207,7 +203,7 @@ public class SwInputHandler {
         }
     }
 
-    // seed the keys so GET /settings exposes them before the first ui save
+    // seed the keys so get /settings exposes them before the first ui save
     private void seedDefaults() {
         SharedPreferences.Editor editor = null;
         for (int i = 0; i < device.inputs; i++) {

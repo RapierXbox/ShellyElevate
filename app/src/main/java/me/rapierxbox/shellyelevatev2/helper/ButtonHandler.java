@@ -24,20 +24,22 @@ import me.rapierxbox.shellyelevatev2.DeviceModel;
 
 // single owner of the capacitive buttons and the power button
 //
-// all of this used to sit in MainActivity.dispatchKeyEvent. with lite mode on the HA companion app is the one in
-// front, nothing of ours holds focus, no key event ever reaches us and the buttons are simply dead #101
-// so the edges come off the native input monitor now, which reads /dev/input and doesnt care whats on top. the
-// activity path stays for when the monitor cant open the node, both deliveries are taken and the duplicate dropped
+// all of this used to sit in MainActivity.dispatchKeyEvent. with lite mode on
+// the ha companion app is the one in front nothing of ours holds focus no key
+// event ever reaches us and the buttons are simply dead (#101)
+// so the edges come off the native input monitor now which reads /dev/input
+// and doesnt care whats on top. the activity path stays for when the monitor
+// cant open the node both deliveries are taken and the duplicate dropped
 public class ButtonHandler {
     private static final String TAG = "ButtonHandler";
 
-    // the power button is id 140 all the way out to mqtt and the js event, thats a pre existing contract
+    // the power button is id 140 all the way out to mqtt and the js event thats a pre existing contract
     public static final int POWER_BUTTON_ID = 140;
 
-    // android keycodes: 131..134 (KEYCODE_F1..F4) are capacitive buttons 0..3, 140 (KEYCODE_F10) is power
+    // android keycodes: 131..134 (keycode_f1..f4) are capacitive buttons 0..3 140 (keycode_f10) is power
     private static final int ANDROID_KEY_BUTTON_BASE = 131;
     private static final int ANDROID_KEY_POWER = 140;
-    // the same keys raw off the event node: KEY_F1..KEY_F4 = 59..62, KEY_F10 = 68
+    // the same keys raw off the event node: key_f1..key_f4 = 59..62 key_f10 = 68
     private static final int LINUX_KEY_BUTTON_BASE = 59;
     private static final int LINUX_KEY_POWER = 68;
     private static final int MAX_BUTTONS = 4;
@@ -47,13 +49,12 @@ public class ButtonHandler {
     private static final long DUPLICATE_WINDOW_MS = 300;
 
     private final DeviceModel device;
-    // slots 0..buttons-1 are the capacitive buttons, power takes the slot after them on models that have one
+    // slots 0..buttons-1 are the capacitive buttons power takes the slot after them on models that have one
     private final int powerSlot;
     private final ButtonPressDetector[] pressDetectors;
-    private final Boolean[] lastDown;
-    private final long[] lastEdgeAtMs;
+    private final EdgeDebounce debounce;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    // relay writes, mqtt publishes and the reboot stay off the main thread. one thread keeps press and release ordered
+    // relay writes mqtt publishes and the reboot stay off the main thread. one thread keeps press and release ordered
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
 
     public ButtonHandler() {
@@ -62,15 +63,14 @@ public class ButtonHandler {
 
         int slots = device.buttons + (device.hasPowerButton ? 1 : 0);
         pressDetectors = new ButtonPressDetector[slots];
-        lastDown = new Boolean[slots];
-        lastEdgeAtMs = new long[slots];
+        debounce = new EdgeDebounce(slots, DUPLICATE_WINDOW_MS);
         for (int slot = 0; slot < slots; slot++) {
             pressDetectors[slot] = new ButtonPressDetector(buttonIdForSlot(slot), this::onPressTypeDetected);
         }
         Log.i(TAG, "ButtonHandler ready: buttons=" + device.buttons + " powerButton=" + device.hasPowerButton);
     }
 
-    // handles the button keycodes, returns false for anything else so callers can pass those on
+    // handles the button keycodes returns false for anything else so callers can pass those on
     public boolean onKeyEvent(KeyEvent event) {
         int slot = slotForButtonId(buttonIdForAndroidKey(event.getKeyCode()));
         if (slot < 0) return false;
@@ -83,11 +83,11 @@ public class ButtonHandler {
         return true;
     }
 
-    // intake for the native input monitor. action 0=UP 1=DOWN 2=REPEAT
+    // intake for the native input monitor. action 0=up 1=down 2=repeat
     public void onNativeKey(int linuxCode, int action) {
         int slot = slotForButtonId(buttonIdForLinuxKey(linuxCode));
         if (slot < 0) return;
-        // 2 is autorepeat, swallowed here for the same reason as on the activity path
+        // 2 is autorepeat swallowed here for the same reason as on the activity path
         if (action == 1) submitEdge(slot, true);
         else if (action == 0) submitEdge(slot, false);
     }
@@ -97,7 +97,7 @@ public class ButtonHandler {
         return buttonIdForLinuxKey(linuxCode) >= 0;
     }
 
-    // button id carried by an android keycode, -1 for other keys
+    // button id carried by an android keycode -1 for other keys
     public static int buttonIdForAndroidKey(int keyCode) {
         if (keyCode == ANDROID_KEY_POWER) return POWER_BUTTON_ID;
         if (keyCode >= ANDROID_KEY_BUTTON_BASE && keyCode < ANDROID_KEY_BUTTON_BASE + MAX_BUTTONS) {
@@ -106,7 +106,7 @@ public class ButtonHandler {
         return -1;
     }
 
-    // button id carried by a raw linux key code, -1 for other keys
+    // button id carried by a raw linux key code -1 for other keys
     public static int buttonIdForLinuxKey(int linuxCode) {
         if (linuxCode == LINUX_KEY_POWER) return POWER_BUTTON_ID;
         if (linuxCode >= LINUX_KEY_BUTTON_BASE && linuxCode < LINUX_KEY_BUTTON_BASE + MAX_BUTTONS) {
@@ -115,8 +115,8 @@ public class ButtonHandler {
         return -1;
     }
 
-    // linux code behind a `getevent -l` key name, -1 when its not one of ours
-    // EXACT match on purpose. a startsWith or a contains would let KEY_F1 swallow KEY_F10, KEY_F11 and KEY_F12
+    // linux code behind a getevent -l key name -1 when its not one of ours
+    // exact match on purpose a startsWith or a contains would let KEY_F1 swallow KEY_F10 KEY_F11 and KEY_F12
     public static int linuxCodeForKeyName(String keyName) {
         if ("KEY_F10".equals(keyName)) return LINUX_KEY_POWER;
         for (int i = 0; i < MAX_BUTTONS; i++) {
@@ -130,11 +130,11 @@ public class ButtonHandler {
     }
 
     private void submitEdge(int slot, boolean down) {
-        // timestamp at ingestion, the rest is serialized on the main looper so the native thread and the ui thread
+        // timestamp at ingestion the rest is serialized on the main looper so the native thread and the ui thread
         // cant race the duplicate check
         final long nowMs = SystemClock.elapsedRealtime();
         mainHandler.post(() -> {
-            if (!accept(slot, down, nowMs)) {
+            if (!debounce.accept(slot, down, nowMs)) {
                 Log.d(TAG, "button " + buttonIdForSlot(slot) + (down ? " down" : " up") + " dropped as duplicate");
                 return;
             }
@@ -142,29 +142,18 @@ public class ButtonHandler {
             if (down) {
                 pressDetectors[slot].onPressDown();
             } else {
-                // relay first then the detector, the order MainActivity used
+                // relay first then the detector the order MainActivity used
                 if (buttonId != POWER_BUTTON_ID) toggleMappedRelay(buttonId);
                 pressDetectors[slot].onPressUp();
             }
         });
     }
 
-    // buttons alternate down and up, so repeating the edge we are already on inside the window is the second delivery of one press
-    // a real double click still gets through since its second down follows an up. the same edge AFTER the window is taken as real
-    // so one lost edge cant wedge the button for good
-    private boolean accept(int slot, boolean down, long nowMs) {
-        Boolean last = lastDown[slot];
-        if (last != null && last == down && nowMs - lastEdgeAtMs[slot] < DUPLICATE_WINDOW_MS) return false;
-        lastDown[slot] = down;
-        lastEdgeAtMs[slot] = nowMs;
-        return true;
-    }
-
     private void onPressTypeDetected(int buttonId, String pressType) {
         Log.d(TAG, "button " + buttonId + " press type detected: " + pressType);
 
         ioExecutor.execute(() -> {
-            if (mMQTTServer != null) mMQTTServer.publishButton(buttonId, pressType);
+            if (mMQTTServer != null && mMQTTServer.shouldSend()) mMQTTServer.publishButton(buttonId, pressType);
         });
         if (mShellyElevateJavascriptInterface != null) {
             mShellyElevateJavascriptInterface.onButtonPressed(buttonId);
@@ -206,5 +195,29 @@ public class ButtonHandler {
         if (buttonId < 0) return -1;
         if (buttonId == POWER_BUTTON_ID) return powerSlot;
         return buttonId < device.buttons ? buttonId : -1;
+    }
+
+    // tracks the last edge per slot to drop the duplicate delivery of one physical edge
+    // buttons alternate down and up so repeating the edge already seen inside the window is the second
+    // delivery of one press. a real double click still gets through since its second down follows an up
+    // the same edge after the window is taken as real so one lost edge cant wedge the button for good
+    private static final class EdgeDebounce {
+        private final Boolean[] lastDown;
+        private final long[] lastEdgeAtMs;
+        private final long windowMs;
+
+        EdgeDebounce(int slots, long windowMs) {
+            lastDown = new Boolean[slots];
+            lastEdgeAtMs = new long[slots];
+            this.windowMs = windowMs;
+        }
+
+        boolean accept(int slot, boolean down, long nowMs) {
+            Boolean last = lastDown[slot];
+            if (last != null && last == down && nowMs - lastEdgeAtMs[slot] < windowMs) return false;
+            lastDown[slot] = down;
+            lastEdgeAtMs[slot] = nowMs;
+            return true;
+        }
     }
 }

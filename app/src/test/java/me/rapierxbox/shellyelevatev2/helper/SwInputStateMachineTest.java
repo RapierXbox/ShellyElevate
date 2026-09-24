@@ -40,7 +40,7 @@ public class SwInputStateMachineTest {
         machine = new SwInputStateMachine(2, actions);
     }
 
-    // --- keymap: 141/KEY_F11 = rising edge, 142/KEY_F12 = falling edge,
+    // --- keymap: 141/KEY_F11 = rising edge 142/KEY_F12 = falling edge
     //     8/KEY_1 = level coded contact ---
 
     @Test
@@ -63,7 +63,7 @@ public class SwInputStateMachineTest {
     public void levelKeyIsSeparateFromTheEdgeCodes() {
         assertTrue(SwInputStateMachine.isAndroidSwLevelKey(8));
         assertTrue(SwInputStateMachine.isLinuxSwLevelKey(2));
-        // the level code carries no direction, the caller derives it from the key state
+        // the level code carries no direction the caller derives it from the key state
         assertNull(SwInputStateMachine.levelForAndroidKey(8));
         assertNull(SwInputStateMachine.levelForLinuxKey(2));
         // and the edge codes are not level keys
@@ -88,8 +88,8 @@ public class SwInputStateMachineTest {
     public void oppositeLevelAlwaysAcceptedEvenFast() {
         machine.configure(0, SW_INPUT_MODE_SWITCH_EDGE, false);
         assertTrue(machine.onEdge(0, true, 0));
-        // a genuine opposite transition right after must not be eaten; the
-        // direction is keycode-coded, so it cannot be delivery noise
+        // a genuine opposite transition right after must not be eaten since the
+        // direction is keycode-coded so it cannot be delivery noise
         assertTrue(machine.onEdge(0, false, 5));
         assertEquals(2, actions.count("toggle:0"));
         assertEquals(Boolean.FALSE, machine.getLevel(0));
@@ -207,11 +207,11 @@ public class SwInputStateMachineTest {
     }
 
     // --- regression: the exact hardware trace from the X1i field test ---
-    // Two tasters in a multi-way (wechsel/kreuz) circuit: each press flips the
-    // line once, alternating direction. Every pulse is delivered twice (native
-    // monitor + activity KeyEvent) ~10ms apart. Five presses were observed:
-    // rise, fall, rise, fall, rise. The old code swallowed the falling pulses,
-    // toggling only every second press.
+    // two tasters in a multi-way (wechsel/kreuz) circuit: each press flips the
+    // line once alternating direction. every pulse is delivered twice (native
+    // monitor + activity KeyEvent) ~10ms apart. five presses were observed:
+    // rise fall rise fall rise. the old code swallowed the falling pulses
+    // toggling only every second press
 
     private void replayFieldTrace() {
         long[] pressAt = {0, 1030, 1960, 2990, 3820};
@@ -242,5 +242,16 @@ public class SwInputStateMachineTest {
         replayFieldTrace();
         assertEquals(List.of("set:0:true", "set:0:false", "set:0:true", "set:0:false", "set:0:true"),
                 actions.events.stream().filter(e -> e.startsWith("set:")).toList());
+    }
+
+    // --- out of range indices are ignored rather than throwing ---
+
+    @Test
+    public void configureAndResetIgnoreInvalidIndex() {
+        machine.configure(5, SW_INPUT_MODE_SWITCH_EDGE, true);
+        machine.reset(5);
+        machine.reset(-1);
+        assertEquals(SW_INPUT_MODE_DETACHED, machine.getMode(5));
+        assertNull(machine.getLevel(5));
     }
 }

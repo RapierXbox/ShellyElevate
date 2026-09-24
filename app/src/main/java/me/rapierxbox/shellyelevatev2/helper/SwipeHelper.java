@@ -35,16 +35,16 @@ public class SwipeHelper {
     private static final String TAG = "SwipeHelper";
     private static final float PINCH_SPREAD_RATIO_THRESHOLD = 0.35F;
 
-    // Thresholds for "real swipe" vs. accidental drag. Velocity is px / ms;
-    // distance is raw pixels, so values are tied to display density.
-    public float minVel = 1.0F; // px/ms = 1000 px/s
-    public float minDist = Math.min(
+    // thresholds for a real swipe vs an accidental drag. velocity is px/ms
+    // distance is raw pixels so both are tied to display density
+    private static final float MIN_VELOCITY_PX_MS = 1.0F; // 1000 px/s
+    private final float minDistancePx = Math.min(
         mApplicationContext.getResources().getDisplayMetrics().widthPixels,
         mApplicationContext.getResources().getDisplayMetrics().heightPixels
-    ) / 3.0F; // px
+    ) / 3.0F;
 
     private final SparseArray<PointerInfo> pointers = new SparseArray<>();
-    // tracks across the full gesture; some fingers may have lifted before ACTION_UP
+    // tracks across the full gesture since some fingers may have lifted before ACTION_UP
     private int maxPointerCount = 0;
     private long gestureStartTime = 0;
     private long lastPointerJoinTime = 0;
@@ -111,24 +111,32 @@ public class SwipeHelper {
         boolean switchOnSwipe = mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true);
         boolean publishSwipeEvents = mSharedPreferences.getBoolean(SP_PUBLISH_SWIPE_EVENTS, true);
 
-        // Measure velocity from the last finger-join timestamp for multi-touch,
-        // while still using gestureStartTime for single-finger gestures.
+        // velocity is measured from the last finger-join timestamp for multi-touch
+        // and from gestureStartTime for single-finger gestures
         long refTime = (lastPointerJoinTime > 0) ? lastPointerJoinTime : gestureStartTime;
         long totalTime = Math.max(1, endTime - refTime);
 
         if (maxPointerCount == 1) {
-            PointerInfo p = pointers.size() > 0 ? pointers.valueAt(0) : null;
-            if (p == null) return;
-            float deltaY   = Math.abs(p.startY - p.endY);
-            float velocity = deltaY / (float) totalTime;
-            if (switchOnSwipe && velocity > minVel && deltaY > minDist) {
-                var numRelay = 0;
-                mDeviceHelper.setRelay(numRelay, !mDeviceHelper.getRelay(numRelay));
-                if (mMQTTServer.shouldSend()) mMQTTServer.publishSwipeEvent(SWIPE_EVENT_TYPE_SINGLE);
-            }
+            evaluateSingleFinger(totalTime, switchOnSwipe);
             return;
         }
 
+        evaluateMultiFinger(totalTime, publishSwipeEvents);
+    }
+
+    private void evaluateSingleFinger(long totalTime, boolean switchOnSwipe) {
+        PointerInfo p = pointers.size() > 0 ? pointers.valueAt(0) : null;
+        if (p == null) return;
+        float deltaY   = Math.abs(p.startY - p.endY);
+        float velocity = deltaY / (float) totalTime;
+        if (switchOnSwipe && velocity > MIN_VELOCITY_PX_MS && deltaY > minDistancePx) {
+            int relayIndex = 0;
+            mDeviceHelper.setRelay(relayIndex, !mDeviceHelper.getRelay(relayIndex));
+            if (mMQTTServer != null && mMQTTServer.shouldSend()) mMQTTServer.publishSwipeEvent(SWIPE_EVENT_TYPE_SINGLE);
+        }
+    }
+
+    private void evaluateMultiFinger(long totalTime, boolean publishSwipeEvents) {
         int count = pointers.size();
         if (count == 0) return;
 
@@ -145,68 +153,70 @@ public class SwipeHelper {
         float meanDist   = Math.max(Math.abs(meanDx), Math.abs(meanDy));
         float velocity   = meanDist / (float) totalTime;
 
-        if (velocity <= minVel || meanDist <= minDist) return;
+        if (velocity <= MIN_VELOCITY_PX_MS || meanDist <= minDistancePx) return;
+        if (isPinchOrSpread(count, meanDist)) return;
+        if (fingersDisagreeOnDirection(count, vertical, meanDx, meanDy)) return;
+        if (!publishSwipeEvents || mMQTTServer == null || !mMQTTServer.shouldSend()) return;
 
-        // reject pinch/spread: if the inter-pointer distance changed by more than
-        // PINCH_SPREAD_RATIO_THRESHOLD × meanDist, treat it as pinch-to-zoom (not a swipe)
-        if (count == 2) {
-            PointerInfo p0 = pointers.valueAt(0);
-            PointerInfo p1 = pointers.valueAt(1);
-            float startSpread = (float) Math.hypot(p0.startX - p1.startX, p0.startY - p1.startY);
-            float endSpread   = (float) Math.hypot(p0.endX   - p1.endX,   p0.endY   - p1.endY);
-            if (Math.abs(endSpread - startSpread) > PINCH_SPREAD_RATIO_THRESHOLD * meanDist) return;
-        }
+        publishMultiFingerSwipe(vertical, meanDx, meanDy);
+    }
 
-        // reject pinch/divergent: every pointer must agree in sign on the dominant axis
+    // rejects pinch/spread: the inter-pointer distance changing by more than
+    // PINCH_SPREAD_RATIO_THRESHOLD x meanDist means this is pinch-to-zoom not a swipe
+    // only checked for two fingers since more than that is not a native pinch gesture
+    private boolean isPinchOrSpread(int count, float meanDist) {
+        if (count != 2) return false;
+        PointerInfo p0 = pointers.valueAt(0);
+        PointerInfo p1 = pointers.valueAt(1);
+        float startSpread = (float) Math.hypot(p0.startX - p1.startX, p0.startY - p1.startY);
+        float endSpread   = (float) Math.hypot(p0.endX   - p1.endX,   p0.endY   - p1.endY);
+        return Math.abs(endSpread - startSpread) > PINCH_SPREAD_RATIO_THRESHOLD * meanDist;
+    }
+
+    // every pointer must agree in sign on the dominant axis or this is a pinch/divergent gesture not a swipe
+    private boolean fingersDisagreeOnDirection(int count, boolean vertical, float meanDx, float meanDy) {
+        float mean = vertical ? meanDy : meanDx;
         for (int i = 0; i < count; i++) {
             PointerInfo p = pointers.valueAt(i);
             float delta = vertical ? (p.endY - p.startY) : (p.endX - p.startX);
-            float mean  = vertical ? meanDy : meanDx;
-            if (Math.signum(delta) != Math.signum(mean)) return;
+            if (Math.signum(delta) != Math.signum(mean)) return true;
         }
+        return false;
+    }
 
-        if (!publishSwipeEvents || !mMQTTServer.shouldSend()) return;
+    private void publishMultiFingerSwipe(boolean vertical, float meanDx, float meanDy) {
+        String[] events = eventNamesFor(maxPointerCount);
+        String event = vertical
+                ? (meanDy < 0 ? events[0] : events[1])
+                : (meanDx < 0 ? events[2] : events[3]);
 
-        String eventUp;
-        String eventDown;
-        String eventLeft;
-        String eventRight;
+        mMQTTServer.publishSwipeEvent(event);
+        if (mScreenSaverManager != null) mScreenSaverManager.onSwipeFired();
+        if (BuildConfig.DEBUG) Log.d(TAG, "multi-finger accepted event=" + event);
+    }
 
-        if (maxPointerCount >= 5) {
-            eventUp = SWIPE_EVENT_TYPE_FIVE_FINGER_UP;
-            eventDown = SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN;
-            eventLeft = SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT;
-            eventRight = SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT;
-        } else if (maxPointerCount == 4) {
-            eventUp = SWIPE_EVENT_TYPE_FOUR_FINGER_UP;
-            eventDown = SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN;
-            eventLeft = SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT;
-            eventRight = SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT;
-        } else if (maxPointerCount == 3) {
-            eventUp = SWIPE_EVENT_TYPE_THREE_FINGER_UP;
-            eventDown = SWIPE_EVENT_TYPE_THREE_FINGER_DOWN;
-            eventLeft = SWIPE_EVENT_TYPE_THREE_FINGER_LEFT;
-            eventRight = SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT;
-        } else {
-            // maxPointerCount == 2
-            eventUp = SWIPE_EVENT_TYPE_TWO_FINGER_UP;
-            eventDown = SWIPE_EVENT_TYPE_TWO_FINGER_DOWN;
-            eventLeft = SWIPE_EVENT_TYPE_TWO_FINGER_LEFT;
-            eventRight = SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT;
+    // [up down left right] event names for a simultaneous finger count clamped to 2..5
+    private static String[] eventNamesFor(int fingerCount) {
+        if (fingerCount >= 5) {
+            return new String[] {
+                SWIPE_EVENT_TYPE_FIVE_FINGER_UP, SWIPE_EVENT_TYPE_FIVE_FINGER_DOWN,
+                SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT, SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT
+            };
+        } else if (fingerCount == 4) {
+            return new String[] {
+                SWIPE_EVENT_TYPE_FOUR_FINGER_UP, SWIPE_EVENT_TYPE_FOUR_FINGER_DOWN,
+                SWIPE_EVENT_TYPE_FOUR_FINGER_LEFT, SWIPE_EVENT_TYPE_FOUR_FINGER_RIGHT
+            };
+        } else if (fingerCount == 3) {
+            return new String[] {
+                SWIPE_EVENT_TYPE_THREE_FINGER_UP, SWIPE_EVENT_TYPE_THREE_FINGER_DOWN,
+                SWIPE_EVENT_TYPE_THREE_FINGER_LEFT, SWIPE_EVENT_TYPE_THREE_FINGER_RIGHT
+            };
         }
-
-        if (vertical) {
-            mMQTTServer.publishSwipeEvent(meanDy < 0 ? eventUp : eventDown);
-            if (mScreenSaverManager != null) mScreenSaverManager.onSwipeFired();
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "multi-finger accepted event=" + (meanDy < 0 ? eventUp : eventDown));
-            }
-        } else {
-            mMQTTServer.publishSwipeEvent(meanDx < 0 ? eventLeft : eventRight);
-            if (mScreenSaverManager != null) mScreenSaverManager.onSwipeFired();
-            if (BuildConfig.DEBUG) {
-                Log.d(TAG, "multi-finger accepted event=" + (meanDx < 0 ? eventLeft : eventRight));
-            }
-        }
+        // fingerCount == 2
+        return new String[] {
+            SWIPE_EVENT_TYPE_TWO_FINGER_UP, SWIPE_EVENT_TYPE_TWO_FINGER_DOWN,
+            SWIPE_EVENT_TYPE_TWO_FINGER_LEFT, SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT
+        };
     }
 }
