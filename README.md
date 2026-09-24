@@ -1,7 +1,13 @@
 # ShellyElevate
 
-> **Warning**
-> This is third-party firmware. It can brick your device if something goes wrong. There is no warranty. If you're not comfortable with `adb` and the idea of rooting a device that costs real money, stop here.
+> [!WARNING]
+> **This is unofficial, third-party firmware. Use it at your own risk.**
+>
+> - Flashing it can **permanently brick your device**. There is no warranty from me or from Shelly.
+> - **Shelly will not service or replace devices modified this way.** They asked me to state this clearly, because many people followed this guide, bricked their devices, and then asked Shelly for a replacement. Please don't.
+> - If something goes wrong, you're on your own: open an issue here or try to recover it yourself.
+>
+> If you're not comfortable with `adb` and with rooting a device you paid real money for, **stop here**.
 
 ShellyElevate replaces the stock software on a Shelly Wall Display. The stock app works, but the WebView crashes, hardware access is locked down, and you can't really build anything on top of it. This project gives you a stable Home Assistant kiosk, exposes the relays, sensors and buttons over MQTT and HTTP, and lets your dashboard talk to the hardware directly from JavaScript.
 
