@@ -9,8 +9,8 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
-import android.util.Log;
 import android.os.SystemClock;
+import android.util.Log;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
@@ -26,78 +26,98 @@ import org.eclipse.paho.mqttv5.common.packet.MqttProperties;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
+import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 public class MQTTServer {
     private static final String TAG = "MQTTServer";
-    private MqttClient mMqttClient;
-    private final MemoryPersistence mMemoryPersistence;
-    private final ShellyElevateMQTTCallback mShellyElevateMQTTCallback;
-    private final MqttConnectionOptions mMqttConnectionsOptions;
-    private final ScheduledExecutorService scheduler;
-    private volatile boolean periodicScheduled = false;
+
     private static final long PERIODIC_INTERVAL_NORMAL_SEC = 30;
     private static final long PERIODIC_INTERVAL_LOW_POWER_SEC = 120;
-    private volatile long periodicIntervalSec = PERIODIC_INTERVAL_NORMAL_SEC;
-    private ScheduledFuture<?> periodicFuture;
-    private String clientId;
-    private boolean validForConnection;
-    private volatile boolean connecting = false;
-    private volatile int lastPublishedBrightness = Integer.MIN_VALUE;
-    private volatile long lastBrightnessSentAtMs = 0L;
     private static final long MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS = 500;
+    // relays and dimmer state are coalesced over this window so rapid flips send one publish
+    private static final long COALESCE_WINDOW_MS = 40L;
+    private static final long RECONNECT_DELAY_SEC = 5;
+    private static final long CONNECT_RETRY_DELAY_SEC = 60;
+    private static final int CONNECTION_TIMEOUT_SEC = 5;
+
+    private final MemoryPersistence mMemoryPersistence = new MemoryPersistence();
+    private final ShellyElevateMQTTCallback mShellyElevateMQTTCallback = new ShellyElevateMQTTCallback(this);
+    private final MqttConnectionOptions mMqttConnectionsOptions = new MqttConnectionOptions();
+    // single thread so connects and publishes never interleave
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private final AtomicBoolean connecting = new AtomicBoolean(false);
+
+    // written on the scheduler thread but read from sensor and ui threads
+    private volatile MqttClient mMqttClient;
+    private volatile String clientId;
+    private volatile boolean validForConnection;
+    // connection settings the current client was built from
+    private volatile String appliedConnectionKey = "";
+
+    // guarded by this
+    private ScheduledFuture<?> periodicFuture;
+    private long periodicIntervalSec = PERIODIC_INTERVAL_NORMAL_SEC;
+
+    // guarded by this
+    private int lastPublishedBrightness = Integer.MIN_VALUE;
+    private long lastBrightnessSentAtMs = 0L;
+    private int pendingBrightness;
     // trailing publish so the final value of a fade always goes out
     private ScheduledFuture<?> brightnessTrailingFuture;
-    private int pendingBrightness;
+
+    private final Object coalesceLock = new Object();
+    // guarded by coalesce lock
+    private Map<String, PendingPublish> pendingPublishes = new LinkedHashMap<>();
+    private boolean flushScheduled = false;
+
     private BroadcastReceiver settingsChangedReceiver;
     private BroadcastReceiver voiceStateReceiver;
 
-    // Bursty topics (relays/switches/buttons) are coalesced over this window so
-    // that flipping a relay rapidly doesn't queue many duplicate publishes.
-    private static final long COALESCE_WINDOW_MS = 40L;
-    private final Object coalesceLock = new Object();
-    private java.util.HashMap<String, Pending> pending = new java.util.HashMap<>();
-    private volatile boolean flushScheduled = false;
-
-    private static final class Pending {
+    private static final class PendingPublish {
         final String payload;
         final int qos;
         final boolean retained;
-        Pending(String payload, int qos, boolean retained) {
-            this.payload = payload; this.qos = qos; this.retained = retained;
+
+        PendingPublish(String payload, int qos, boolean retained) {
+            this.payload = payload;
+            this.qos = qos;
+            this.retained = retained;
         }
     }
 
     public MQTTServer() {
-        mMemoryPersistence = new MemoryPersistence();
-        mShellyElevateMQTTCallback = new ShellyElevateMQTTCallback();
-        mMqttConnectionsOptions = new MqttConnectionOptions();
-        scheduler = Executors.newScheduledThreadPool(1);
-
         setupClientId();
-        registerSettingsReceiver();
-
+        registerReceivers();
         checkCredsAndConnect();
     }
 
     private void setupClientId() {
-        clientId = mSharedPreferences.getString(SP_MQTT_CLIENTID, "shellywalldisplay");
-        if (clientId.equals("shellyelevate") || clientId.equals("shellywalldisplay") || clientId.length() <= 2) {
-            clientId = "shellyelevate-" + UUID.randomUUID().toString().replaceAll("-", "").substring(2, 6);
-            mSharedPreferences.edit().putString(SP_MQTT_CLIENTID, clientId).apply();
+        String id = mSharedPreferences.getString(SP_MQTT_CLIENTID, "shellywalldisplay");
+        // legacy defaults would collide when several displays share one broker
+        if (id.equals("shellyelevate") || id.equals("shellywalldisplay") || id.length() <= 2) {
+            id = "shellyelevate-" + UUID.randomUUID().toString().replace("-", "").substring(2, 6);
+            mSharedPreferences.edit().putString(SP_MQTT_CLIENTID, id).apply();
         }
+        clientId = id;
     }
 
-    private void registerSettingsReceiver() {
+    private void registerReceivers() {
+        LocalBroadcastManager lbm = LocalBroadcastManager.getInstance(mApplicationContext);
+
         settingsChangedReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -105,88 +125,80 @@ public class MQTTServer {
                 reconnectWithNewSettings();
             }
         };
-        LocalBroadcastManager.getInstance(mApplicationContext)
-                .registerReceiver(settingsChangedReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
+        lbm.registerReceiver(settingsChangedReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
 
         voiceStateReceiver = new BroadcastReceiver() {
             @Override
-            public void onReceive(Context context, Intent intent) { publishVoiceState(); }
+            public void onReceive(Context context, Intent intent) {
+                publishVoiceState();
+            }
         };
-        LocalBroadcastManager.getInstance(mApplicationContext)
-                .registerReceiver(voiceStateReceiver, new IntentFilter(INTENT_VOICE_STATE_CHANGED));
+        lbm.registerReceiver(voiceStateReceiver, new IntentFilter(INTENT_VOICE_STATE_CHANGED));
+    }
+
+    // scheduler helpers that never throw once the scheduler is shut down
+
+    private boolean execute(Runnable task) {
+        if (scheduler.isShutdown()) return false;
+        try {
+            scheduler.execute(task);
+            return true;
+        } catch (RejectedExecutionException e) {
+            Log.w(TAG, "Task rejected, scheduler is shut down");
+            return false;
+        }
+    }
+
+    private ScheduledFuture<?> schedule(Runnable task, long delay, TimeUnit unit) {
+        if (scheduler.isShutdown()) return null;
+        try {
+            return scheduler.schedule(task, delay, unit);
+        } catch (RejectedExecutionException e) {
+            Log.w(TAG, "Delayed task rejected, scheduler is shut down");
+            return null;
+        }
     }
 
     private void reconnectWithNewSettings() {
-        if (scheduler.isShutdown()) return;
-        scheduler.execute(() -> {
-            try {
-                if (mMqttClient != null) {
-                    Log.d(TAG, "Tearing down old MQTT connection before applying new settings");
-                    try {
-                        if (mMqttClient.isConnected()) mMqttClient.disconnect();
-                        mMqttClient.close();
-                    } catch (MqttException e) {
-                        Log.w(TAG, "Error disconnecting during settings change", e);
-                    }
-                    mMqttClient = null;
-                }
-                // clear any stuck connecting flag so the fresh attempt is not blocked
-                connecting = false;
-
-                setupClientId();
-                Log.d(TAG, "Updated MQTT client ID to: " + clientId);
-
-                // Give the broker a moment to drop the old session before we reconnect
-                // with potentially the same client id.
-                Thread.sleep(500);
-
-                checkCredsAndConnect();
-            } catch (InterruptedException e) {
-                Log.e("MQTT", "Interrupted during reconnect", e);
-                Thread.currentThread().interrupt();
+        execute(() -> {
+            // settings the connection does not depend on only need a fresh state and discovery sync
+            if (connectionKey().equals(appliedConnectionKey) && isClientConnected()) {
+                Log.d(TAG, "Connection settings unchanged - republishing state only");
+                publishStatus();
+                return;
             }
+            MqttClient old = mMqttClient;
+            if (old != null) {
+                Log.d(TAG, "Tearing down old MQTT connection before applying new settings");
+                // mqtt was switched off so mark entities unavailable but keep the ha device and its customizations
+                if (!isEnabled()) publishOffline(old);
+                closeClient(old);
+                mMqttClient = null;
+            }
+            // clear a stuck connecting flag so the fresh attempt is not blocked
+            connecting.set(false);
+
+            setupClientId();
+            Log.d(TAG, "Updated MQTT client ID to: " + clientId);
+
+            try {
+                // give the broker a moment to drop the old session before we reuse the same client id
+                Thread.sleep(500);
+            } catch (InterruptedException e) {
+                Log.e(TAG, "Interrupted during reconnect", e);
+                Thread.currentThread().interrupt();
+                return;
+            }
+            checkCredsAndConnect();
         });
     }
 
-    private void schedulePeriodicTempHum() {
-        if (periodicScheduled) return;
-        periodicFuture = scheduler.scheduleWithFixedDelay(this::runPeriodicPublish,
-                0, periodicIntervalSec, TimeUnit.SECONDS);
-        periodicScheduled = true;
-    }
-
-    private void runPeriodicPublish() {
-        // skip sensor and uart reads while there is nothing to publish to
-        if (mMqttClient == null || !mMqttClient.isConnected()) return;
-        publishTempAndHum();
-        publishThermalZones();
-        if (mDeviceHelper.isDimmerAttached()) {
-            StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10));
-            StesProtocolHandler.getPowerMeter(p -> publishDimmerPower(p.powerW, p.voltageV, p.currentA));
-        }
-    }
-
-    public synchronized void setLowPowerMode(boolean low) {
-        long target = low ? PERIODIC_INTERVAL_LOW_POWER_SEC : PERIODIC_INTERVAL_NORMAL_SEC;
-        if (target == periodicIntervalSec) return;
-        periodicIntervalSec = target;
-        Log.i(TAG, "Periodic publish interval -> " + target + "s (lowPower=" + low + ")");
-        if (periodicScheduled) {
-            if (periodicFuture != null) periodicFuture.cancel(false);
-            periodicFuture = scheduler.scheduleWithFixedDelay(this::runPeriodicPublish,
-                    target, target, TimeUnit.SECONDS);
-        }
-    }
-
     public void checkCredsAndConnect() {
+        appliedConnectionKey = connectionKey();
         if (!isEnabled()) {
             // stop the periodic task so no sensor reads fire while disabled
-            if (periodicFuture != null) {
-                periodicFuture.cancel(false);
-                periodicFuture = null;
-            }
-            periodicScheduled = false;
-            if (mMqttClient != null && mMqttClient.isConnected()) {
+            stopPeriodicPublish();
+            if (isClientConnected()) {
                 Log.d(TAG, "MQTT disabled in settings - disconnecting");
                 disconnect();
             }
@@ -203,203 +215,208 @@ public class MQTTServer {
             return;
         }
 
-        schedulePeriodicTempHum();
-
+        startPeriodicPublish();
         connect();
     }
 
     public void connect() {
-        if (!validForConnection || connecting || (mMqttClient != null && mMqttClient.isConnected())) return;
-        if (scheduler.isShutdown()) return;
+        // the enabled flag is rechecked since a delayed retry may fire after mqtt got disabled
+        if (!isEnabled() || !validForConnection || isClientConnected()) return;
+        if (!connecting.compareAndSet(false, true)) return;
 
-        connecting = true;
-        Log.d("MQTT", "Connecting...");
-        scheduler.execute(this::doConnect);
+        Log.d(TAG, "Connecting...");
+        if (!execute(this::doConnect)) connecting.set(false);
     }
 
     private void doConnect() {
-        if (mMqttClient != null && mMqttClient.isConnected()) return;
+        if (isClientConnected()) {
+            connecting.set(false);
+            return;
+        }
 
         try {
-            mMqttConnectionsOptions.setUserName(mSharedPreferences.getString(SP_MQTT_USERNAME, ""));
-            mMqttConnectionsOptions.setPassword(mSharedPreferences.getString(SP_MQTT_PASSWORD, "").getBytes());
-            mMqttConnectionsOptions.setAutomaticReconnect(false);
-            mMqttConnectionsOptions.setConnectionTimeout(5);
-            mMqttConnectionsOptions.setCleanStart(true);
+            configureConnectionOptions();
 
-            // release the previous client so its network threads and persistence go away
-            if (mMqttClient != null) {
-                try {
-                    if (mMqttClient.isConnected()) mMqttClient.disconnect();
-                    mMqttClient.close();
-                } catch (Exception e) {
-                    Log.w(TAG, "Error closing previous MQTT client", e);
-                }
+            // release the previous client so its network threads go away
+            MqttClient previous = mMqttClient;
+            if (previous != null) {
+                closeClient(previous);
+                mMqttClient = null;
             }
 
-            mMqttClient = new MqttClient(
-                normalizeBrokerUri(mSharedPreferences.getString(SP_MQTT_BROKER, "")) + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883),
-                clientId, mMemoryPersistence
-            );
-
-            mMqttClient.setCallback(new MqttCallback() {
-                @Override
-                public void connectComplete(boolean reconnect, String serverURI) {
-                    Log.i(TAG, "Connected to " + serverURI + ", reconnect: " + reconnect);
-                    connecting = false;
-                    safeOnConnected();
-                }
-
-                @Override
-                public void disconnected(MqttDisconnectResponse disconnectResponse) {
-                    Log.w(TAG, "Disconnected: " + disconnectResponse.getReasonString());
-                    connecting = false;
-                    if (!scheduler.isShutdown() && isEnabled() && validForConnection) {
-                        scheduler.schedule(MQTTServer.this::connect, 5, TimeUnit.SECONDS);
-                    }
-                }
-
-                @Override
-                public void mqttErrorOccurred(MqttException exception) {
-                    Log.e(TAG, "MQTT error occurred", exception);
-                }
-
-                @Override
-                public void messageArrived(String topic, MqttMessage message) {
-                    mShellyElevateMQTTCallback.messageArrived(topic, message);
-                }
-
-                @Override
-                public void deliveryComplete(IMqttToken token) {}
-
-                @Override
-                public void authPacketArrived(int reasonCode, MqttProperties properties) {}
-            });
-
-            // Last-will: broker publishes "offline" if we drop without a clean disconnect.
-            MqttMessage lwtMessage = new MqttMessage("offline".getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            lwtMessage.setQos(1);
-            lwtMessage.setRetained(true);
-            MqttProperties lwtProps = new MqttProperties();
-            lwtProps.setPayloadFormat(true);
-            lwtProps.setContentType("text/plain; charset=utf-8");
-            lwtMessage.setProperties(lwtProps);
-            mMqttConnectionsOptions.setWill(parseTopic(MQTT_TOPIC_STATUS), lwtMessage);
-
-            mMqttClient.connect(mMqttConnectionsOptions);
+            MqttClient client = new MqttClient(buildServerUri(), clientId, mMemoryPersistence);
+            client.setCallback(createClientCallback(client));
+            mMqttClient = client;
+            client.connect(mMqttConnectionsOptions);
         } catch (MqttException e) {
-            Log.e(TAG, "Connect failed, scheduling retry in 60s: ", e);
-            connecting = false;
-            scheduler.schedule(this::connect, 60, TimeUnit.SECONDS);
+            Log.e(TAG, "Connect failed, scheduling retry in " + CONNECT_RETRY_DELAY_SEC + "s", e);
+            connecting.set(false);
+            schedule(this::connect, CONNECT_RETRY_DELAY_SEC, TimeUnit.SECONDS);
         } catch (Exception e) {
-            // a bad broker uri throws here so reset the flag so a fixed setting can reconnect without reboot
-            Log.e(TAG, "Connect failed with unexpected error: ", e);
-            connecting = false;
+            // a bad broker uri throws here so reset the flag and let a fixed setting reconnect without reboot
+            Log.e(TAG, "Connect failed with unexpected error", e);
+            connecting.set(false);
         }
     }
 
-    private String normalizeBrokerUri(String broker) {
-        String b = broker.trim();
-        // default to plain tcp when the scheme is omitted
-        if (!b.contains("://")) b = "tcp://" + b;
-        return b;
+    private void configureConnectionOptions() {
+        mMqttConnectionsOptions.setUserName(mSharedPreferences.getString(SP_MQTT_USERNAME, ""));
+        mMqttConnectionsOptions.setPassword(
+                mSharedPreferences.getString(SP_MQTT_PASSWORD, "").getBytes(StandardCharsets.UTF_8));
+        mMqttConnectionsOptions.setAutomaticReconnect(false);
+        mMqttConnectionsOptions.setConnectionTimeout(CONNECTION_TIMEOUT_SEC);
+        mMqttConnectionsOptions.setCleanStart(true);
+
+        // the broker publishes offline for us if we drop without a clean disconnect
+        MqttMessage will = new MqttMessage("offline".getBytes(StandardCharsets.UTF_8));
+        will.setQos(1);
+        will.setRetained(true);
+        will.setProperties(payloadProperties("offline"));
+        mMqttConnectionsOptions.setWill(parseTopic(MQTT_TOPIC_STATUS), will);
     }
 
-    private void safeOnConnected() {
-        // Small delay so the broker finishes session setup before we start
-        // publishing/subscribing. Some brokers reject SUBSCRIBE if it arrives in
-        // the same TCP write as CONNACK.
-        scheduler.schedule(() -> {
-            if (mMqttClient != null && mMqttClient.isConnected()) {
-                try {
-                    // subscribe only to inbound command topics so we dont echo our own state
-                    String[] inboundTopics = {
-                            parseTopic(MQTT_TOPIC_UPDATE),
-                            MQTT_TOPIC_UPDATE_GENERIC,
-                            parseTopic(MQTT_TOPIC_RELAY_COMMAND),
-                            parseTopic(MQTT_TOPIC_RELAY_COMMAND) + "_1",
-                            parseTopic(MQTT_TOPIC_DIMMER_COMMAND),
-                            parseTopic(MQTT_TOPIC_SLEEP_BUTTON),
-                            parseTopic(MQTT_TOPIC_WAKE_BUTTON),
-                            parseTopic(MQTT_TOPIC_REBOOT_BUTTON),
-                            parseTopic(MQTT_TOPIC_REFRESH_WEBVIEW_BUTTON),
-                            parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS_COMMAND),
-                            parseTopic(MQTT_TOPIC_NIGHT_MODE_COMMAND),
-                            parseTopic(MQTT_TOPIC_VOICE_TRIGGER),
-                            parseTopic(MQTT_TOPIC_VOICE_MUTE_COMMAND),
-                            MQTT_TOPIC_HOME_ASSISTANT_STATUS
-                    };
-                    for (String t : inboundTopics) mMqttClient.subscribe(t, 1);
+    // every setting the live connection was built from so a change forces a reconnect
+    private String connectionKey() {
+        return isEnabled() + "\n" + buildServerUri() + "\n"
+                + mSharedPreferences.getString(SP_MQTT_USERNAME, "") + "\n"
+                + mSharedPreferences.getString(SP_MQTT_PASSWORD, "") + "\n"
+                + mSharedPreferences.getString(SP_MQTT_CLIENTID, "");
+    }
 
-                    publishStatus();
-                } catch (Exception e) {
-                    Log.e(TAG, "onConnected error", e);
+    private String buildServerUri() {
+        String broker = mSharedPreferences.getString(SP_MQTT_BROKER, "").trim();
+        // default to plain tcp when the scheme is omitted
+        if (!broker.contains("://")) broker = "tcp://" + broker;
+        return broker + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883);
+    }
+
+    private MqttCallback createClientCallback(MqttClient client) {
+        return new MqttCallback() {
+            @Override
+            public void connectComplete(boolean reconnect, String serverURI) {
+                Log.i(TAG, "Connected to " + serverURI + ", reconnect: " + reconnect);
+                connecting.set(false);
+                onConnected();
+            }
+
+            @Override
+            public void disconnected(MqttDisconnectResponse disconnectResponse) {
+                Log.w(TAG, "Disconnected: " + disconnectResponse.getReasonString());
+                // a replaced client must not reset state that belongs to its successor
+                if (client != mMqttClient) return;
+                connecting.set(false);
+                if (isEnabled() && validForConnection) {
+                    schedule(MQTTServer.this::connect, RECONNECT_DELAY_SEC, TimeUnit.SECONDS);
                 }
+            }
+
+            @Override
+            public void mqttErrorOccurred(MqttException exception) {
+                Log.e(TAG, "MQTT error occurred", exception);
+            }
+
+            @Override
+            public void messageArrived(String topic, MqttMessage message) {
+                // paho only logs handler exceptions at fine level so surface them here
+                try {
+                    mShellyElevateMQTTCallback.messageArrived(topic, message);
+                } catch (RuntimeException e) {
+                    Log.e(TAG, "Failed to handle message on " + topic, e);
+                }
+            }
+
+            @Override
+            public void deliveryComplete(IMqttToken token) {}
+
+            @Override
+            public void authPacketArrived(int reasonCode, MqttProperties properties) {}
+        };
+    }
+
+    private void onConnected() {
+        // some brokers reject a subscribe that shares the tcp write with the connack so wait a moment
+        schedule(() -> {
+            MqttClient client = mMqttClient;
+            if (client == null || !client.isConnected()) return;
+            try {
+                for (String topic : inboundTopics()) client.subscribe(topic, 1);
+                publishStatus();
+            } catch (Exception e) {
+                Log.e(TAG, "onConnected error", e);
             }
         }, 150, TimeUnit.MILLISECONDS);
     }
 
-    public void publishStatus() {
-        if (mMqttClient == null || !mMqttClient.isConnected()) return;
-        if (scheduler.isShutdown()) return;
+    // only command topics so we never echo our own state back
+    private String[] inboundTopics() {
+        return new String[]{
+                parseTopic(MQTT_TOPIC_UPDATE),
+                MQTT_TOPIC_UPDATE_GENERIC,
+                parseTopic(MQTT_TOPIC_RELAY_COMMAND),
+                parseTopic(MQTT_TOPIC_RELAY_COMMAND) + "_1",
+                parseTopic(MQTT_TOPIC_DIMMER_COMMAND),
+                parseTopic(MQTT_TOPIC_SLEEP_BUTTON),
+                parseTopic(MQTT_TOPIC_WAKE_BUTTON),
+                parseTopic(MQTT_TOPIC_REBOOT_BUTTON),
+                parseTopic(MQTT_TOPIC_REFRESH_WEBVIEW_BUTTON),
+                parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS_COMMAND),
+                parseTopic(MQTT_TOPIC_NIGHT_MODE_COMMAND),
+                parseTopic(MQTT_TOPIC_VOICE_TRIGGER),
+                parseTopic(MQTT_TOPIC_VOICE_MUTE_COMMAND),
+                MQTT_TOPIC_HOME_ASSISTANT_STATUS
+        };
+    }
 
-        scheduler.execute(() -> {
+    public void disconnect() {
+        Log.d(TAG, "Disconnecting");
+        MqttClient client = mMqttClient;
+        if (client == null || !client.isConnected()) return;
+        try {
+            deleteConfig(client);
+            // sent directly since the send guard already fails when mqtt was just disabled
+            publishSync(client, parseTopic(MQTT_TOPIC_STATUS), "offline", 1, true);
+            client.disconnect();
+        } catch (MqttException e) {
+            Log.e(TAG, "Error disconnecting MQTT client", e);
+        }
+    }
+
+    private void publishOffline(MqttClient client) {
+        if (!client.isConnected()) return;
+        // sent directly since the send guard already fails when mqtt was just disabled
+        publishSync(client, parseTopic(MQTT_TOPIC_STATUS), "offline", 1, true);
+    }
+
+    private static void closeClient(MqttClient client) {
+        try {
+            if (client.isConnected()) client.disconnect();
+        } catch (MqttException e) {
+            Log.w(TAG, "Clean disconnect failed, forcing it", e);
+            // close refuses a client that still counts as connected
             try {
-                publishHello();
-                if (isHaDiscoveryEnabled()) {
-                    publishConfig();
-                } else {
-                    // Clear any stale retained discovery blob from a previous session.
-                    try {
-                        deleteConfig();
-                    } catch (MqttException e) {
-                        Log.w(TAG, "Failed to clear stale discovery topic", e);
-                    }
-                }
-                publishInternal(parseTopic(MQTT_TOPIC_STATUS), "online", 1, true);
-                publishNightModeState();
-
-                // Stagger publishes so the initial discovery burst doesn't overwhelm
-                // a slow broker or starve other tasks on the single-thread scheduler.
-                scheduler.schedule(this::publishTempAndHum, 50, TimeUnit.MILLISECONDS);
-
-                scheduler.schedule(() -> {
-                    for (int num = 0; num < DeviceModel.getReportedDevice().relays; num++) {
-                        publishRelay(num, mDeviceHelper.getRelay(num));
-                    }
-                    // re-sync the input binary_sensors after a reconnect; the level
-                    // stays unknown until the first edge after app start
-                    if (mSwInputHandler != null) {
-                        for (int num = 0; num < DeviceModel.getReportedDevice().inputs; num++) {
-                            Boolean level = mSwInputHandler.getLevel(num);
-                            if (level != null) publishSwitch(num, level);
-                        }
-                    }
-                }, 100, TimeUnit.MILLISECONDS);
-
-                scheduler.schedule(() -> {
-                    publishLux(mDeviceSensorManager.getLastMeasuredLux());
-                    publishScreenBrightness(mDeviceHelper.getScreenBrightness());
-                    if (DeviceModel.getReportedDevice().hasProximitySensor) {
-                        publishProximity(mDeviceSensorManager.getLastMeasuredDistance());
-                    }
-                    publishSleeping(mScreenSaverManager.isScreenSaverRunning());
-                }, 150, TimeUnit.MILLISECONDS);
-
-                scheduler.schedule(this::publishThermalZones, 2, TimeUnit.SECONDS);
-
-                scheduler.schedule(this::publishVoiceState, 250, TimeUnit.MILLISECONDS);
-
-                if (mDeviceHelper.isDimmerAttached()) {
-                    scheduler.schedule(() ->
-                        StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10)),
-                        200, TimeUnit.MILLISECONDS);
-                }
-
-            } catch (Exception e) {
-                Log.e(TAG, "publishStatus failed", e);
+                client.disconnectForcibly();
+            } catch (MqttException forced) {
+                Log.w(TAG, "Forced disconnect failed", forced);
             }
-        });
+        }
+        try {
+            client.close();
+        } catch (MqttException e) {
+            Log.w(TAG, "Error closing MQTT client", e);
+        }
+    }
+
+    public boolean isEnabled() {
+        return mSharedPreferences.getBoolean(SP_MQTT_ENABLED, false);
+    }
+
+    private boolean isClientConnected() {
+        MqttClient client = mMqttClient;
+        return client != null && client.isConnected();
+    }
+
+    public boolean shouldSend() {
+        return isEnabled() && isClientConnected();
     }
 
     private boolean isHaDiscoveryEnabled() {
@@ -410,107 +427,206 @@ public class MQTTServer {
         return mSharedPreferences.getBoolean(SP_MQTT_RETAIN_STATE, true);
     }
 
-    public void disconnect() {
-        Log.d(TAG, "Disconnecting");
-        if (mMqttClient != null && mMqttClient.isConnected()) {
+    private synchronized void startPeriodicPublish() {
+        if (periodicFuture != null) return;
+        periodicFuture = schedulePeriodic(0, periodicIntervalSec);
+    }
+
+    private synchronized void stopPeriodicPublish() {
+        if (periodicFuture == null) return;
+        periodicFuture.cancel(false);
+        periodicFuture = null;
+    }
+
+    public synchronized void setLowPowerMode(boolean low) {
+        long target = low ? PERIODIC_INTERVAL_LOW_POWER_SEC : PERIODIC_INTERVAL_NORMAL_SEC;
+        if (target == periodicIntervalSec) return;
+        periodicIntervalSec = target;
+        Log.i(TAG, "Periodic publish interval -> " + target + "s (lowPower=" + low + ")");
+        if (periodicFuture != null) {
+            periodicFuture.cancel(false);
+            periodicFuture = schedulePeriodic(target, target);
+        }
+    }
+
+    private ScheduledFuture<?> schedulePeriodic(long initialDelaySec, long delaySec) {
+        if (scheduler.isShutdown()) return null;
+        try {
+            return scheduler.scheduleWithFixedDelay(this::runPeriodicPublish,
+                    initialDelaySec, delaySec, TimeUnit.SECONDS);
+        } catch (RejectedExecutionException e) {
+            Log.w(TAG, "Periodic publish rejected, scheduler is shut down");
+            return null;
+        }
+    }
+
+    private void runPeriodicPublish() {
+        // skip sensor and uart reads while there is nothing to publish to
+        if (!isClientConnected()) return;
+        try {
+            publishTempAndHum();
+            publishThermalZones();
+            if (mDeviceHelper.isDimmerAttached()) {
+                StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10));
+                StesProtocolHandler.getPowerMeter(p -> publishDimmerPower(p.powerW, p.voltageV, p.currentA));
+            }
+        } catch (RuntimeException e) {
+            // an escaping exception would silently cancel the fixed delay schedule for good
+            Log.e(TAG, "Periodic publish failed", e);
+        }
+    }
+
+    // full state sync after connect or when ha asks for it
+
+    public void publishStatus() {
+        if (!isClientConnected()) return;
+
+        execute(() -> {
             try {
-                deleteConfig();
-                publishInternalSync(parseTopic(MQTT_TOPIC_STATUS), "offline", 1, true);
-                mMqttClient.disconnect();
-            } catch (MqttException e) {
-                Log.e(TAG, "Error disconnecting MQTT client", e);
+                publishHello();
+                if (isHaDiscoveryEnabled()) {
+                    publishConfig();
+                } else {
+                    clearStaleConfig();
+                }
+                publishInternal(parseTopic(MQTT_TOPIC_STATUS), "online", 1, true);
+                publishNightModeState();
+
+                // staggered so the discovery burst does not swamp a slow broker or starve the scheduler
+                schedule(this::publishTempAndHum, 50, TimeUnit.MILLISECONDS);
+                schedule(this::publishRelaysAndInputs, 100, TimeUnit.MILLISECONDS);
+                schedule(this::publishDisplayState, 150, TimeUnit.MILLISECONDS);
+                if (mDeviceHelper.isDimmerAttached()) {
+                    schedule(() -> StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10)),
+                            200, TimeUnit.MILLISECONDS);
+                }
+                schedule(this::publishVoiceState, 250, TimeUnit.MILLISECONDS);
+                schedule(this::publishThermalZones, 2, TimeUnit.SECONDS);
+            } catch (Exception e) {
+                Log.e(TAG, "publishStatus failed", e);
+            }
+        });
+    }
+
+    private void publishRelaysAndInputs() {
+        DeviceModel device = DeviceModel.getReportedDevice();
+        for (int num = 0; num < device.relays; num++) {
+            publishRelay(num, mDeviceHelper.getRelay(num));
+        }
+        // re-sync the input binary sensors after a reconnect since the level stays unknown until the first edge
+        if (mSwInputHandler != null) {
+            for (int num = 0; num < device.inputs; num++) {
+                Boolean level = mSwInputHandler.getLevel(num);
+                if (level != null) publishSwitch(num, level);
             }
         }
     }
 
-    public boolean isEnabled() {
-        return mSharedPreferences.getBoolean(SP_MQTT_ENABLED, false);
+    private void publishDisplayState() {
+        publishLux(mDeviceSensorManager.getLastMeasuredLux());
+        publishScreenBrightness(mDeviceHelper.getScreenBrightness());
+        if (DeviceModel.getReportedDevice().hasProximitySensor) {
+            publishProximity(mDeviceSensorManager.getLastMeasuredDistance());
+        }
+        publishSleeping(mScreenSaverManager.isScreenSaverRunning());
     }
 
-    public boolean shouldSend() {
-        return isEnabled() && mMqttClient != null && mMqttClient.isConnected();
+    private void publishConfig() throws JSONException {
+        JSONObject payload = new MqttDiscoveryConfigBuilder(
+                clientId, DeviceModel.getReportedDevice(), mSharedPreferences).build();
+        String topic = parseTopic(MQTT_TOPIC_CONFIG_DEVICE);
+        String json = payload.toString();
+        Log.i(TAG, "publishConfig: topic=" + topic + " bytes=" + json.length()
+                + " components=" + payload.optJSONObject("cmps").length());
+        // sync so the discovery blob lands before the state topics it describes
+        publishInternalSync(topic, json, 1, true);
+    }
+
+    private void clearStaleConfig() {
+        MqttClient client = mMqttClient;
+        if (client == null) return;
+        try {
+            deleteConfig(client);
+        } catch (MqttException e) {
+            Log.w(TAG, "Failed to clear stale discovery topic", e);
+        }
+    }
+
+    // an empty retained payload removes the device from ha and wipes the retained blob on the broker
+    private void deleteConfig(MqttClient client) throws MqttException {
+        client.publish(parseTopic(MQTT_TOPIC_CONFIG_DEVICE), new byte[0], 1, true);
     }
 
     public void publishInternal(String topic, String payload, int qos, boolean retained) {
-        if (scheduler.isShutdown()) return;
-        scheduler.execute(() -> publishInternalSync(topic, payload, qos, retained));
+        execute(() -> publishInternalSync(topic, payload, qos, retained));
     }
 
-    // Last-write-wins per topic: a fast-toggling relay produces only one publish
-    // per COALESCE_WINDOW_MS. The first call into the window arms a single flush;
-    // subsequent calls just overwrite the pending entry.
+    // last write wins per topic so a fast toggling relay produces one publish per window
     private void publishInternalCoalesced(String topic, String payload, int qos, boolean retained) {
-        if (scheduler.isShutdown()) return;
         synchronized (coalesceLock) {
-            pending.put(topic, new Pending(payload, qos, retained));
-            if (!flushScheduled) {
-                flushScheduled = true;
-                try {
-                    scheduler.schedule(this::flushPendingPublishes, COALESCE_WINDOW_MS, TimeUnit.MILLISECONDS);
-                } catch (java.util.concurrent.RejectedExecutionException e) {
-                    flushScheduled = false;
-                    Log.w(TAG, "Coalesce flush rejected; scheduler shutting down");
-                }
-            }
+            pendingPublishes.put(topic, new PendingPublish(payload, qos, retained));
+            if (flushScheduled) return;
+            flushScheduled = schedule(this::flushPendingPublishes, COALESCE_WINDOW_MS, TimeUnit.MILLISECONDS) != null;
         }
     }
 
     private void flushPendingPublishes() {
-        java.util.HashMap<String, Pending> toSend;
+        Map<String, PendingPublish> toSend;
         synchronized (coalesceLock) {
-            toSend = pending;
-            pending = new java.util.HashMap<>();
+            toSend = pendingPublishes;
+            pendingPublishes = new LinkedHashMap<>();
             flushScheduled = false;
         }
 
-        if (toSend.isEmpty()) return;
-        if (!shouldSend()) return;
-
-        for (java.util.Map.Entry<String, Pending> e : toSend.entrySet()) {
-            Pending p = e.getValue();
-            publishInternalSync(e.getKey(), p.payload, p.qos, p.retained);
+        if (toSend.isEmpty() || !shouldSend()) return;
+        for (Map.Entry<String, PendingPublish> entry : toSend.entrySet()) {
+            PendingPublish p = entry.getValue();
+            publishInternalSync(entry.getKey(), p.payload, p.qos, p.retained);
         }
     }
 
     private void publishInternalSync(String topic, String payload, int qos, boolean retained) {
-        if (!shouldSend()) {
+        MqttClient client = mMqttClient;
+        if (!isEnabled() || client == null || !client.isConnected()) {
             Log.w(TAG, "publishInternal skipped, client not connected: " + topic);
             return;
         }
+        publishSync(client, topic, payload, qos, retained);
+    }
+
+    private static void publishSync(MqttClient client, String topic, String payload, int qos, boolean retained) {
         try {
-            MqttMessage message = new MqttMessage(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            MqttMessage message = new MqttMessage(payload.getBytes(StandardCharsets.UTF_8));
             message.setQos(qos);
             message.setRetained(retained);
-            // Mark payloads as UTF-8 text/JSON so v5 brokers don't render them as
-            // binary; v3.1 brokers ignore these properties.
-            MqttProperties props = new MqttProperties();
-            props.setPayloadFormat(true);
-            String trimmed = !payload.isEmpty() ? payload.trim() : "";
-            boolean looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
-            props.setContentType(looksLikeJson ? "application/json" : "text/plain; charset=utf-8");
-            message.setProperties(props);
-            mMqttClient.publish(topic, message);
+            message.setProperties(payloadProperties(payload));
+            client.publish(topic, message);
         } catch (MqttException e) {
             Log.e(TAG, "Failed to publish to " + topic, e);
         }
+    }
+
+    // mark payloads as utf8 text or json so v5 brokers do not render them as binary
+    private static MqttProperties payloadProperties(String payload) {
+        MqttProperties props = new MqttProperties();
+        props.setPayloadFormat(true);
+        String trimmed = payload.trim();
+        boolean looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+        props.setContentType(looksLikeJson ? "application/json" : "text/plain; charset=utf-8");
+        return props;
+    }
+
+    private static String indexSuffix(int num) {
+        return num > 0 ? "_" + num : "";
     }
 
     public void publishTempAndHum() {
         float temp = (float) mDeviceHelper.getTemperature();
         float hum = (float) mDeviceHelper.getHumidity();
         boolean retain = shouldRetainState();
+        // -999 marks a failed sensor read
         if (temp != -999) publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, retain);
         if (hum != -999) publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, retain);
-    }
-
-    public void publishTemp(float temp) {
-        if (temp == -999) return;
-        publishInternal(parseTopic(MQTT_TOPIC_TEMP_SENSOR), String.valueOf(temp), 1, shouldRetainState());
-    }
-
-    public void publishHum(float hum) {
-        if (hum == -999) return;
-        publishInternal(parseTopic(MQTT_TOPIC_HUM_SENSOR), String.valueOf(hum), 1, shouldRetainState());
     }
 
     public void publishLux(float lux) {
@@ -520,8 +636,7 @@ public class MQTTServer {
     public void publishScreenBrightness(int brightness) {
         long now = SystemClock.elapsedRealtime();
 
-        // Rate-limit identical brightness republishes; the fade animator can
-        // call us many times per second with the same final value.
+        // the fade animator calls this many times per second so rate limit it
         synchronized (this) {
             long since = now - lastBrightnessSentAtMs;
             if (since < MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS) {
@@ -529,10 +644,8 @@ public class MQTTServer {
                 // throttled during a fade so arm a trailing publish of the latest value
                 pendingBrightness = brightness;
                 if (brightnessTrailingFuture != null) brightnessTrailingFuture.cancel(false);
-                if (!scheduler.isShutdown()) {
-                    brightnessTrailingFuture = scheduler.schedule(this::publishTrailingBrightness,
-                            MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS - since, TimeUnit.MILLISECONDS);
-                }
+                brightnessTrailingFuture = schedule(this::publishTrailingBrightness,
+                        MIN_BRIGHTNESS_PUBLISH_INTERVAL_MS - since, TimeUnit.MILLISECONDS);
                 return;
             }
             if (brightnessTrailingFuture != null) {
@@ -557,13 +670,14 @@ public class MQTTServer {
         }
         publishInternal(parseTopic(MQTT_TOPIC_SCREEN_BRIGHTNESS), String.valueOf(value), 1, shouldRetainState());
     }
+
     public void publishProximity(float distance) {
         publishInternal(parseTopic(MQTT_TOPIC_PROXIMITY_SENSOR), String.valueOf(distance), 1, shouldRetainState());
     }
 
     public void publishRelay(int num, boolean state) {
-        var mqttSuffix = (num >0 ? ("_" + num): "");
-        publishInternalCoalesced(parseTopic(MQTT_TOPIC_RELAY_STATE) + mqttSuffix, state ? "ON" : "OFF", 1, shouldRetainState());
+        publishInternalCoalesced(parseTopic(MQTT_TOPIC_RELAY_STATE) + indexSuffix(num),
+                state ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     public void publishDimmer(boolean on, int brightness0to100) {
@@ -578,26 +692,24 @@ public class MQTTServer {
     }
 
     public void publishSwitch(int num, boolean state) {
-        var mqttSuffix = (num >0 ? ("_" + num): "");
-        // Switch presses are momentary events, never retained.
-        // published directly so a fast press then release is not coalesced away
-        publishInternal(parseTopic(MQTT_TOPIC_SWITCH_STATE) + mqttSuffix, state?"PRESS":"RELEASE", 1, false);
+        // momentary events are never retained and skip coalescing so a fast press then release both go out
+        publishInternal(parseTopic(MQTT_TOPIC_SWITCH_STATE) + indexSuffix(num),
+                state ? "PRESS" : "RELEASE", 1, false);
     }
 
     public void publishSleeping(boolean state) {
         publishInternal(parseTopic(MQTT_TOPIC_SLEEPING_BINARY_SENSOR), state ? "ON" : "OFF", 1, shouldRetainState());
     }
 
-    // Button id 140 is the dedicated power button; 0..3 are the regular touch buttons.
+    // button 140 is the dedicated power button and 0 to 3 are the touch buttons
     public void publishButton(int number, String pressType) {
-        long epochMillis = System.currentTimeMillis();
         JSONObject json = new JSONObject();
         try {
-            json.put("last_update", epochMillis);
+            json.put("last_update", System.currentTimeMillis());
             json.put("press_type", pressType);
-            // event_type is the field Home Assistant's MQTT Event entity reads.
+            // event_type is the field the ha mqtt event entity reads
             json.put("event_type", pressType);
-        } catch (Exception e) {
+        } catch (JSONException e) {
             Log.e(TAG, "Error creating button JSON", e);
         }
 
@@ -605,13 +717,8 @@ public class MQTTServer {
                 ? parseTopic(MQTT_TOPIC_POWER_BUTTON)
                 : parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
 
-        // published directly so rapid events are not coalesced away
+        // not coalesced so rapid presses all reach ha
         publishInternal(topic, json.toString(), 1, false);
-    }
-
-    @Deprecated
-    public void publishButton(int number) {
-        publishButton(number, BUTTON_PRESS_TYPE_SHORT);
     }
 
     public void publishVoiceState() {
@@ -629,10 +736,6 @@ public class MQTTServer {
                 mNightModeManager.isEnabled() ? "ON" : "OFF", 1, true);
     }
 
-    public void publishSwipeEvent() {
-        publishSwipeEvent("swipe");
-    }
-
     public void publishSwipeEvent(String eventType) {
         publishInternal(parseTopic(MQTT_TOPIC_SWIPE_EVENT),
                 "{\"event_type\": \"" + eventType + "\"}", 1, false);
@@ -643,18 +746,10 @@ public class MQTTServer {
         try {
             JSONObject json = new JSONObject();
             json.put("name", mApplicationContext.getPackageName());
-
-            String version = "unknown";
-            try {
-                PackageInfo pInfo = mApplicationContext.getPackageManager()
-                        .getPackageInfo(mApplicationContext.getPackageName(), 0);
-                version = pInfo.versionName;
-            } catch (PackageManager.NameNotFoundException ignored) {}
-
-            json.put("version", version);
+            json.put("version", readVersionName());
             json.put("startTime", getApplicationStartTime());
             json.put("buildType", BuildConfig.BUILD_TYPE);
-            var device = DeviceModel.getReportedDevice();
+            DeviceModel device = DeviceModel.getReportedDevice();
             json.put("modelName", device.name());
             json.put("proximity", device.hasProximitySensor ? "true" : "false");
 
@@ -664,30 +759,25 @@ public class MQTTServer {
         }
     }
 
-    private void publishConfig() throws JSONException {
-        JSONObject payload = new MqttDiscoveryConfigBuilder(
-                clientId, DeviceModel.getReportedDevice(), mSharedPreferences).build();
-        String topic = parseTopic(MQTT_TOPIC_CONFIG_DEVICE);
-        String json = payload.toString();
-        Log.i(TAG, "publishConfig: topic=" + topic + " bytes=" + json.length()
-                + " components=" + payload.optJSONObject("cmps").length());
-        // Routed through publishInternalSync so v5 brokers tag this as application/json.
-        publishInternalSync(topic, json, 1, true);
+    private static String readVersionName() {
+        try {
+            PackageInfo info = mApplicationContext.getPackageManager()
+                    .getPackageInfo(mApplicationContext.getPackageName(), 0);
+            return info.versionName;
+        } catch (PackageManager.NameNotFoundException e) {
+            return "unknown";
+        }
     }
 
     private void publishThermalZones() {
         if (!mSharedPreferences.getBoolean(SP_PUBLISH_THERMAL_SENSORS, false)) return;
         boolean retain = shouldRetainState();
-        for (ThermalZoneReader.Zone z : ThermalZoneReader.discoverZones()) {
-            Float t = ThermalZoneReader.readZoneTempC(z);
-            if (t == null) continue;
-            String topic = String.format(MQTT_TOPIC_THERMAL_ZONE, clientId, z.type);
-            publishInternal(topic, String.valueOf(Math.round(t * 10f) / 10f), 1, retain);
+        for (ThermalZoneReader.Zone zone : ThermalZoneReader.discoverZones()) {
+            Float temp = ThermalZoneReader.readZoneTempC(zone);
+            if (temp == null) continue;
+            String topic = String.format(MQTT_TOPIC_THERMAL_ZONE, clientId, zone.type);
+            publishInternal(topic, String.valueOf(Math.round(temp * 10f) / 10f), 1, retain);
         }
-    }
-
-    private void deleteConfig() throws MqttException {
-        mMqttClient.publish(parseTopic(MQTT_TOPIC_CONFIG_DEVICE), "".getBytes(), 1, false);
     }
 
     private String parseTopic(String topic) {
@@ -702,7 +792,13 @@ public class MQTTServer {
         LocalBroadcastManager lbm = LocalBroadcastManager.getInstance(mApplicationContext);
         if (settingsChangedReceiver != null) lbm.unregisterReceiver(settingsChangedReceiver);
         if (voiceStateReceiver != null) lbm.unregisterReceiver(voiceStateReceiver);
+        stopPeriodicPublish();
         disconnect();
-        if (scheduler != null && !scheduler.isShutdown()) scheduler.shutdown();
+        MqttClient client = mMqttClient;
+        if (client != null) {
+            closeClient(client);
+            mMqttClient = null;
+        }
+        scheduler.shutdown();
     }
 }
