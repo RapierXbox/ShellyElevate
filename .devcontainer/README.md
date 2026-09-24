@@ -11,10 +11,10 @@ This project includes a dev container configuration that includes all required d
 
 1. Open the project folder in VS Code
 2. Click the remote indicator in the bottom-left corner (or press `F1` and search for "Dev Containers: Reopen in Container")
-3. Wait for the container to build and initialize (first time takes 5-10 minutes to download and install Android SDK)
+3. Wait for the container to build and initialize (the first time takes 5-10 minutes to download and install Android SDK)
 4. The container will automatically:
    - Install Java 17
-   - Download and configure Android SDK (including platform-tools, API 24 & 35, and build-tools 35.0.0)
+   - Download and configure Android SDK (including platform-tools, API 24 & 36, and build-tools 36.0.0)
    - Accept SDK licenses
    - Fix gradlew line endings
    - Create local.properties with SDK path
@@ -49,8 +49,8 @@ The dev container provides:
 - **Android SDK**: Located at `/usr/local/android-sdk`
   - Platform Tools (adb, fastboot)
   - Android API 24 (minSdk)
-  - Android API 35 (compileSdk)
-  - Build Tools 35.0.0
+  - Android API 36 (compileSdk)
+  - Build Tools 36.0.0
 - **VS Code Extensions**:
   - Java Extension Pack
   - Gradle for Java

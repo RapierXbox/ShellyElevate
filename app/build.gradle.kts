@@ -9,19 +9,19 @@ plugins {
     // kotlin support is built into agp 9 so the external kotlin plugin is dropped
 }
 
-// Dynamic versioning: Major.YearDayOfYear.HourMinute (e.g., 3.26111.1430)
+// dynamic versioning: major.yeardayofyear.hourminute (example 3.26111.1430)
 fun generateVersionCode(): Int {
     val now = LocalDateTime.now()
-    val year = now.year % 100  // Last 2 digits of year
+    val year = now.year % 100  // last 2 digits of year
     val dayOfYear = now.dayOfYear
     val minuteOfDay = now.hour * 60 + now.minute  // 0..1439
-    // (3YYDDD) * 1440 + minuteOfDay: monotonic intraday, fits a 32-bit int
+    // (3YYDDD) * 1440 + minuteOfDay: monotonic intraday and fits a 32-bit int
     return ((3_00_000 + (year * 1000) + dayOfYear) * 1440) + minuteOfDay
 }
 
 fun generateVersionName(): String {
     val now = LocalDateTime.now()
-    val year = now.year % 100  // Last 2 digits of year
+    val year = now.year % 100  // last 2 digits of year
     val dayOfYear = now.dayOfYear
     val hourMin = now.format(DateTimeFormatter.ofPattern("HHmm"))
     return "3.${year}${dayOfYear.toString().padStart(3, '0')}.${hourMin}"
@@ -80,7 +80,7 @@ android {
             create("release") {
                 val keystoreFile = File.createTempFile("release_keystore_", ".keystore")
                     .also {
-                        // Owner-only read/write (createTempFile already restricts, but be explicit)
+                        // owner-only read/write: createTempFile already restricts this but be explicit
                         it.setReadable(true, true)
                         it.setWritable(true, true)
                         // deleteOnExit covers cleanup; buildFinished is deprecated and

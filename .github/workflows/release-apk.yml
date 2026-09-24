@@ -30,7 +30,7 @@ jobs:
         run: yes | sdkmanager --licenses
 
       - name: Install Android platform/build-tools
-        run: sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+        run: sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Prepare local.properties
         run: |
@@ -89,8 +89,8 @@ jobs:
       - name: Prepare APK for release
         run: |
           VERSION="${{ steps.version.outputs.name }}"
-          VERSION=${VERSION#v}  # Remove 'v' prefix if present
-          cp app/build/outputs/apk/release/*.apk ShellyElevateV2-${VERSION}.apk
+          VERSION=${VERSION#v}  # strip a leading v if present
+          cp app/build/outputs/apk/release/*.apk "ShellyElevateV2-${VERSION}.apk"
 
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2

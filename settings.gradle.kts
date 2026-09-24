@@ -1,6 +1,6 @@
 pluginManagement {
     repositories {
-        google ()
+        google()
         mavenCentral()
         gradlePluginPortal()
     }
@@ -16,4 +16,3 @@ dependencyResolutionManagement {
 
 rootProject.name = "ShellyElevateV2"
 include(":app")
- 

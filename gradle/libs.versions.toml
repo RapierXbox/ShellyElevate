@@ -32,6 +32,5 @@ webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
 serialport = { group = "io.github.xmaihh", name = "serialport", version.ref = "serialport" }
 
-
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
