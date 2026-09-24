@@ -86,6 +86,7 @@ class MainActivity : ComponentActivity() {
     private var firstPaintDone = false
     private val pendingJs = mutableListOf<String>()
     private var webviewUpdatePromptShown = false
+    private var webviewUpdateOutcomeChecked = false
 
     private lateinit var binding: MainActivityBinding
     /** Current WebView; replaced wholesale after a render-process crash. */
@@ -696,7 +697,20 @@ class MainActivity : ComponentActivity() {
             initialLoadDone = true
         }
 
+        showWebViewUpdateOutcome()
         maybePromptForWebViewUpdate()
+    }
+
+    // tells the user whether the ota from the last recovery boot took
+    private fun showWebViewUpdateOutcome() {
+        if (webviewUpdateOutcomeChecked) return
+        webviewUpdateOutcomeChecked = true
+        val message = WebViewUpdater.consumeUpdateOutcome(applicationContext) ?: return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.webview_update_result_title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     // Ask exactly once, on the first launch where the WebView is actually too
@@ -723,7 +737,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startBackgroundWebViewDownload() {
-        WebViewUpdater.downloadAndStage(object : WebViewUpdater.Listener {
+        WebViewUpdater.downloadAndStage(applicationContext, object : WebViewUpdater.Listener {
             override fun onProgress(percent: Int) {}
             override fun onCompleted(staged: java.io.File) {
                 Log.i("MainActivity", "WebView OTA staged at ${staged.absolutePath}")
@@ -731,6 +745,7 @@ class MainActivity : ComponentActivity() {
             }
             override fun onFailed(reason: String) {
                 Log.w("MainActivity", "WebView OTA download failed: $reason")
+                showWebViewUpdateFailed(reason)
             }
         })
     }
@@ -740,8 +755,20 @@ class MainActivity : ComponentActivity() {
         AlertDialog.Builder(this)
             .setTitle(R.string.webview_update_reboot_title)
             .setMessage(R.string.webview_update_reboot_message)
-            .setPositiveButton(R.string.webview_update_reboot_now) { _, _ -> WebViewUpdater.rebootToInstall() }
+            .setPositiveButton(R.string.webview_update_reboot_now) { _, _ ->
+                WebViewUpdater.rebootToInstall(applicationContext) { reason -> showWebViewUpdateFailed(reason) }
+            }
             .setNegativeButton(R.string.webview_update_reboot_later, null)
+            .show()
+    }
+
+    // a dialog not a toast so the whole reason stays readable
+    private fun showWebViewUpdateFailed(reason: String) {
+        if (isFinishing || isDestroyed) return
+        AlertDialog.Builder(this)
+            .setTitle(R.string.webview_update_result_title)
+            .setMessage(getString(R.string.webview_update_failed, reason))
+            .setPositiveButton(android.R.string.ok, null)
             .show()
     }
 

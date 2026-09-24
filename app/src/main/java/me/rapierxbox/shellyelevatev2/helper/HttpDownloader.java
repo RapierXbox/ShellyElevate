@@ -68,6 +68,19 @@ public final class HttpDownloader {
         }
     }
 
+    // -1 when the server does not report a length
+    public static long contentLength(OkHttpClient client, String url) {
+        Request req = new Request.Builder().url(url).head().header("User-Agent", "ShellyElevateV2").build();
+        try (Response res = client.newCall(req).execute()) {
+            if (!res.isSuccessful()) return -1;
+            String len = res.header("Content-Length");
+            return len == null ? -1 : Long.parseLong(len.trim());
+        } catch (IOException | NumberFormatException e) {
+            Log.w(TAG, "HEAD failed for " + url + ": " + e.getMessage());
+            return -1;
+        }
+    }
+
     public static void download(OkHttpClient client, String url, File dest, ProgressCallback progress) throws IOException {
         Request req = new Request.Builder().url(url).header("User-Agent", "ShellyElevateV2").build();
         try (Response res = client.newCall(req).execute()) {

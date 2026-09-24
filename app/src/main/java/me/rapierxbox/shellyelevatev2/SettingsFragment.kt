@@ -165,7 +165,7 @@ class SettingsFragment : Fragment() {
         binding.webviewUpdateProgressBar.progress = 0
         binding.webviewUpdateProgressText.text = "0%"
 
-        WebViewUpdater.downloadAndStage(object : WebViewUpdater.Listener {
+        WebViewUpdater.downloadAndStage(requireContext(), object : WebViewUpdater.Listener {
             override fun onProgress(percent: Int) {
                 if (_binding == null) return
                 binding.webviewUpdateProgressBar.progress = percent
@@ -191,7 +191,12 @@ class SettingsFragment : Fragment() {
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.webview_update_reboot_title)
             .setMessage(R.string.webview_update_reboot_message)
-            .setPositiveButton(R.string.webview_update_reboot_now) { _, _ -> WebViewUpdater.rebootToInstall() }
+            .setPositiveButton(R.string.webview_update_reboot_now) { _, _ ->
+                val ctx = requireContext().applicationContext
+                WebViewUpdater.rebootToInstall(ctx) { reason ->
+                    Toast.makeText(ctx, ctx.getString(R.string.webview_update_failed, reason), Toast.LENGTH_LONG).show()
+                }
+            }
             .setNegativeButton(R.string.webview_update_reboot_later, null)
             .show()
     }
@@ -339,7 +344,7 @@ class SettingsFragment : Fragment() {
             +SwitchPref(binding.voiceWakeExperimentalModels, SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
             +SliderPref(binding.voiceWakeSensitivity, SP_VOICE_WAKE_SENSITIVITY, 50)
             +SliderPref(binding.voiceWakeCooldown, SP_VOICE_WAKE_COOLDOWN_SEC, 5)
-            +SwitchPref(binding.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)
+            +SwitchPref(binding.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)c
             +SwitchPref(binding.voiceScoreBarEnabled, SP_VOICE_SCORE_BAR_ENABLED, false)
 
             +SwitchPref(binding.bluetoothProxyEnabled, SP_BLUETOOTH_PROXY_ENABLED, false)

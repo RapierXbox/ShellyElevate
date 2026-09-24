@@ -40,6 +40,8 @@ public class Constants {
 
     //WebView OTA SP Keys
     public static final String SP_WEBVIEW_UPDATE_PROMPTED = "webviewUpdatePrompted";
+    // webview version before a reboot into recovery. set means an ota is in flight
+    public static final String SP_WEBVIEW_UPDATE_PENDING_FROM = "webviewUpdatePendingFrom";
 
     //Priv-app install SP Keys
     public static final String SP_PRIVAPP_PROMOTION_ATTEMPTED = "privAppPromotionAttempted";
