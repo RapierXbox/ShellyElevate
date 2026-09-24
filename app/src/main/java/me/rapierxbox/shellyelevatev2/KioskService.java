@@ -9,6 +9,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.os.Build;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -16,10 +17,13 @@ import android.util.Log;
 
 import androidx.core.app.NotificationCompat;
 
-import java.util.List;
-
+// foreground anchor that keeps the process alive and brings the kiosk ui back when it goes away
 public class KioskService extends Service {
-	private static final String WATCHDOG_TAG = "KioskService";
+	private static final String TAG = "KioskService";
+
+	private static final String CHANNEL_ID = "kiosk_channel";
+	private static final int NOTIFICATION_ID = 1;
+	private static final long WATCHDOG_INTERVAL_MS = 30_000;
 
 	private Handler watchdogHandler;
 	private Runnable watchdogTask;
@@ -28,8 +32,8 @@ public class KioskService extends Service {
 	public void onCreate() {
 		super.onCreate();
 		ensureNotificationChannel();
-		Log.i("KioskService", "Foreground service created");
-		startForeground(1, buildNotification());
+		Log.i(TAG, "Foreground service created");
+		startForeground(NOTIFICATION_ID, buildNotification());
 
 		startWatchdog();
 	}
@@ -40,10 +44,12 @@ public class KioskService extends Service {
 	}
 
 	@Override
-	public IBinder onBind(Intent intent) { return null; }
+	public IBinder onBind(Intent intent) {
+		return null;
+	}
 
 	private Notification buildNotification() {
-		return new NotificationCompat.Builder(this, "kiosk_channel")
+		return new NotificationCompat.Builder(this, CHANNEL_ID)
 				.setContentTitle("Kiosk running")
 				.setContentText("Foreground anchor active")
 				.setSmallIcon(R.drawable.ic_launcher_foreground)
@@ -51,17 +57,13 @@ public class KioskService extends Service {
 	}
 
 	private void ensureNotificationChannel() {
-		if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O) {
-			return;
-		}
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
 
 		NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
-		if (manager == null) {
-			return;
-		}
+		if (manager == null) return;
 
 		NotificationChannel channel = new NotificationChannel(
-				"kiosk_channel",
+				CHANNEL_ID,
 				"Kiosk",
 				NotificationManager.IMPORTANCE_LOW
 		);
@@ -75,22 +77,24 @@ public class KioskService extends Service {
 		watchdogTask = new Runnable() {
 			@Override
 			public void run() {
-				if (isLiteModeEnabled()) {
-					Log.i(WATCHDOG_TAG, "Lite mode enabled, skipping MainActivity relaunch");
-					watchdogHandler.postDelayed(this, 30000);
-					return;
-				}
-
-				if (!isActivityAtTop(MainActivity.class) && !isActivityAtTop(SettingsActivity.class)) {
-					Log.w("KioskService", "MainActivity not running, relaunching...");
-					Intent activityIntent = new Intent(KioskService.this, MainActivity.class);
-					activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-					startActivity(activityIntent);
-				}
-				watchdogHandler.postDelayed(this, 30000);
+				checkKioskActivity();
+				watchdogHandler.postDelayed(this, WATCHDOG_INTERVAL_MS);
 			}
 		};
-		watchdogHandler.postDelayed(watchdogTask, 30000);
+		watchdogHandler.postDelayed(watchdogTask, WATCHDOG_INTERVAL_MS);
+	}
+
+	private void checkKioskActivity() {
+		if (isLiteModeEnabled()) {
+			Log.i(TAG, "Lite mode enabled, skipping MainActivity relaunch");
+			return;
+		}
+		if (isOwnActivityOnTop()) return;
+
+		Log.w(TAG, "MainActivity not running, relaunching...");
+		Intent activityIntent = new Intent(this, MainActivity.class);
+		activityIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+		startActivity(activityIntent);
 	}
 
 	@Override
@@ -109,17 +113,22 @@ public class KioskService extends Service {
 		return prefs.getBoolean(Constants.SP_LITE_MODE, false);
 	}
 
-	private boolean isActivityAtTop(Class<?> activityClass) {
+	// the settings screen counts as in kiosk so the watchdog does not yank the user out of it
+	private boolean isOwnActivityOnTop() {
 		ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
 		if (am == null) return false;
-		List<ActivityManager.AppTask> tasks = am.getAppTasks();
-		for (ActivityManager.AppTask task : tasks) {
+		String mainName = MainActivity.class.getName();
+		String settingsName = SettingsActivity.class.getName();
+		for (ActivityManager.AppTask task : am.getAppTasks()) {
 			try {
 				ComponentName top = task.getTaskInfo().topActivity;
-				if (top != null && top.getClassName().equals(activityClass.getName())) {
-					return true;
-				}
-			} catch (Exception ignored) {}
+				if (top == null) continue;
+				String topName = top.getClassName();
+				if (mainName.equals(topName) || settingsName.equals(topName)) return true;
+			} catch (Exception e) {
+				// the task can vanish between listing and querying it
+				Log.d(TAG, "Skipping app task", e);
+			}
 		}
 		return false;
 	}
