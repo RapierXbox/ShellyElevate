@@ -15,6 +15,7 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import android.view.KeyEvent
@@ -118,6 +119,7 @@ class MainActivity : ComponentActivity() {
 
     private var clicksButtonRight = 0
     private var clicksButtonLeft = 0
+    private var lastSettingsTapAtMs = 0L
 
     private var scoreBarRegistered = false
     private val colorGreen by lazy { ContextCompat.getColor(this, R.color.voice_score_green) }
@@ -742,16 +744,28 @@ class MainActivity : ComponentActivity() {
     private fun setupSettingsButtons() {
         // secret knock of taps on the bottom right then the bottom left corner
         binding.settingButtonOverlayRight.setOnTouchListener { _, event ->
-            if (event.action == MotionEvent.ACTION_DOWN) clicksButtonRight++
+            if (event.action == MotionEvent.ACTION_DOWN) {
+                expireStaleSettingsTaps()
+                clicksButtonRight++
+            }
             false
         }
         binding.settingButtonOverlayLeft.setOnTouchListener { _, event ->
             if (event.action == MotionEvent.ACTION_DOWN) {
-                if (clicksButtonRight == SETTINGS_TAP_COUNT) clicksButtonLeft++ else resetClicks()
-                if (clicksButtonLeft == SETTINGS_TAP_COUNT) startSettingsActivity()
+                expireStaleSettingsTaps()
+                // overlays pass touches through so dashboard taps count too and overshooting must not wedge the sequence
+                if (clicksButtonRight >= SETTINGS_TAP_COUNT) clicksButtonLeft++ else resetClicks()
+                if (clicksButtonLeft >= SETTINGS_TAP_COUNT) startSettingsActivity()
             }
             false
         }
+    }
+
+    // a long pause means nobody is entering the sequence so stale taps from normal use are dropped
+    private fun expireStaleSettingsTaps() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSettingsTapAtMs > SETTINGS_TAP_TIMEOUT_MS) resetClicks()
+        lastSettingsTapAtMs = now
     }
 
     private fun startSettingsActivity() {
@@ -962,6 +976,7 @@ class MainActivity : ComponentActivity() {
 
         private const val MAX_PENDING_JS = 50
         private const val SETTINGS_TAP_COUNT = 10
+        private const val SETTINGS_TAP_TIMEOUT_MS = 2000L
 
         private const val AOD_TICK_PERIOD_MS = 1000L
         private const val AOD_TICK_WINDOW_MS = 200L

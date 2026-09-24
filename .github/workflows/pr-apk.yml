@@ -28,6 +28,11 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # the action installs the obsolete `tools` package by default, which google
+          # removed from the sdk repository: sdkmanager then fails the whole step.
+          # everything actually needed is installed explicitly below
+          packages: ''
 
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses
