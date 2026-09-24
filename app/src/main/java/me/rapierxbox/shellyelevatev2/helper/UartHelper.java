@@ -4,6 +4,7 @@ import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,6 +57,10 @@ public class UartHelper {
     private byte[] mQueuedCommand;
     private OnDataTransferListener mQueuedListener;
     private long mQueuedTimeoutMs = DEFAULT_TIMEOUT_MS;
+    private int mQueuedMinBytes = 0;
+    // a transfer with min bytes collects reads until the whole reply is in so no listener gap opens mid reply
+    private int mMinBytes = 0;
+    private final ByteArrayOutputStream mReplyBuffer = new ByteArrayOutputStream();
     // bumped per transfer so a timeout that already left the handler queue cant end a newer transfer
     private long mTransferId = 0;
     private Runnable mPendingTimeout;
@@ -80,8 +85,11 @@ public class UartHelper {
                     if (n == 0) continue;
                     byte[] data = new byte[n];
                     System.arraycopy(buf, 0, data, 0, n);
+                    byte[] reply = collectReply(data);
+                    // still waiting for the rest of a multi byte reply
+                    if (reply == null) continue;
                     OnDataTransferListener l = finishTransfer();
-                    if (l != null) l.dataReceived(data);
+                    if (l != null) l.dataReceived(reply);
                     drainQueue();
                 } catch (IOException e) {
                     if (!cancelled) Log.e(TAG, "Read error: " + e.getMessage());
@@ -170,6 +178,11 @@ public class UartHelper {
 
     // false when nothing was sent. a busy port keeps the command in the slot and sends it once the current transfer ends
     public synchronized boolean sendData(byte[] cmd, OnDataTransferListener listener, long timeoutMs) {
+        return sendData(cmd, listener, timeoutMs, 0);
+    }
+
+    // min bytes holds the transfer open until that many bytes arrived or it times out with what came so far
+    public synchronized boolean sendData(byte[] cmd, OnDataTransferListener listener, long timeoutMs, int minBytes) {
         if (!isReady()) return false;
         if (transferActive) {
             // the slot holds one command so fail the one being replaced instead of leaving its caller hanging
@@ -178,10 +191,13 @@ public class UartHelper {
             mQueuedCommand = cmd;
             mQueuedListener = listener;
             mQueuedTimeoutMs = timeoutMs;
+            mQueuedMinBytes = minBytes;
             return false;
         }
         transferActive = true;
         mListener = listener;
+        mMinBytes = minBytes;
+        mReplyBuffer.reset();
         mQueuedCommand = null;
         mQueuedListener = null;
         mWriterThread.write(cmd);
@@ -193,6 +209,7 @@ public class UartHelper {
 
     private void onTransferTimeout(long transferId) {
         OnDataTransferListener l;
+        byte[] partial;
         synchronized (this) {
             // a null pending timeout means data or close already ended this transfer
             if (transferId != mTransferId || mPendingTimeout == null) return;
@@ -200,10 +217,27 @@ public class UartHelper {
             transferActive = false;
             l = mListener;
             mListener = null;
+            partial = mReplyBuffer.size() > 0 ? mReplyBuffer.toByteArray() : null;
+            mMinBytes = 0;
+            mReplyBuffer.reset();
         }
         Log.w(TAG, "Read timeout");
-        if (l != null) l.readTimeout();
+        if (l != null) {
+            // a short reply such as a single nack is still handed over
+            if (partial != null) l.dataReceived(partial);
+            else l.readTimeout();
+        }
         drainQueue();
+    }
+
+    // returns the reply to deliver or null while a min bytes transfer still waits for more
+    private synchronized byte[] collectReply(byte[] data) {
+        if (!transferActive || mMinBytes <= 0) return data;
+        mReplyBuffer.write(data, 0, data.length);
+        if (mReplyBuffer.size() < mMinBytes) return null;
+        byte[] reply = mReplyBuffer.toByteArray();
+        mReplyBuffer.reset();
+        return reply;
     }
 
     // ends the current transfer and hands back the listener to notify outside the lock
@@ -214,6 +248,8 @@ public class UartHelper {
         transferActive = false;
         OnDataTransferListener l = mListener;
         mListener = null;
+        mMinBytes = 0;
+        mReplyBuffer.reset();
         return l;
     }
 
@@ -229,15 +265,18 @@ public class UartHelper {
         byte[] cmd = mQueuedCommand;
         OnDataTransferListener l = mQueuedListener;
         long timeoutMs = mQueuedTimeoutMs;
+        int minBytes = mQueuedMinBytes;
         mQueuedCommand = null;
         mQueuedListener = null;
-        sendData(cmd, l, timeoutMs);
+        sendData(cmd, l, timeoutMs, minBytes);
     }
 
     public synchronized void close() {
         cancelPendingTimeout();
         transferActive = false;
         mListener = null;
+        mMinBytes = 0;
+        mReplyBuffer.reset();
         mQueuedCommand = null;
         mQueuedListener = null;
         if (mReaderThread != null) {

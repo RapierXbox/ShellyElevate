@@ -42,6 +42,8 @@ public class ActiveBleConnection {
 
     // recovers the op queue when a gatt completion never arrives
     private static final long OP_TIMEOUT_MS = 20_000;
+    // no response writes only wait for the stack to release its busy flag
+    private static final long NO_RESPONSE_WRITE_TIMEOUT_MS = 2_000;
     private static final ScheduledExecutorService OP_TIMEOUT_EXEC =
             Executors.newSingleThreadScheduledExecutor(r -> {
                 Thread t = new Thread(r, "ble-op-timeout");
@@ -68,7 +70,8 @@ public class ActiveBleConnection {
     private enum OpKind {
         READ_CHAR,
         WRITE_CHAR,
-        // acked as soon as the stack accepts it since onCharacteristicWrite is unreliable here
+        // acked once the stack accepts it but kept in flight until onCharacteristicWrite
+        // because android rejects the next op while its busy flag is still set
         WRITE_CHAR_NO_RESPONSE,
         READ_DESC,
         WRITE_DESC,
@@ -90,6 +93,8 @@ public class ActiveBleConnection {
         final GattCall call;
         // guarded by opLock so a timeout and a real callback cannot both finish it
         boolean settled = false;
+        // success already reported to ha so a timeout must not report a failure
+        volatile boolean acked = false;
 
         PendingOp(OpKind kind, int reportHandle, Object target, GattCall call) {
             this.kind = kind;
@@ -337,7 +342,8 @@ public class ActiveBleConnection {
         if (!accepted) {
             if (finishOp(op)) reportOpFailure(op);
         } else if (op.kind == OpKind.WRITE_CHAR_NO_RESPONSE) {
-            if (finishOp(op)) cb.onCharWrite(address, op.reportHandle, BluetoothGatt.GATT_SUCCESS);
+            op.acked = true;
+            cb.onCharWrite(address, op.reportHandle, BluetoothGatt.GATT_SUCCESS);
         }
     }
 
@@ -373,7 +379,8 @@ public class ActiveBleConnection {
     // must hold opLock
     private void armOpTimeoutLocked(PendingOp op) {
         cancelOpTimeoutLocked();
-        opTimeoutFuture = OP_TIMEOUT_EXEC.schedule(() -> onOpTimeout(op), OP_TIMEOUT_MS, TimeUnit.MILLISECONDS);
+        long timeoutMs = op.kind == OpKind.WRITE_CHAR_NO_RESPONSE ? NO_RESPONSE_WRITE_TIMEOUT_MS : OP_TIMEOUT_MS;
+        opTimeoutFuture = OP_TIMEOUT_EXEC.schedule(() -> onOpTimeout(op), timeoutMs, TimeUnit.MILLISECONDS);
     }
 
     // must hold opLock
@@ -387,7 +394,7 @@ public class ActiveBleConnection {
     private void onOpTimeout(PendingOp op) {
         if (!finishOp(op)) return;
         Log.w(TAG, "gatt op timed out kind=" + op.kind + " handle=" + op.reportHandle);
-        reportOpFailure(op);
+        if (!op.acked) reportOpFailure(op);
     }
 
     private void reportOpFailure(PendingOp op) {
@@ -472,11 +479,11 @@ public class ActiveBleConnection {
             onCharacteristicRead(g, c, v != null ? v : new byte[0], status);
         }
 
-        // no response writes were acked on start so only with response writes finish here
+        // no response writes were acked on start so they only release the queue here
         @Override public void onCharacteristicWrite(BluetoothGatt g, BluetoothGattCharacteristic c, int status) {
             if (closed) return;
-            PendingOp op = finishCurrent(c, OpKind.WRITE_CHAR);
-            if (op == null) return;
+            PendingOp op = finishCurrent(c, OpKind.WRITE_CHAR, OpKind.WRITE_CHAR_NO_RESPONSE);
+            if (op == null || op.kind == OpKind.WRITE_CHAR_NO_RESPONSE) return;
             cb.onCharWrite(address, op.reportHandle, status);
         }
 

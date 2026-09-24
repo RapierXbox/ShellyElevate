@@ -276,18 +276,36 @@ public class MQTTServer {
     }
 
     // every setting the live connection was built from so a change forces a reconnect
+    // reads raw values so a pref stored with the wrong type cannot throw here
     private String connectionKey() {
-        return isEnabled() + "\n" + buildServerUri() + "\n"
-                + mSharedPreferences.getString(SP_MQTT_USERNAME, "") + "\n"
-                + mSharedPreferences.getString(SP_MQTT_PASSWORD, "") + "\n"
-                + mSharedPreferences.getString(SP_MQTT_CLIENTID, "");
+        Map<String, ?> prefs = mSharedPreferences.getAll();
+        return isEnabled() + "\n"
+                + prefs.get(SP_MQTT_BROKER) + "\n"
+                + prefs.get(SP_MQTT_PORT) + "\n"
+                + prefs.get(SP_MQTT_USERNAME) + "\n"
+                + prefs.get(SP_MQTT_PASSWORD) + "\n"
+                + prefs.get(SP_MQTT_CLIENTID);
     }
 
     private String buildServerUri() {
         String broker = mSharedPreferences.getString(SP_MQTT_BROKER, "").trim();
         // default to plain tcp when the scheme is omitted
         if (!broker.contains("://")) broker = "tcp://" + broker;
-        return broker + ":" + mSharedPreferences.getInt(SP_MQTT_PORT, 1883);
+        return broker + ":" + readPort();
+    }
+
+    // the http settings api can store the port as a string
+    private int readPort() {
+        Object port = mSharedPreferences.getAll().get(SP_MQTT_PORT);
+        if (port instanceof Integer) return (Integer) port;
+        if (port != null) {
+            try {
+                return Integer.parseInt(port.toString().trim());
+            } catch (NumberFormatException e) {
+                Log.w(TAG, "invalid mqtt port " + port);
+            }
+        }
+        return 1883;
     }
 
     private MqttCallback createClientCallback(MqttClient client) {

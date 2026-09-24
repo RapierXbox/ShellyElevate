@@ -267,6 +267,11 @@ public class StesProtocolHandler {
 
     // returns the raw reply or an empty array on timeout or null if nothing came back in time
     private static byte[] transferBlocking(byte[] data, long timeoutMs) throws InterruptedException {
+        return transferBlocking(data, timeoutMs, 0);
+    }
+
+    // min bytes keeps reading until a multi byte reply is complete
+    private static byte[] transferBlocking(byte[] data, long timeoutMs, int minBytes) throws InterruptedException {
         UartHelper uart = sUart;
         if (uart == null || !uart.isReady()) return null;
         final Object lock = new Object();
@@ -281,7 +286,7 @@ public class StesProtocolHandler {
                     lock.notifyAll();
                 }
             }
-        }, timeoutMs);
+        }, timeoutMs, minBytes);
         long deadline = SystemClock.uptimeMillis() + timeoutMs + BLOCKING_GRACE_MS;
         synchronized (lock) {
             // loop guards against spurious wakeups
@@ -406,6 +411,8 @@ public class StesProtocolHandler {
         private static final int BL_MAX_PAGES      = 40;
         private static final int BL_MAX_BYTES      = BL_MAX_PAGES * BL_PAGE_SIZE;
         private static final int BL_MAX_RETRIES    = 3;
+        // ack n pid hi pid lo ack
+        private static final int GET_ID_REPLY_LENGTH = 5;
 
         private static final long TIMEOUT_NORMAL    = 1000;
         private static final long TIMEOUT_LONG      = 3000;
@@ -488,18 +495,10 @@ public class StesProtocolHandler {
         }
 
         private static int getDeviceId() throws InterruptedException {
-            byte[] resp = transferBlocking(commandFrame(BL_CMD_GET_ID), TIMEOUT_NORMAL);
+            // whole reply is [ack] [n] [pid hi] [pid lo] [ack] collected in one transfer
+            byte[] resp = transferBlocking(commandFrame(BL_CMD_GET_ID), TIMEOUT_NORMAL, GET_ID_REPLY_LENGTH);
             if (!isAck(resp)) return -1;
-            // reply is [n] [pid hi] [pid lo] [ack] and may share a read with the command ack
             byte[] idResp = Arrays.copyOfRange(resp, 1, resp.length);
-            if (idResp.length < 3) {
-                // keep any id bytes that came with the ack and append the rest
-                byte[] more = transferBlocking(new byte[0], TIMEOUT_NORMAL);
-                if (more == null) return -1;
-                byte[] joined = Arrays.copyOf(idResp, idResp.length + more.length);
-                System.arraycopy(more, 0, joined, idResp.length, more.length);
-                idResp = joined;
-            }
             if (idResp.length < 3) return -1;
             return u16(idResp[1], idResp[2]);
         }
