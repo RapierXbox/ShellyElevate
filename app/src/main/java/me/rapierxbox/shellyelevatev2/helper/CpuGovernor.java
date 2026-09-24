@@ -15,27 +15,32 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+// switches every cpu to a low power cpufreq governor during sleep and puts the old ones back afterwards
 public final class CpuGovernor {
 
     private static final String TAG = "CpuGovernor";
     private static final String CPU_BASE = "/sys/devices/system/cpu";
     private static final Pattern CPU_DIR = Pattern.compile("cpu[0-9]+");
+    private static final String FALLBACK_GOVERNOR = "powersave";
 
+    // most frugal first
     private static final List<String> PREFERRED_LOW_POWER = Arrays.asList(
             "powersave", "conservative", "ondemand", "schedutil"
     );
 
     private static volatile List<String> cachedCpuPaths = null;
     private final Map<String, String> savedGovernors = new HashMap<>();
+    // set after the first failed write so a locked down kernel is not hammered on every sleep
     private volatile boolean denied = false;
 
+    // scaling_governor paths of all cpus that expose one
     public List<String> discover() {
         List<String> cached = cachedCpuPaths;
         if (cached != null) return cached;
 
         List<String> paths = new ArrayList<>();
-        File base = new File(CPU_BASE);
-        File[] dirs = base.listFiles(f -> f.isDirectory() && CPU_DIR.matcher(f.getName()).matches());
+        File[] dirs = new File(CPU_BASE).listFiles(
+                f -> f.isDirectory() && CPU_DIR.matcher(f.getName()).matches());
         if (dirs != null) {
             for (File dir : dirs) {
                 File gov = new File(dir, "cpufreq/scaling_governor");
@@ -43,19 +48,21 @@ public final class CpuGovernor {
             }
         }
         Collections.sort(paths);
-        cachedCpuPaths = Collections.unmodifiableList(paths);
-        return cachedCpuPaths;
+        cached = Collections.unmodifiableList(paths);
+        cachedCpuPaths = cached;
+        return cached;
     }
 
     private static List<String> readAvailable(String governorPath) {
         String availPath = governorPath.replace("scaling_governor", "scaling_available_governors");
         String raw = readLine(availPath);
-        if (raw == null || raw.isEmpty()) return Collections.emptyList();
+        // trimmed before the empty check so a blank line cant yield an empty governor name
+        if (raw == null || raw.trim().isEmpty()) return Collections.emptyList();
         return Arrays.asList(raw.trim().split("\\s+"));
     }
 
     private static String pickLowPower(List<String> available) {
-        if (available == null || available.isEmpty()) return "powersave";
+        if (available.isEmpty()) return FALLBACK_GOVERNOR;
         for (String pref : PREFERRED_LOW_POWER) {
             if (available.contains(pref)) return pref;
         }
@@ -75,15 +82,12 @@ public final class CpuGovernor {
             String current = readLine(path);
             if (current == null) continue;
             current = current.trim();
+            // keep the first saved value so a second apply cant record the low power governor as the original
             if (!savedGovernors.containsKey(path)) {
                 savedGovernors.put(path, current);
             }
             String target = pickLowPower(readAvailable(path));
-            if (target.equals(current)) {
-                applied++;
-                continue;
-            }
-            if (writeFile(path, target)) {
+            if (target.equals(current) || writeFile(path, target)) {
                 applied++;
             } else {
                 denied = true;
