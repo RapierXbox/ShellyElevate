@@ -1,5 +1,4 @@
 <resources>
-    <!-- Reply Preference -->
 
     <string-array name="sleep_optimization_levels">
         <item>@string/sleep_opt_none</item>
@@ -7,7 +6,7 @@
         <item>@string/sleep_opt_aggressive</item>
     </string-array>
 
-    <!-- order must match the SW_INPUT_MODE_* int constants -->
+    <!-- order must match sw_input_mode int constants in code -->
     <string-array name="sw_input_modes">
         <item>@string/sw_input_mode_detached</item>
         <item>@string/sw_input_mode_button</item>

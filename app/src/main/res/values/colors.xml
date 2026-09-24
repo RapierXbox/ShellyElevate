@@ -45,7 +45,7 @@
     <color name="md_theme_surfaceContainer">#F2EBFB</color>
     <color name="md_theme_surfaceContainerHigh">#EDE5F5</color>
     <color name="md_theme_surfaceContainerHighest">#E7E0F0</color>
-    <!-- Missing defaults to satisfy lint for non-night configurations -->
+    <!-- scrim color for dialogs and overlays -->
     <color name="md_theme_scrim">#000000</color>
     <color name="voice_score_green">#4CAF50</color>
     <color name="voice_score_amber">#FFC107</color>
