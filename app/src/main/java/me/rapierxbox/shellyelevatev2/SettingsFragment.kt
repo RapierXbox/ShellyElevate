@@ -2,7 +2,6 @@ package me.rapierxbox.shellyelevatev2
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Context.MODE_PRIVATE
 import android.content.Intent
 import android.media.AudioManager
 import android.os.Bundle
@@ -52,6 +51,7 @@ import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
 import java.io.File
 import java.io.IOException
 import java.net.NetworkInterface
+import java.net.SocketException
 import java.util.Locale
 import java.util.UUID
 
@@ -59,11 +59,11 @@ class SettingsFragment : Fragment() {
 
     private var _binding: SettingsFragmentBinding? = null
     private val binding get() = _binding!!
-    // Restored in onDestroyView so leaving Settings doesn't leave the screen at 100%.
+    // restored in onDestroyView so leaving settings does not leave the screen at 100%
     private var savedBrightness = DEFAULT_BRIGHTNESS
     private var hasProximitySensor = false
 
-    // Shared trust-all client. See HttpDownloader for the rationale.
+    // shared trust-all client see HttpDownloader for the rationale
     private val okHttpClient by lazy { HttpDownloader.defaultClient() }
     private var modelList: MutableList<WakeWordModel> = mutableListOf()
     private var selectedModelName: String = ""
@@ -74,7 +74,9 @@ class SettingsFragment : Fragment() {
     override fun onDestroyView() {
         super.onDestroyView()
         downloadJob?.cancel()
-        mDeviceHelper?.setScreenBrightness(savedBrightness)
+        // let the screen manager pick the level so automatic brightness is honored
+        val screenManager = mScreenManager
+        if (screenManager != null) screenManager.reapplyBrightness() else mDeviceHelper?.setScreenBrightness(savedBrightness)
         _binding = null
     }
 
@@ -86,8 +88,7 @@ class SettingsFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         activity?.setTitle(R.string.settings)
 
-        // Force max brightness while the Settings UI is open; the previous value
-        // is restored in onDestroyView.
+        // force max brightness while settings is open previous value is restored in onDestroyView
         savedBrightness = mScreenManager?.let { mSharedPreferences?.getInt(SP_BRIGHTNESS, DEFAULT_BRIGHTNESS) ?: DEFAULT_BRIGHTNESS } ?: DEFAULT_BRIGHTNESS
         mScreenManager?.setScreenOn(true)
         mDeviceHelper?.setScreenBrightness(255)
@@ -107,7 +108,7 @@ class SettingsFragment : Fragment() {
                         saveSettings()
                         lifecycleScope.launch(Dispatchers.IO) {
                             try { Runtime.getRuntime().exec("reboot") }
-                            catch (e: IOException) { Log.e("SettingsActivity", "Error rebooting:", e) }
+                            catch (e: IOException) { Log.e("SettingsFragment", "Error rebooting:", e) }
                         }
                         true
                     }
@@ -275,7 +276,7 @@ class SettingsFragment : Fragment() {
     private fun buildBinder() {
         val device = DeviceModel.getReportedDevice()
         hasProximitySensor = device.hasProximitySensor
-        val defaultClientId = "shellyelevate-" + UUID.randomUUID().toString().replace("-".toRegex(), "").substring(2, 6)
+        val defaultClientId = "shellyelevate-" + UUID.randomUUID().toString().replace("-", "").substring(2, 6)
         val hasButtonRelayCapability = device.buttons > 0 && device.relays > 0
         val hasSwInput = device.inputs > 0
 
@@ -380,15 +381,24 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    private fun setupSwInputRelaySpinner(relayCount: Int) {
+    private fun spinnerAdapter(items: List<String>): ArrayAdapter<String> =
+        ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, items).apply {
+            setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        }
+
+    // shared "none" + "relay 0".."relay n-1" option list used by both relay pickers
+    private fun relayOptionsAdapter(relayCount: Int): ArrayAdapter<String> {
         val options = mutableListOf(getString(R.string.button_relay_none))
         for (i in 0 until relayCount) options.add(getString(R.string.button_relay_relay_label, i))
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, options)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.swInputRelay.adapter = adapter
-        // Stored value: -1 = None (position 0), 0 = Relay 0 (position 1), etc.
+        return spinnerAdapter(options)
+    }
+
+    private fun setupSwInputRelaySpinner(relayCount: Int) {
+        val optionCount = relayCount + 1
+        binding.swInputRelay.adapter = relayOptionsAdapter(relayCount)
+        // stored value -1 is none position 0 then relay 0 at position 1 and so on
         val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), 0)
-        binding.swInputRelay.setSelection((storedRelay + 1).coerceIn(0, options.size - 1))
+        binding.swInputRelay.setSelection((storedRelay + 1).coerceIn(0, optionCount - 1))
 
         // the relay row only applies while the input actually drives a relay
         binding.swInputMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
@@ -424,16 +434,15 @@ class SettingsFragment : Fragment() {
         selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
 
         binding.httpServerAddress.text = getString(R.string.server_url, getLocalIpAddress())
-        binding.httpServerStatus.text = getString(if (mHttpServer.isAlive) R.string.http_server_running else R.string.http_server_not_running)
-        binding.httpServerButton.isVisible = !mHttpServer.isAlive
+        val httpAlive = mHttpServer.isAlive
+        binding.httpServerStatus.text = getString(if (httpAlive) R.string.http_server_running else R.string.http_server_not_running)
+        binding.httpServerButton.isVisible = !httpAlive
 
         binding.adbWifiAddress.text = getString(R.string.adb_wifi_url, getLocalIpAddress())
 
         val zones = ThermalZoneReader.discoverZones()
         val zoneNames = zones.map { it.type }
-        val zoneAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, zoneNames)
-        zoneAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
-        binding.dynamicTempOffsetZone.adapter = zoneAdapter
+        binding.dynamicTempOffsetZone.adapter = spinnerAdapter(zoneNames)
         val savedZone = mSharedPreferences.getString(SP_DYNAMIC_TEMP_OFFSET_ZONE, null)
         val zoneIdx = zoneNames.indexOf(savedZone)
         if (zoneIdx >= 0) binding.dynamicTempOffsetZone.setSelection(zoneIdx)
@@ -512,20 +521,19 @@ class SettingsFragment : Fragment() {
         }
 
         binding.httpServerButton.setOnClickListener {
-            // nanohttpd start throws on rebind failures and kotlin does not force the catch
-            try {
-                mHttpServer.start()
-                binding.httpServerText.text = getString(R.string.http_server_running)
+            // goes through the application so a failed start gets the usual retry backoff
+            val app = requireActivity().application as ShellyElevateApplication
+            if (app.startHttpServerNow()) {
+                binding.httpServerStatus.text = getString(R.string.http_server_running)
                 binding.httpServerButton.isVisible = false
-            } catch (e: IOException) {
-                Log.e("SettingsFragment", "http server start failed", e)
+            } else {
                 Toast.makeText(requireContext(), R.string.http_server_not_running, Toast.LENGTH_SHORT).show()
             }
         }
 
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
             mSwipeHelper?.onTouchEvent(event)
-            mScreenSaverManager.onTouchEvent(event)
+            mScreenSaverManager?.onTouchEvent(event)
             false
         }
     }
@@ -537,10 +545,10 @@ class SettingsFragment : Fragment() {
     }
 
     private fun setupModelChooser() {
-        val wakewordsDir = File(requireContext().filesDir, "wakewords")
+        val wakewordsDir = WakeWordModelManager.getModelDirectory(requireContext())
 
-        // Show installed models immediately so the picker isn't empty while we
-        // wait for GitHub; remote results are merged in once they arrive.
+        // show installed models immediately so the picker is not empty while we
+        // wait for github remote results are merged in once they arrive
         rebuildModelList(WakeWordModelManager.getInstalledModels(wakewordsDir), emptyList(), emptyList())
         fetchAndMergeRemoteModels(wakewordsDir)
 
@@ -554,8 +562,8 @@ class SettingsFragment : Fragment() {
             fetchAndMergeRemoteModels(wakewordsDir)
         }
 
-        // The VAD model is required to suppress false wake triggers, so fetch
-        // it as soon as wake-word detection is enabled. registered via the binder
+        // the vad model is required to suppress false wake triggers so fetch
+        // it as soon as wake word detection is enabled registered via the binder
         // so it does not clobber the visibility toggle listener
         binder.onToggle(binding.voiceWakeEnabled) { isChecked ->
             if (isChecked && !WakeWordModelManager.isVadPresent(wakewordsDir)) {
@@ -579,7 +587,7 @@ class SettingsFragment : Fragment() {
                     .setPositiveButton(android.R.string.ok, null)
                     .show()
             } else if (result == WakeWordModelManager.VadResult.DOWNLOADED) {
-                // Force a reload so the detector picks up the freshly fetched VAD.
+                // force a reload so the detector picks up the freshly fetched vad
                 mVoiceAssistantManager?.invalidateLoadedModel()
             }
         }
@@ -610,7 +618,13 @@ class SettingsFragment : Fragment() {
             try {
                 val (official, experimental) = withContext(Dispatchers.IO) {
                     val off = WakeWordModelManager.fetchOfficialModels(okHttpClient)
-                    val exp = if (showExperimental) WakeWordModelManager.fetchExperimentalModels(okHttpClient) else emptyList()
+                    // a failed experimental fetch must not drop the official list
+                    val exp = if (!showExperimental) emptyList() else try {
+                        WakeWordModelManager.fetchExperimentalModels(okHttpClient)
+                    } catch (e: IOException) {
+                        Log.w("SettingsFragment", "experimental model fetch failed: ${e.message}")
+                        emptyList()
+                    }
                     Pair(off, exp)
                 }
                 val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
@@ -640,7 +654,7 @@ class SettingsFragment : Fragment() {
         is WakeWordModel.Installed    -> "\u2713  ${model.displayName}"
         is WakeWordModel.Downloadable -> "\u2B07  ${model.displayName}"
         is WakeWordModel.Experimental -> "\u26A1  ${model.displayName}"
-        else                          -> model.displayName  // Custom
+        else                          -> model.displayName  // custom
     }
 
     private fun onModelSelected(model: WakeWordModel) {
@@ -651,13 +665,13 @@ class SettingsFragment : Fragment() {
             }
             is WakeWordModel.Downloadable -> startModelDownload(model.name, model.tfliteUrl, model.jsonUrl)
             is WakeWordModel.Experimental -> startModelDownload(model.name, model.tfliteUrl, model.jsonUrl)
-            else -> showCustomModelPathDialog()  // Custom
+            else -> showCustomModelPathDialog()  // custom
         }
     }
 
     private fun startModelDownload(name: String, tfliteUrl: String, jsonUrl: String) {
         downloadJob?.cancel()
-        val wakewordsDir = File(requireContext().filesDir, "wakewords")
+        val wakewordsDir = WakeWordModelManager.getModelDirectory(requireContext())
         val mainHandler = Handler(Looper.getMainLooper())
 
         binding.voiceWakeDownloadProgress.visibility = View.VISIBLE
@@ -711,7 +725,7 @@ class SettingsFragment : Fragment() {
     }
 
     private fun showCustomModelPathDialog() {
-        val wakewordsDir = File(requireContext().filesDir, "wakewords")
+        val wakewordsDir = WakeWordModelManager.getModelDirectory(requireContext())
         val input = EditText(requireContext()).apply {
             hint = getString(R.string.voice_wake_model_custom_hint)
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
@@ -761,11 +775,8 @@ class SettingsFragment : Fragment() {
     }
 
     private fun setupButtonRelaySpinners(buttonCount: Int, relayCount: Int) {
-        // Build options list: "None" + "Relay 0" ... "Relay N-1"
-        val options = mutableListOf(getString(R.string.button_relay_none))
-        for (i in 0 until relayCount) options.add(getString(R.string.button_relay_relay_label, i))
-        val adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, options)
-        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        val optionCount = relayCount + 1
+        val adapter = relayOptionsAdapter(relayCount)
 
         val buttonLayouts = listOf(binding.buttonRelayMap0Layout, binding.buttonRelayMap1Layout, binding.buttonRelayMap2Layout, binding.buttonRelayMap3Layout)
         val buttonLabels  = listOf(binding.buttonRelayMap0Label,  binding.buttonRelayMap1Label,  binding.buttonRelayMap2Label,  binding.buttonRelayMap3Label)
@@ -777,9 +788,9 @@ class SettingsFragment : Fragment() {
             if (visible) {
                 buttonLabels[i].text = getString(R.string.button_relay_button_label, i)
                 buttonSpinners[i].adapter = adapter
-                // Stored value: -1 = None (position 0), 0 = Relay 0 (position 1), etc.
+                // stored value -1 is none position 0 then relay 0 at position 1 and so on
                 val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
-                buttonSpinners[i].setSelection((storedRelay + 1).coerceIn(0, options.size - 1))
+                buttonSpinners[i].setSelection((storedRelay + 1).coerceIn(0, optionCount - 1))
             }
         }
 
@@ -792,7 +803,7 @@ class SettingsFragment : Fragment() {
     private fun saveSettings() {
         binder.saveAll()
 
-        requireContext().getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE).edit {
+        mSharedPreferences.edit {
             val device = DeviceModel.getReportedDevice()
 
             putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
@@ -803,14 +814,14 @@ class SettingsFragment : Fragment() {
 
             putString(SP_DYNAMIC_TEMP_OFFSET_ZONE, binding.dynamicTempOffsetZone.selectedItem?.toString() ?: "")
 
-            // Button-to-Relay Mapping
+            // button-to-relay mapping
             if (device.buttons > 0 && device.relays > 0) {
                 val spinners = listOf(binding.buttonRelayMap0, binding.buttonRelayMap1, binding.buttonRelayMap2, binding.buttonRelayMap3)
                 for (i in 0 until device.buttons.coerceAtMost(4))
                     putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), spinners[i].selectedItemPosition - 1)
             }
 
-            // SW input relay target; spinner position 0 = None = -1
+            // sw input relay target spinner position 0 is none = -1
             if (device.inputs > 0) {
                 putInt(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), binding.swInputRelay.selectedItemPosition - 1)
             }
@@ -823,8 +834,13 @@ class SettingsFragment : Fragment() {
         Toast.makeText(requireContext(), getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
     }
 
-    private fun getLocalIpAddress(): String? =
+    private fun getLocalIpAddress(): String? = try {
         NetworkInterface.getNetworkInterfaces().toList().flatMap { it.inetAddresses.toList() }.firstOrNull { it.isSiteLocalAddress }?.hostAddress
+    } catch (e: SocketException) {
+        // interface listing can fail transiently eg right after wifi reconnects
+        Log.w("SettingsFragment", "Cannot list network interfaces", e)
+        null
+    }
 
     fun getScreenSaverSpinnerAdapter(): ArrayAdapter<String?> {
         val adapter = ArrayAdapter<String?>(requireContext(), android.R.layout.simple_spinner_item)

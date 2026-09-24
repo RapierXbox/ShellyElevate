@@ -21,10 +21,10 @@ import java.util.Set;
 import java.util.LinkedHashSet;
 
 public class SettingsParser {
-    // Keys whose values must always be stored as Float in SharedPreferences.
-    // Any component that calls getFloat() on these keys must be listed here so
-    // that the HTTP /settings API cannot accidentally corrupt them by writing
-    // whole-number JSON values as Integer.
+    // keys whose values must always be stored as Float in SharedPreferences
+    // any component that calls getFloat() on these keys must be listed here so
+    // that the http /settings api cannot accidentally corrupt them by writing
+    // whole-number json values as Integer
     private static final Set<String> FLOAT_PREF_KEYS = Collections.unmodifiableSet(
         new HashSet<>(Arrays.asList(
             Constants.SP_DYNAMIC_TEMP_OFFSET_BASELINE,
@@ -32,7 +32,7 @@ public class SettingsParser {
         ))
     );
 
-    public JSONObject getSettings()throws JSONException {
+    public JSONObject getSettings() throws JSONException {
         JSONObject settings = new JSONObject();
         Map<String, ?> allPreferences = mSharedPreferences.getAll();
         for (Map.Entry<String, ?> entry : allPreferences.entrySet()) {
@@ -45,7 +45,7 @@ public class SettingsParser {
                 }
                 settings.put(key, arr);
             } else if (value instanceof Float) {
-                // JSON numbers are doubles; widen here so precision survives the round trip.
+                // json numbers are doubles widen here so precision survives the round trip
                 settings.put(key, ((Float) value).doubleValue());
             } else {
                 settings.put(key, value);
@@ -62,7 +62,7 @@ public class SettingsParser {
             String key = it.next();
             Object value = settings.get(key);
 
-            // Explicit JSON null removes the key.
+            // explicit json null removes the key
             if (value == JSONObject.NULL) {
                 editor.remove(key);
                 continue;
@@ -89,13 +89,13 @@ public class SettingsParser {
                 if (allStrings) {
                     editor.putStringSet(key, set);
                 }
-                // Mixed-type arrays are dropped: SharedPreferences only stores StringSet.
+                // mixed-type arrays are dropped SharedPreferences only stores StringSet
             } else if (value instanceof Number) {
                 Number num = (Number) value;
                 double d = num.doubleValue();
-                // Always use putFloat() for known Float pref keys, regardless of whether
-                // the current stored type is Float/Int/Long. This repairs any corruption
-                // caused by a previous write that stored a whole-number float as Integer.
+                // always use putFloat() for known Float pref keys regardless of whether
+                // the current stored type is Float/Int/Long this repairs any corruption
+                // caused by a previous write that stored a whole-number float as Integer
                 Object existing = existingPrefs.get(key);
                 if (FLOAT_PREF_KEYS.contains(key) || existing instanceof Float) {
                     editor.putFloat(key, (float) d);
