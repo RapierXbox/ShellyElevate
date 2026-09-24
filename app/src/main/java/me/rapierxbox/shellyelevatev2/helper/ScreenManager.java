@@ -16,9 +16,6 @@ import static me.rapierxbox.shellyelevatev2.Constants.SP_TOUCH_TO_WAKE;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 
-import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
-import android.animation.ValueAnimator;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -39,8 +36,8 @@ import me.rapierxbox.shellyelevatev2.screensavers.ScreenOffScreenSaver;
 public class ScreenManager extends BroadcastReceiver {
 
     private static final String TAG = "ScreenManager";
-    // Wait this long after the desired brightness changes before actually animating,
-    // so a flickering lux sensor doesn't yo-yo the backlight.
+    // wait this long after the desired brightness changes before animating so a
+    // flickering lux sensor does not yo-yo the backlight
     private static final long HYSTERESIS_DELAY_MS = 3000L;
     public static final long FADE_DURATION_MS = 1000L;
     private static final int MIN_BRIGHTNESS_STEP = 3;
@@ -101,8 +98,8 @@ public class ScreenManager extends BroadcastReceiver {
 
         LocalBroadcastManager.getInstance(context).registerReceiver(this, intentFilter);
 
-        // Force the screen on at startup so we don't boot at brightness 0; the
-        // screensaver will dim later if it activates.
+        // force the screen on at startup so we do not boot at brightness 0
+        // the screensaver will dim later if it activates
         setScreenOn(true);
         updateBrightness();
     }
@@ -130,13 +127,13 @@ public class ScreenManager extends BroadcastReceiver {
         mDeviceHelper.setScreenOn(on);
         if (!on) {
             applyBrightness(0, "screen off");
-            // X2i uses Android PowerManager for reliable panel blanking in addition to
-            // setting brightness=0 (which remains meaningful for MQTT/UI state).
+            // x2i uses android powermanager for reliable panel blanking in addition to
+            // setting brightness=0 (which remains meaningful for mqtt and ui state)
             mDeviceHelper.requestAndroidSleep();
         }
     }
 
-    /** Forwarded from MainActivity's WebView touch listener. */
+    // forwarded from MainActivity webview touch listener
     public void onTouchEvent() {
         if (BuildConfig.DEBUG) Log.d(TAG, "onTouchEvent called: screenOn=" + screenOn + ", cachedTouchToWake=" + cachedTouchToWake + ", currentBrightness=" + currentBrightness + ", inScreenSaver=" + inScreenSaver);
         if (inScreenSaver) {
@@ -148,12 +145,12 @@ public class ScreenManager extends BroadcastReceiver {
         if (!screenOn && cachedTouchToWake) {
             Log.i(TAG, "Touch detected, waking screen via touch-to-wake");
             setScreenOn(true);
-            // Apply brightness immediately on wake; hysteresis is only for lux jitter.
+            // apply brightness immediately on wake since hysteresis is only for lux jitter
             wakeScreen("touch-to-wake");
         }
     }
 
-    /** True when a touch should wake the screen instead of being delivered to the WebView. */
+    // true when a touch should wake the screen instead of reaching the webview
     public boolean shouldConsumeTouchForWake() {
         return inScreenSaver || !screenOn || currentBrightness == 0;
     }
@@ -180,11 +177,11 @@ public class ScreenManager extends BroadcastReceiver {
                 updateScreenSaverState(false);
                 break;
             case INTENT_TURN_SCREEN_ON:
-                // Clear screensaver state before waking: INTENT_TURN_SCREEN_ON can arrive
+                // clear screensaver state before waking. INTENT_TURN_SCREEN_ON can arrive
                 // before INTENT_SCREEN_SAVER_STOPPED (race between the handler post and the
-                // executor send in ScreenOffScreenSaver / ScreenSaverManager), so we must
-                // clear inScreenSaver here to let computeDesiredBrightness return the real
-                // target instead of 0.
+                // executor send in ScreenOffScreenSaver / ScreenSaverManager) so inScreenSaver
+                // must be cleared here to let computeDesiredBrightness return the real target
+                // instead of 0
                 inScreenSaver = false;
                 setScreenOn(true);
                 wakeScreen("screen on");
@@ -202,7 +199,6 @@ public class ScreenManager extends BroadcastReceiver {
                 if (Float.isNaN(lux) || lux < 0f) lux = 0f;
                 lastMeasuredLux = lux;
 
-                // TODO: debounce when the lux sensor is noisy.
                 if (automaticBrightness())
                     updateBrightness();
 
@@ -244,7 +240,7 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     private int computeDesiredBrightness() {
-        // aod pins to panel minimum, skip lux ramp
+        // aod pins to panel minimum and skips the lux ramp
         if (inScreenSaver && isAODSaverActive()) {
             return clamp(DeviceModel.getReportedDevice().panelMinBacklight, 0, 255);
         }
@@ -260,8 +256,7 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     private synchronized void checkAndApplyBrightness() {
-        // Skip the hysteresis delay when we're heading to 0 so the screen turns
-        // off promptly.
+        // skip the hysteresis delay when heading to 0 so the screen turns off promptly
         boolean force = currentBrightness != 0 && targetBrightness == 0;
         long now = System.currentTimeMillis();
 
@@ -292,9 +287,9 @@ public class ScreenManager extends BroadcastReceiver {
         }
     }
 
-    // Linear ramp from cachedMinBrightness at 30 lux to 255 at 500 lux. Below/above
-    // those breakpoints we clamp to the endpoints so the screen never goes fully
-    // dark in a lit room and never gets stuck below max in bright sunlight.
+    // linear ramp from cachedMinBrightness at 30 lux to 255 at 500 lux
+    // below and above those breakpoints we clamp to the endpoints so the screen
+    // never goes fully dark in a lit room and never gets stuck below max in bright sunlight
     private int getScreenBrightnessFromLux(float lux) {
         if (Float.isNaN(lux) || lux < 0f) lux = 0f;
 
@@ -309,9 +304,9 @@ public class ScreenManager extends BroadcastReceiver {
         return clamp((int) Math.round(computed), 0, 255);
     }
 
-    // Saver-active transitions intentionally bypass HYSTERESIS_DELAY_MS: dimming
-    // on screen-off is asymmetric (we want fast off, smooth-faded on, no jitter
-    // delay) so we drive brightness directly here instead of via updateBrightness.
+    // saver-active transitions intentionally bypass HYSTERESIS_DELAY_MS since dimming
+    // on screen-off is asymmetric (fast off smooth-faded on no jitter delay) so we
+    // drive brightness directly here instead of via updateBrightness
     private synchronized void updateScreenSaverState(boolean newState) {
         this.inScreenSaver = newState;
         if (BuildConfig.DEBUG) {
@@ -327,34 +322,41 @@ public class ScreenManager extends BroadcastReceiver {
             } else {
                 updateBrightness();
                 if (isScreenOffSaverActive()) {
-                    // Some panels swallow the first brightness=0 write right after
-                    // entering the saver; repeating it ~300 ms later sticks reliably.
+                    // some panels swallow the first brightness=0 write right after
+                    // entering the saver so repeating it ~300 ms later sticks reliably
                     fadeHandler.postDelayed(() -> {
                         if (inScreenSaver && isScreenOffSaverActive()) {
                             applyBrightness(0, "screen-off screensaver second write", true);
                         }
                     }, 300L);
-                    // X2i: also request Android PowerManager sleep so the panel actually
-                    // blanks even when brightness=0 alone is not sufficient.
+                    // x2i: also request android powermanager sleep so the panel actually
+                    // blanks even when brightness=0 alone is not sufficient
                     mDeviceHelper.requestAndroidSleep();
                 }
             }
         } else {
-            // Wake immediately; the hysteresis delay is only meant for lux jitter.
+            // wake immediately since the hysteresis delay is only meant for lux jitter
             setScreenOn(true);
             wakeScreen("exit screensaver");
             if (BuildConfig.DEBUG) Log.d(TAG, "Exited screensaver, applied brightness immediately");
         }
     }
 
-    /**
-     * Immediately restores brightness to the configured target without waiting for
-     * the hysteresis delay.  Call this whenever the screen transitions from off/dark
-     * to on so users see the correct brightness instantly rather than after the
-     * 3-second lux-jitter guard fires.
-     */
+    // immediately restores brightness to the configured target without waiting for
+    // the hysteresis delay
+    // call this whenever the screen transitions from off or dark to on so users
+    // see the correct brightness instantly rather than after the 3 second lux-jitter guard fires
+    // resyncs the backlight after a caller wrote it directly such as the settings screen
+    public synchronized void reapplyBrightness() {
+        if (!screenOn || inScreenSaver) {
+            updateBrightness();
+            return;
+        }
+        wakeScreen("reapply");
+    }
+
     private synchronized void wakeScreen(String reason) {
-        // X2i uses Android PowerManager to turn the display on before restoring brightness.
+        // x2i uses android powermanager to turn the display on before restoring brightness
         mDeviceHelper.requestAndroidWake();
         int desiredBrightness = computeDesiredBrightness();
         targetBrightness = desiredBrightness;

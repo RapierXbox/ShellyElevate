@@ -24,7 +24,7 @@ import java.util.concurrent.TimeUnit;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication;
 
-// Idle timer for the screensaver, plus proximity-based wake handling.
+// idle timer for the screensaver plus proximity-based wake handling
 public class ScreenSaverManager extends BroadcastReceiver {
 
     private static final String TAG = "ScreenSaverManager";
@@ -33,20 +33,25 @@ public class ScreenSaverManager extends BroadcastReceiver {
     private final ScheduledExecutorService scheduler;
     private final ScreenSaver[] screenSavers;
 
-    private long lastTouchEventTime;
+    // touched from both the main thread and the scheduler thread see rescheduleIdleCheck
+    private volatile long lastTouchEventTime;
     private volatile boolean screenSaverRunning;
-	private volatile boolean keepAliveFlag = false;
+    private volatile boolean keepAliveFlag = false;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    // only ever read and written on the main thread
     private long gestureToken = 0L;
-    // Tracks whether the current touch gesture became multi-touch.
+    // tracks whether the current touch gesture became multi-touch
     private volatile boolean gestureIsMultiTouch = false;
-    // Set by SwipeHelper when a multi-finger swipe was successfully recognized.
+    // set by SwipeHelper when a multi-finger swipe was successfully recognized
     private volatile boolean swipeFired = false;
     private long lastProximityWakeTime = 0L;
     private volatile Boolean lastNearState = null;
     private volatile ScheduledFuture<?> idleTask;
-    private int runningSaverId = -1;
+    // startScreenSaver/stopScreenSaver can be called from the mqtt callback thread while
+    // onReceive runs on the main thread so this needs to be volatile too
+    private volatile int runningSaverId = -1;
 
+    // index in this array is the value persisted under SP_SCREEN_SAVER_ID so keep the order stable
     public static ScreenSaver[] getAvailableScreenSavers() {
         return new ScreenSaver[]{
                 new ScreenOffScreenSaver(),
@@ -94,30 +99,30 @@ public class ScreenSaverManager extends BroadcastReceiver {
         int actionMasked = event.getActionMasked();
 
         if (actionMasked == ACTION_DOWN) {
-            // New gesture starts: assume single-touch until a second pointer joins.
+            // new gesture starts so assume single-touch until a second pointer joins
             gestureToken++;
             gestureIsMultiTouch = false;
             swipeFired = false;
             rescheduleIdleCheck();
-            // Do not wake on DOWN yet; wait for ACTION_UP so multi-touch gestures
-            // can complete while the screensaver remains active.
+            // waking is deferred until ACTION_UP so multi-touch gestures
+            // can complete while the screensaver remains active
         }
 
         if (actionMasked == MotionEvent.ACTION_POINTER_DOWN) {
-            // Second (or more) finger joined this gesture.
+            // second (or more) finger joined this gesture
             gestureIsMultiTouch = true;
         }
 
         if (actionMasked == ACTION_UP) {
             rescheduleIdleCheck();
             final long tokenAtUp = gestureToken;
-            // Decide tap-vs-swipe at the end of this dispatch turn so SwipeHelper
-            // can still mark onSwipeFired() even if it receives ACTION_UP later.
+            // decide tap-vs-swipe at the end of this dispatch turn so SwipeHelper
+            // can still mark onSwipeFired() even if it receives ACTION_UP later
             mainHandler.post(() -> {
                 if (tokenAtUp != gestureToken) return;
                 if (isScreenSaverRunning() && !swipeFired) {
-                    // Wake on taps (single- and multi-touch). Only keep running
-                    // when a swipe was explicitly recognized for this gesture.
+                    // wake on taps (single and multi touch) but keep running
+                    // when a swipe was explicitly recognized for this gesture
                     stopScreenSaver();
                 }
                 swipeFired = false;
@@ -163,47 +168,49 @@ public class ScreenSaverManager extends BroadcastReceiver {
                 ShellyElevateApplication.mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ENABLED, true);
     }
 
-	private synchronized void rescheduleIdleCheck() {
-		ScheduledFuture<?> current = idleTask;
-		if (current != null) { current.cancel(false); idleTask = null; }
-		if (scheduler.isShutdown()) return;
+    private synchronized void rescheduleIdleCheck() {
+        ScheduledFuture<?> current = idleTask;
+        if (current != null) { current.cancel(false); idleTask = null; }
+        if (scheduler.isShutdown()) return;
 
-		var prefs = ShellyElevateApplication.mSharedPreferences;
-		if (prefs == null) return;
-		if (keepAliveFlag || screenSaverRunning) return;
-		if (!prefs.getBoolean(SP_SCREEN_SAVER_ENABLED, true)) return;
+        var prefs = ShellyElevateApplication.mSharedPreferences;
+        if (prefs == null) return;
+        if (keepAliveFlag || screenSaverRunning) return;
+        if (!prefs.getBoolean(SP_SCREEN_SAVER_ENABLED, true)) return;
 
-		long delayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
-		long elapsed = System.currentTimeMillis() - lastTouchEventTime;
-		long remaining = Math.max(0L, delayMs - elapsed);
-		idleTask = scheduler.schedule(this::onIdleDeadline, remaining, TimeUnit.MILLISECONDS);
-	}
+        long delayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
+        long elapsed = System.currentTimeMillis() - lastTouchEventTime;
+        long remaining = Math.max(0L, delayMs - elapsed);
+        idleTask = scheduler.schedule(this::onIdleDeadline, remaining, TimeUnit.MILLISECONDS);
+    }
 
-	private void onIdleDeadline() {
-		idleTask = null;
-		var prefs = ShellyElevateApplication.mSharedPreferences;
-		if (prefs == null) return;
-		if (keepAliveFlag || screenSaverRunning) return;
-		if (!prefs.getBoolean(SP_SCREEN_SAVER_ENABLED, true)) return;
+    // synchronized so a deadline firing on the scheduler thread cannot interleave
+    // with a reschedule triggered on the main thread
+    private synchronized void onIdleDeadline() {
+        idleTask = null;
+        var prefs = ShellyElevateApplication.mSharedPreferences;
+        if (prefs == null) return;
+        if (keepAliveFlag || screenSaverRunning) return;
+        if (!prefs.getBoolean(SP_SCREEN_SAVER_ENABLED, true)) return;
 
-		long delayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
-		long elapsed = System.currentTimeMillis() - lastTouchEventTime;
-		if (elapsed >= delayMs) startScreenSaver();
-		else rescheduleIdleCheck();
-	}
+        long delayMs = Math.max(5, prefs.getInt(SP_SCREEN_SAVER_DELAY, 45)) * 1000L;
+        long elapsed = System.currentTimeMillis() - lastTouchEventTime;
+        if (elapsed >= delayMs) startScreenSaver();
+        else rescheduleIdleCheck();
+    }
 
-	public void keepAlive(boolean keepAlive) {
-		this.keepAliveFlag = keepAlive;
-		if (keepAlive) {
-			Log.i(TAG, "KeepAlive enabled: screensaver will not start");
-			if (screenSaverRunning) stopScreenSaver();
-			rescheduleIdleCheck();
-		} else {
-			Log.i(TAG, "KeepAlive disabled: screensaver logic resumes");
-			lastTouchEventTime = System.currentTimeMillis();
-			rescheduleIdleCheck();
-		}
-	}
+    public void keepAlive(boolean keepAlive) {
+        this.keepAliveFlag = keepAlive;
+        if (keepAlive) {
+            Log.i(TAG, "KeepAlive enabled: screensaver will not start");
+            if (screenSaverRunning) stopScreenSaver();
+            rescheduleIdleCheck();
+        } else {
+            Log.i(TAG, "KeepAlive disabled: screensaver logic resumes");
+            lastTouchEventTime = System.currentTimeMillis();
+            rescheduleIdleCheck();
+        }
+    }
 
     // synchronized because paho scheduler and main threads all call this
     public synchronized void startScreenSaver() {
@@ -211,16 +218,16 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
         screenSaverRunning = true;
 
-        // Reset proximity tracking so the first event after the screensaver starts is
-        // always treated as a fresh transition.  Without this, a user who was already
+        // reset proximity tracking so the first event after the screensaver starts is
+        // always treated as a fresh transition. without this a user who was already
         // near when the idle timeout fired would be unable to wake the screen because
         // lastNearState would already equal the incoming isNear value and the
-        // transition guard would silently return early.
+        // transition guard would silently return early
         lastNearState = null;
         if (mDeviceSensorManager != null) {
-            // Force SensorManager-based sensors (which fire continuously) to re-publish
+            // force SensorManager-based sensors (which fire continuously) to re-publish
             // their current value so the screensaver can wake immediately when the user
-            // is already in range.
+            // is already in range
             mDeviceSensorManager.resetProximityState();
         }
 
@@ -233,8 +240,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
         if (mqtt != null && mqtt.shouldSend()) mqtt.publishSleeping(true);
 
         final int activeId = runningSaverId;
-        // Broadcasts are observed by ScreenManager and friends; pushing them off
-        // the main thread keeps the saver activity responsive on slow devices.
+        // broadcasts are observed by ScreenManager and friends
+        // pushing them off the main thread keeps the saver activity responsive on slow devices
         scheduler.execute(() -> LocalBroadcastManager.getInstance(appContext)
                 .sendBroadcast(new Intent(INTENT_SCREEN_SAVER_STARTED)
                         .putExtra(EXTRA_SCREEN_SAVER_ID, activeId)));
@@ -298,7 +305,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
         float threshold = maxProximitySensorValue <= 1.5f ? 0.5f : Math.max(0.5f, maxProximitySensorValue * 0.1f);
         boolean isNear = proximity < maxProximitySensorValue - threshold;
 
-        // Only act on near/far transitions, not on each repeated event.
+        // only act on near/far transitions not on each repeated event
         if (lastNearState != null && lastNearState == isNear) {
             return;
         }
