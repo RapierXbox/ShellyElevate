@@ -120,16 +120,20 @@ public final class AppUpdater {
         });
     }
 
+    // exec+waitFor blocks so this must never run on the caller thread since that
+    // is the main thread when triggered from the reboot dialog button
     public static void rebootToInstall() {
-        try {
-            int code = Runtime.getRuntime().exec("reboot").waitFor();
-            if (code != 0) Log.e(TAG, "reboot command exited with " + code);
-        } catch (IOException e) {
-            Log.e(TAG, "reboot failed", e);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            Log.e(TAG, "reboot interrupted", e);
-        }
+        POOL.execute(() -> {
+            try {
+                int code = Runtime.getRuntime().exec("reboot").waitFor();
+                if (code != 0) Log.e(TAG, "reboot command exited with " + code);
+            } catch (IOException e) {
+                Log.e(TAG, "reboot failed", e);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                Log.e(TAG, "reboot interrupted", e);
+            }
+        });
     }
 
     // block installs signed with a different key than the running app

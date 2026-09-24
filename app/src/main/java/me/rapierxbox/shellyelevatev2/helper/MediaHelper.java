@@ -4,13 +4,10 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicatio
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
 import android.util.Log;
-
-import androidx.preference.PreferenceManager;
 
 import java.io.IOException;
 
@@ -20,7 +17,7 @@ public class MediaHelper {
     private MediaPlayer mediaPlayerEffects;
     private MediaPlayer mediaPlayerMusic;
     private final AudioManager audioManager;
-    private boolean enabled = true;
+    private boolean enabled;
     // remember if music was playing when an effect started so we only resume then
     private volatile boolean resumeMusicAfterEffect = false;
 

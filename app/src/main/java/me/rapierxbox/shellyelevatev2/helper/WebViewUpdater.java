@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.R;
 
-// Mirrors the OEM cloud.shelly.stargate WebView OTA flow: drop the device's
+// mirrors the oem cloud.shelly.stargate webview ota flow: drop the device
 // WebViewUpdate.zip at /cache/update.zip and reboot into recovery which
 // applies it. writing /cache needs the cache gid which the priv-app gets
 // through ACCESS_CACHE_FILESYSTEM
@@ -49,9 +49,9 @@ public final class WebViewUpdater {
     // headroom on top of the zip size
     private static final long SPACE_MARGIN_BYTES = 8L * 1024 * 1024;
 
-    // Only Stargate ships a system WebView old enough to need this OTA. Shelly
-    // hasn't published a WebViewUpdate for the newer Wall Displays... those
-    // already come with a modern Chromium (or so I think).
+    // only stargate ships a system webview old enough to need this ota. shelly
+    // hasnt published a webviewupdate for the newer wall displays... those
+    // already come with a modern chromium (or so i think)
     private static final Map<String, String> UPDATE_URLS;
     static {
         Map<String, String> m = new HashMap<>();
@@ -60,8 +60,8 @@ public final class WebViewUpdater {
         UPDATE_URLS = Collections.unmodifiableMap(m);
     }
 
-    // Same cutoff the OEM uses to decide "WebView is ready for HA". Anything
-    // above this major renders the modern HA dashboard cleanly (also a guess).
+    // same cutoff the oem uses to decide webview is ready for ha. anything
+    // above this major renders the modern ha dashboard cleanly (also a guess)
     private static final int MIN_READY_MAJOR = 100;
 
     private static final ExecutorService DOWNLOAD_POOL = Executors.newSingleThreadExecutor();
@@ -88,8 +88,8 @@ public final class WebViewUpdater {
         return !getUpdateUrl().isEmpty();
     }
 
-    // Stargate images sometimes carry com.android.webview rather than the
-    // Google variant... probe both
+    // stargate images sometimes carry com.android.webview rather than the
+    // google variant... probe both
     public static String getInstalledWebViewVersion(Context ctx) {
         PackageManager pm = ctx.getPackageManager();
         for (String pkg : new String[]{"com.google.android.webview", "com.android.webview"}) {
@@ -110,7 +110,7 @@ public final class WebViewUpdater {
         try {
             return Integer.parseInt(head) <= MIN_READY_MAJOR;
         } catch (NumberFormatException nfe) {
-            // Unparseable — push the update anyway.
+            // unparseable so push the update anyway
             return true;
         }
     }
@@ -119,7 +119,7 @@ public final class WebViewUpdater {
         return DOWNLOAD_IN_PROGRESS.get();
     }
 
-    // Listener callbacks always fire on the main thread.
+    // listener callbacks always fire on the main thread
     public static void downloadAndStage(Context ctx, Listener listener) {
         final String url = getUpdateUrl();
         if (url.isEmpty()) {
@@ -160,21 +160,10 @@ public final class WebViewUpdater {
 
                 HttpDownloader.download(HttpDownloader.defaultClient(), url, TEMP_ZIP,
                         pct -> main.post(() -> listener.onProgress(pct)));
-                if (TEMP_ZIP.length() <= 0) {
-                    //noinspection ResultOfMethodCallIgnored
-                    TEMP_ZIP.delete();
-                    main.post(() -> listener.onFailed("Downloaded file is empty"));
-                } else if (expected > 0 && TEMP_ZIP.length() != expected) {
-                    long got = TEMP_ZIP.length();
-                    //noinspection ResultOfMethodCallIgnored
-                    TEMP_ZIP.delete();
-                    main.post(() -> listener.onFailed("Download incomplete (" + got + " of " + expected + " bytes)"));
-                } else if (!TEMP_ZIP.renameTo(STAGED_ZIP)) {
-                    //noinspection ResultOfMethodCallIgnored
-                    TEMP_ZIP.delete();
-                    main.post(() -> listener.onFailed("Could not rename update.zip.part to update.zip"));
+                String failure = stageDownloadedZip(expected);
+                if (failure != null) {
+                    main.post(() -> listener.onFailed(failure));
                 } else {
-                    makeReadable(STAGED_ZIP);
                     main.post(() -> listener.onCompleted(STAGED_ZIP));
                 }
             } catch (IOException e) {
@@ -188,13 +177,35 @@ public final class WebViewUpdater {
         });
     }
 
+    // verifies the finished TEMP_ZIP and renames it into place. returns null on
+    // success or a failure message otherwise and always deletes TEMP_ZIP on failure
+    private static String stageDownloadedZip(long expected) {
+        if (TEMP_ZIP.length() <= 0) {
+            //noinspection ResultOfMethodCallIgnored
+            TEMP_ZIP.delete();
+            return "Downloaded file is empty";
+        }
+        if (expected > 0 && TEMP_ZIP.length() != expected) {
+            long got = TEMP_ZIP.length();
+            //noinspection ResultOfMethodCallIgnored
+            TEMP_ZIP.delete();
+            return "Download incomplete (" + got + " of " + expected + " bytes)";
+        }
+        if (!TEMP_ZIP.renameTo(STAGED_ZIP)) {
+            //noinspection ResultOfMethodCallIgnored
+            TEMP_ZIP.delete();
+            return "Could not rename update.zip.part to update.zip";
+        }
+        makeReadable(STAGED_ZIP);
+        return null;
+    }
+
     // null when /cache is usable. a probe file is the only reliable test
     // since the cache gid only shows up after a boot as priv-app
     private static String checkCacheWritable(Context ctx) {
         if (!CACHE_DIR.isDirectory()) return "/cache does not exist on this device";
         File probe = new File(CACHE_DIR, ".shellyelevate_probe");
-        try {
-            new FileOutputStream(probe).close();
+        try (FileOutputStream ignored = new FileOutputStream(probe)) {
             //noinspection ResultOfMethodCallIgnored
             probe.delete();
             return null;

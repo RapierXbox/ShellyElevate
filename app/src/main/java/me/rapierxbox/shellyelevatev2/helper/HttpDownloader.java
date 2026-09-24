@@ -28,16 +28,16 @@ public final class HttpDownloader {
         void onProgress(int percent);
     }
 
-    // Build the SSL context once and share it across all the file fetchers
-    // (wake-word models, WebView OTA, ...). Not free to construct.
+    // build the ssl context once and share it across the file fetchers such as
+    // wake word models and webview ota since it is not free to construct
     private static volatile OkHttpClient sharedClient;
 
     private HttpDownloader() {}
 
-    // Android 7's CA store is missing modern roots (Sectigo, Let's Encrypt
-    // cross-signs) and rejects fine hosts like github.com and repo.shelly.cloud.
-    // The payloads here aren't authenticated beyond the byte stream anyway, so
-    // trust-all is the pragmatic choice.
+    // android 7 ca store is missing modern roots like sectigo and the lets
+    // encrypt cross-signs and rejects fine hosts like github.com and
+    // repo.shelly.cloud. the payloads here arent authenticated beyond the byte
+    // stream anyway so trust-all is the pragmatic choice
     public static OkHttpClient defaultClient() {
         OkHttpClient c = sharedClient;
         if (c != null) return c;
