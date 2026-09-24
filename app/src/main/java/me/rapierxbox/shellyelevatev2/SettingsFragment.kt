@@ -344,7 +344,7 @@ class SettingsFragment : Fragment() {
             +SwitchPref(binding.voiceWakeExperimentalModels, SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
             +SliderPref(binding.voiceWakeSensitivity, SP_VOICE_WAKE_SENSITIVITY, 50)
             +SliderPref(binding.voiceWakeCooldown, SP_VOICE_WAKE_COOLDOWN_SEC, 5)
-            +SwitchPref(binding.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)c
+            +SwitchPref(binding.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)
             +SwitchPref(binding.voiceScoreBarEnabled, SP_VOICE_SCORE_BAR_ENABLED, false)
 
             +SwitchPref(binding.bluetoothProxyEnabled, SP_BLUETOOTH_PROXY_ENABLED, false)
