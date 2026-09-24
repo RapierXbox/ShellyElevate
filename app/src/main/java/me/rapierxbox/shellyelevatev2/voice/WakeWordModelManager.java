@@ -1,20 +1,14 @@
 package me.rapierxbox.shellyelevatev2.voice;
 
 import android.content.Context;
-import android.database.Cursor;
-import android.net.Uri;
-import android.provider.DocumentsContract;
-import android.provider.OpenableColumns;
 import android.util.Log;
 
 import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -28,22 +22,25 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
-public class WakeWordModelManager {
+// lists installs and downloads microwakeword models from github
+public final class WakeWordModelManager {
     private static final String TAG = "WakeWordModelManager";
 
-    // One trees API call returns every blob in the repo, avoiding the 60 req/hour
-    // limit on the contents API.
-    private static final String OFFICIAL_REPO     = "esphome/micro-wake-word-models";
+    private static final String OFFICIAL_REPO = "esphome/micro-wake-word-models";
     private static final String EXPERIMENTAL_REPO = "TaterTotterson/microWakeWords";
+    // one trees call returns every blob and dodges the 60 per hour contents api limit
     private static final String TREES_URL = "https://api.github.com/repos/%s/git/trees/HEAD?recursive=1";
-    // raw.githubusercontent.com downloads are unauthenticated and don't count
-    // against the API rate limit.
-    private static final String RAW_URL   = "https://raw.githubusercontent.com/%s/HEAD/%s";
+    // raw downloads are unauthenticated and do not count against the api limit
+    private static final String RAW_URL = "https://raw.githubusercontent.com/%s/HEAD/%s";
 
-    // Official ESPHome VAD model. Required to gate wake detections on voice activity.
-    // Lives next to the wake-word model in /data/data/<pkg>/files/wakewords/vad.{tflite,json}.
+    // official esphome vad model that gates wake detections on voice activity
+    // stored next to the wake word models as wakewords/vad.tflite and vad.json
     private static final String VAD_TFLITE_URL = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.tflite";
-    private static final String VAD_JSON_URL   = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.json";
+    private static final String VAD_JSON_URL = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.json";
+    private static final String VAD_STEM = WakeWordDetector.VAD_MODEL_NAME;
+
+    private static final String TFLITE_EXT = ".tflite";
+    private static final String JSON_EXT = ".json";
 
     private WakeWordModelManager() {}
 
@@ -53,76 +50,61 @@ public class WakeWordModelManager {
 
     public enum VadResult { ALREADY_PRESENT, DOWNLOADED, FAILED }
 
+    private interface RemoteFactory<T extends WakeWordModel.Remote> {
+        T create(String name, String stem, String folderPath, String tfliteUrl, String jsonUrl);
+    }
+
+    // where installed wake word and vad models live
+    public static File getModelDirectory(Context context) {
+        return StreamingModel.modelDir(context);
+    }
+
     public static boolean isVadPresent(File wakewordsDir) {
-        return new File(wakewordsDir, "vad.tflite").exists()
-            && new File(wakewordsDir, "vad.json").exists();
+        return new File(wakewordsDir, VAD_STEM + TFLITE_EXT).exists()
+                && new File(wakewordsDir, VAD_STEM + JSON_EXT).exists();
     }
 
     public static VadResult ensureVadDownloaded(OkHttpClient client, File wakewordsDir) {
-        File tflite = new File(wakewordsDir, "vad.tflite");
-        File json   = new File(wakewordsDir, "vad.json");
+        File tflite = new File(wakewordsDir, VAD_STEM + TFLITE_EXT);
+        File json = new File(wakewordsDir, VAD_STEM + JSON_EXT);
         if (tflite.exists() && json.exists()) return VadResult.ALREADY_PRESENT;
 
         try {
             if (!tflite.exists()) downloadFile(client, VAD_TFLITE_URL, tflite, p -> {});
-            if (!json.exists())   downloadFile(client, VAD_JSON_URL,   json,   p -> {});
+            if (!json.exists()) downloadFile(client, VAD_JSON_URL, json, p -> {});
             return VadResult.DOWNLOADED;
         } catch (Exception e) {
             Log.w(TAG, "VAD download failed: " + e.getMessage());
+            // keep the pair all or nothing
             if (tflite.exists() && !json.exists()) tflite.delete();
             if (json.exists() && !tflite.exists()) json.delete();
             return VadResult.FAILED;
         }
     }
 
-
     public static List<WakeWordModel.Installed> getInstalledModels(File wakewordsDir) {
-        if (!wakewordsDir.exists()) return Collections.emptyList();
-        File[] files = wakewordsDir.listFiles(f -> f.getName().endsWith(".tflite"));
+        File[] files = wakewordsDir.listFiles(f -> f.getName().endsWith(TFLITE_EXT));
         if (files == null) return Collections.emptyList();
         List<WakeWordModel.Installed> result = new ArrayList<>();
         for (File f : files) {
-            String stem = f.getName().substring(0, f.getName().length() - 7);
-            if ("vad".equals(stem)) continue;
-            result.add(new WakeWordModel.Installed(stem));
+            String stem = stripExtension(f.getName(), TFLITE_EXT);
+            if (!VAD_STEM.equals(stem)) result.add(new WakeWordModel.Installed(stem));
         }
         result.sort(Comparator.comparing(WakeWordModel.Installed::getName));
         return result;
     }
 
     public static List<WakeWordModel.Downloadable> fetchOfficialModels(OkHttpClient client) throws IOException {
-        List<RawModel> raw = fetchModelsFromRepo(client, OFFICIAL_REPO);
-        List<WakeWordModel.Downloadable> result = new ArrayList<>(raw.size());
-        for (RawModel m : raw)
-            result.add(new WakeWordModel.Downloadable(m.saveName, m.stem, m.folderPath, m.tfliteUrl, m.jsonUrl));
-        return result;
+        return fetchModelsFromRepo(client, OFFICIAL_REPO, WakeWordModel.Downloadable::new);
     }
 
     public static List<WakeWordModel.Experimental> fetchExperimentalModels(OkHttpClient client) throws IOException {
-        List<RawModel> raw = fetchModelsFromRepo(client, EXPERIMENTAL_REPO);
-        List<WakeWordModel.Experimental> result = new ArrayList<>(raw.size());
-        for (RawModel m : raw)
-            result.add(new WakeWordModel.Experimental(m.saveName, m.stem, m.folderPath, m.tfliteUrl, m.jsonUrl));
-        return result;
+        return fetchModelsFromRepo(client, EXPERIMENTAL_REPO, WakeWordModel.Experimental::new);
     }
 
-    private static class RawModel {
-        final String stem;
-        final String saveName;
-        final String folderPath;
-        final String tfliteUrl;
-        final String jsonUrl;
-        RawModel(String stem, String saveName, String folderPath, String tfliteUrl, String jsonUrl) {
-            this.stem = stem; this.saveName = saveName; this.folderPath = folderPath;
-            this.tfliteUrl = tfliteUrl; this.jsonUrl = jsonUrl;
-        }
-    }
-
-    private static List<RawModel> fetchModelsFromRepo(OkHttpClient client, String repo) throws IOException {
-        String treeUrl = String.format(TREES_URL, repo);
-        JSONObject response = fetchJsonObject(client, treeUrl);
-        if (response == null) return Collections.emptyList();
-
+    private static <T extends WakeWordModel.Remote> List<T> fetchModelsFromRepo(
+            OkHttpClient client, String repo, RemoteFactory<T> factory) throws IOException {
+        JSONObject response = fetchJsonObject(client, String.format(TREES_URL, repo));
         JSONArray tree = response.optJSONArray("tree");
         if (tree == null) return Collections.emptyList();
 
@@ -136,36 +118,33 @@ public class WakeWordModelManager {
             if (entry == null || !"blob".equals(entry.optString("type"))) continue;
             String path = entry.optString("path");
             allPaths.add(path);
-            if (path.endsWith(".tflite")) tflitePaths.add(path);
+            if (path.endsWith(TFLITE_EXT)) tflitePaths.add(path);
         }
 
-        List<RawModel> results = new ArrayList<>();
+        List<T> results = new ArrayList<>();
         for (String tflitePath : tflitePaths) {
-            int lastSlash  = tflitePath.lastIndexOf('/');
-            String folder  = lastSlash >= 0 ? tflitePath.substring(0, lastSlash) : "";
-            String filename = lastSlash >= 0 ? tflitePath.substring(lastSlash + 1) : tflitePath;
-            String stem    = filename.substring(0, filename.length() - 7); // strip ".tflite"
+            int lastSlash = tflitePath.lastIndexOf('/');
+            String folder = lastSlash >= 0 ? tflitePath.substring(0, lastSlash) : "";
+            String stem = stripExtension(tflitePath.substring(lastSlash + 1), TFLITE_EXT);
 
-            // vad is fetched automatically by ensureVadDownloaded; don't show it as a wake-word pick.
-            if ("vad".equals(stem)) continue;
+            // the vad is fetched on its own and is not offered as a wake word
+            if (VAD_STEM.equals(stem)) continue;
 
+            String jsonPath = folder.isEmpty() ? stem + JSON_EXT : folder + "/" + stem + JSON_EXT;
+            String jsonUrl = allPaths.contains(jsonPath) ? String.format(RAW_URL, repo, jsonPath) : "";
             String tfliteUrl = String.format(RAW_URL, repo, tflitePath);
 
-            String jsonPath = folder.isEmpty() ? stem + ".json" : folder + "/" + stem + ".json";
-            String jsonUrl  = allPaths.contains(jsonPath)
-                    ? String.format(RAW_URL, repo, jsonPath) : "";
-
-            results.add(new RawModel(stem, buildSaveName(stem, folder), folder, tfliteUrl, jsonUrl));
+            results.add(factory.create(buildSaveName(stem, folder), stem, folder, tfliteUrl, jsonUrl));
         }
 
-        results.sort(Comparator.comparing(m -> m.saveName));
+        results.sort(Comparator.comparing(WakeWordModel.Remote::getName));
         return results;
     }
 
-    // Two repos can ship a model with the same stem (e.g. okay_nabu). Append the
-    // unique parts of the folder path to avoid filename collisions on disk:
-    //   "okay_nabu/v2" + stem "okay_nabu" -> "okay_nabu_v2"
-    //   ""             + stem "okay_nabu" -> "okay_nabu"
+    // two repos can ship the same stem so the unique folder parts are appended
+    // to keep the files apart on disk
+    //   okay_nabu/v2 with stem okay_nabu -> okay_nabu_v2
+    //   the repo root with stem okay_nabu -> okay_nabu
     private static String buildSaveName(String stem, String folderPath) {
         if (folderPath.isEmpty()) return stem;
         StringBuilder qualifier = new StringBuilder();
@@ -178,23 +157,25 @@ public class WakeWordModelManager {
         return qualifier.length() > 0 ? stem + "_" + qualifier : stem;
     }
 
-    private static JSONObject fetchJsonObject(OkHttpClient client, String url) {
+    private static String stripExtension(String name, String ext) {
+        return name.endsWith(ext) ? name.substring(0, name.length() - ext.length()) : name;
+    }
+
+    // throws so callers can tell a failed fetch apart from an empty repo
+    private static JSONObject fetchJsonObject(OkHttpClient client, String url) throws IOException {
         Request request = new Request.Builder()
                 .url(url)
                 .header("Accept", "application/vnd.github+json")
                 .header("User-Agent", "ShellyElevateV2")
                 .build();
         try (Response response = client.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                Log.w(TAG, "GitHub API returned " + response.code() + " for " + url);
-                return null;
-            }
+            if (!response.isSuccessful())
+                throw new IOException("GitHub API returned " + response.code() + " for " + url);
             ResponseBody body = response.body();
-            if (body == null) return null;
+            if (body == null) throw new IOException("empty response for " + url);
             return new JSONObject(body.string());
-        } catch (Exception e) {
-            Log.w(TAG, "Failed to fetch " + url + ": " + e.getMessage());
-            return null;
+        } catch (JSONException e) {
+            throw new IOException("invalid JSON from " + url, e);
         }
     }
 
@@ -205,80 +186,9 @@ public class WakeWordModelManager {
             HttpDownloader.download(client, url, tmp, onProgress::onProgress);
             if (!tmp.renameTo(destFile))
                 throw new IOException("could not rename " + tmp + " to " + destFile);
-        } catch (Exception e) {
+        } catch (IOException | RuntimeException e) {
             tmp.delete();
             throw e;
-        }
-    }
-
-    public static String importCustomModel(Context context, Uri tfliteUri, File wakewordsDir) throws IOException {
-        String stem = resolveStem(context, tfliteUri);
-        if (stem == null) throw new IOException("Cannot resolve filename from URI");
-
-        wakewordsDir.mkdirs();
-        File destTflite = new File(wakewordsDir, stem + ".tflite");
-
-        boolean success = false;
-        try (InputStream input  = context.getContentResolver().openInputStream(tfliteUri);
-             OutputStream output = new FileOutputStream(destTflite)) {
-            if (input == null) throw new IOException("Cannot open input stream for " + tfliteUri);
-            byte[] buf = new byte[8192];
-            int n;
-            while ((n = input.read(buf)) != -1) output.write(buf, 0, n);
-            success = true;
-        } finally {
-            if (!success) destTflite.delete();
-        }
-
-        tryImportSiblingJson(context, tfliteUri, stem, wakewordsDir);
-        return stem;
-    }
-
-    private static String resolveStem(Context context, Uri uri) {
-        try (Cursor cursor = context.getContentResolver().query(uri, null, null, null, null)) {
-            if (cursor != null && cursor.moveToFirst()) {
-                int idx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
-                if (idx >= 0) {
-                    String name = cursor.getString(idx);
-                    if (name != null)
-                        return name.endsWith(".tflite") ? name.substring(0, name.length() - 7) : name;
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "resolveStem failed: " + e.getMessage());
-        }
-        return null;
-    }
-
-    // Best-effort sibling import. The detector falls back to default thresholds
-    // when the .json is missing, so any failure here is silently tolerated.
-    private static void tryImportSiblingJson(Context context, Uri tfliteUri, String stem, File wakewordsDir) {
-        try {
-            String docId     = DocumentsContract.getDocumentId(tfliteUri);
-            int colonIdx     = docId.indexOf(':');
-            if (colonIdx < 0) return;
-            String authority = docId.substring(0, colonIdx);
-            String path      = docId.substring(colonIdx + 1);
-            int lastSlash    = path.lastIndexOf('/');
-            String dir       = lastSlash >= 0 ? path.substring(0, lastSlash) : "";
-            String jsonPath  = dir.isEmpty() ? stem + ".json" : dir + "/" + stem + ".json";
-            String jsonId    = authority + ":" + jsonPath;
-
-            String uriPath    = tfliteUri.getPath();
-            String parentPath = uriPath != null ? uriPath.substring(0, uriPath.lastIndexOf('/')) : "";
-            Uri treeBase = tfliteUri.buildUpon().path(parentPath).build();
-            Uri jsonUri  = DocumentsContract.buildDocumentUriUsingTree(treeBase, jsonId);
-
-            try (InputStream input  = context.getContentResolver().openInputStream(jsonUri);
-                 OutputStream output = new FileOutputStream(new File(wakewordsDir, stem + ".json"))) {
-                if (input != null) {
-                    byte[] buf = new byte[8192];
-                    int n;
-                    while ((n = input.read(buf)) != -1) output.write(buf, 0, n);
-                }
-            }
-        } catch (Exception e) {
-            Log.d(TAG, "No sibling .json found for " + stem + ", proceeding without it");
         }
     }
 }

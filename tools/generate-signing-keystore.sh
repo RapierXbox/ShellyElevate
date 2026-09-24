@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Generate a release signing keystore and print the values for the four
-# SIGNING_* GitHub Actions secrets that release-apk.yml and pr-apk.yml use.
-# Without these secrets every CI build falls back to an ephemeral debug key,
-# so no two artifacts can update each other on a device.
-# Usage: ./generate-signing-keystore.sh [output-keystore] [alias]
-#   output-keystore Path for the new keystore (default: shellyelevate-release.keystore)
-#   alias           Key alias (default: shellyelevate)
-# Keep the keystore and password out of the repository and back them up:
-# losing them means future builds can no longer update existing installs.
+# generates a release signing keystore and prints the values for the four
+# signing_* github actions secrets that release-apk.yml and pr-apk.yml use
+# without these secrets every ci build falls back to an ephemeral debug key
+# so no two artifacts can update each other on a device
+# usage: ./generate-signing-keystore.sh [output-keystore] [alias]
+#   output-keystore path for the new keystore (default: shellyelevate-release.keystore)
+#   alias           key alias (default: shellyelevate)
+# keep the keystore and password out of the repository and back them up
+# losing them means future builds can no longer update existing installs
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ fi
 
 command -v keytool >/dev/null || { echo "keytool not found (install a JDK)" >&2; exit 1; }
 
-# pkcs12 keystores use one password for store and key
+# pkcs12 keystores use one password for both store and key
 PASSWORD="$(openssl rand -base64 18)"
 
 keytool -genkeypair -keystore "$KEYSTORE" -alias "$ALIAS" \

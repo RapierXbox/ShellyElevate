@@ -22,10 +22,17 @@ import java.util.function.Consumer;
 import me.rapierxbox.shellyelevatev2.KioskService;
 
 public class ServiceHelper {
+    private static final String TAG = "ServiceHelper";
     private static final long DISCOVERY_TIMEOUT_MS = 30_000L;
 
     private static NsdManager activeNsdManager;
     private static NsdManager.DiscoveryListener activeDiscoveryListener;
+
+    // stops whatever discovery is currently active if any. reads the field under
+    // the lock so a discovery started concurrently is never missed
+    private static synchronized void stopActiveDiscovery() {
+        stopDiscovery(activeDiscoveryListener);
+    }
 
     // stops the given discovery if it is still the active one
     private static synchronized void stopDiscovery(NsdManager.DiscoveryListener listener) {
@@ -42,46 +49,50 @@ public class ServiceHelper {
 
     public static void getHAURL(Context context, Consumer<String> action) {
         NsdManager nsdManager = (NsdManager) context.getSystemService(Context.NSD_SERVICE);
+        if (nsdManager == null) {
+            Log.e(TAG, "NsdManager unavailable, cannot discover Home Assistant");
+            return;
+        }
         // stop a previous discovery so listeners dont stack
-        stopDiscovery(activeDiscoveryListener);
+        stopActiveDiscovery();
         NsdManager.DiscoveryListener discoveryListener = new NsdManager.DiscoveryListener() {
             @Override
             public void onStartDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e("discovery", "Discovery failed: Error code: " + errorCode);
+                Log.e(TAG, "Discovery failed: Error code: " + errorCode);
                 stopDiscovery(this);
             }
 
             @Override
             public void onStopDiscoveryFailed(String serviceType, int errorCode) {
-                Log.e("discovery", "Discovery failed to stop: Error code: " + errorCode);
+                Log.e(TAG, "Discovery failed to stop: Error code: " + errorCode);
             }
 
             @Override
             public void onDiscoveryStarted(String serviceType) {
-                Log.i("discovery", "Service discovery started");
+                Log.i(TAG, "Service discovery started");
             }
 
             @Override
             public void onDiscoveryStopped(String serviceType) {
-                Log.i("discovery", "Service discovery stopped");
+                Log.i(TAG, "Service discovery stopped");
             }
 
             @Override
             public void onServiceFound(NsdServiceInfo serviceInfo) {
                 if (serviceInfo.getServiceType().equals("_home-assistant._tcp.")) {
-                    Log.i("discovery", "Found Home Assistant service: " + serviceInfo.getServiceName());
+                    Log.i(TAG, "Found Home Assistant service: " + serviceInfo.getServiceName());
 
                     NsdManager.ResolveListener resolveListener = new NsdManager.ResolveListener() {
                         @Override
                         public void onResolveFailed(NsdServiceInfo serviceInfo, int errorCode) {
-                            Log.e("discovery", "Resolve failed: Error code: " + errorCode);
+                            Log.e(TAG, "Resolve failed: Error code: " + errorCode);
                         }
 
                         @Override
                         public void onServiceResolved(NsdServiceInfo serviceInfo) {
-                            Log.i("discovery", "Service resolved: " + serviceInfo);
+                            Log.i(TAG, "Service resolved: " + serviceInfo);
                             String url = "http://" + serviceInfo.getHost().getHostAddress() + ":" + serviceInfo.getPort();
-                            Log.i("discovery", "Home Assistant URL: " + url);
+                            Log.i(TAG, "Home Assistant URL: " + url);
                             action.accept(url);
                         }
                     };
@@ -94,7 +105,7 @@ public class ServiceHelper {
 
             @Override
             public void onServiceLost(NsdServiceInfo serviceInfo) {
-                Log.i("discovery", "Service lost: " + serviceInfo);
+                Log.i(TAG, "Service lost: " + serviceInfo);
             }
         };
 
@@ -131,14 +142,14 @@ public class ServiceHelper {
             boolean hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET);
             boolean validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED);
 
-            // VALIDATED isn't set immediately after boot; fall back to INTERNET so
-            // first-boot HTTP starts succeed instead of waiting for the captive check.
+            // validated isnt set immediately after boot so fall back to internet
+            // so first boot http calls succeed instead of waiting on the captive check
             return validated || hasInternet;
         } else {
             try {
                 android.net.NetworkInfo info = cm.getActiveNetworkInfo();
-	            //noinspection deprecation
-	            return info != null && info.isConnected();
+                //noinspection deprecation
+                return info != null && info.isConnected();
             } catch (Throwable t) {
                 return false;
             }
@@ -146,7 +157,7 @@ public class ServiceHelper {
     }
 
     public static void ensureKioskService(Context context) {
-        Log.i("KioskService", "Starting KioskService...");
+        Log.i(TAG, "Starting KioskService...");
         Intent serviceIntent = new Intent(context, KioskService.class);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             context.startForegroundService(serviceIntent);

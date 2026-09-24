@@ -1,8 +1,7 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.ShellyElevateV2" parent="Theme.Material3.Light.NoActionBar">
-        <!-- Prevent Android auto-darkening -->
-        <item name="android:forceDarkAllowed">false</item>
-        <!-- other styles -->
+        <!-- prevent android from auto-darkening ui -->
+        <item name="android:forceDarkAllowed" tools:targetApi="q">false</item>
         <item name="colorPrimary">@color/md_theme_primary</item>
         <item name="colorOnPrimary">@color/md_theme_onPrimary</item>
         <item name="colorPrimaryContainer">@color/md_theme_primaryContainer</item>

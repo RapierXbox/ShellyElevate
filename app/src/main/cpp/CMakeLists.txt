@@ -5,14 +5,13 @@ project("shellyinput")
 add_library(shellyinput SHARED shellyinput.cpp)
 target_link_libraries(shellyinput android log)
 
-# native tflm microfrontend
+# wake word mel frontend on top of the vendored tflm microfrontend
 set(TFLM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/tflm)
 set(MFE_DIR ${TFLM_ROOT}/tensorflow/lite/experimental/microfrontend/lib)
 
 add_library(melfrontend SHARED
     mel_jni.cpp
 
-    # tflm microfrontend sources
     ${MFE_DIR}/frontend.c
     ${MFE_DIR}/frontend_util.c
     ${MFE_DIR}/window.c
@@ -29,23 +28,23 @@ add_library(melfrontend SHARED
     ${MFE_DIR}/log_scale_util.c
     ${MFE_DIR}/log_lut.c
 
-    # kissfft (vendored, built as fp16)
+    # vendored kissfft
     ${MFE_DIR}/kiss_fft.c
     ${MFE_DIR}/tools/kiss_fftr.c
 )
 
-# kissfft needs FIXED_POINT=16 defined at compile time so it emits i16-arithmetic butterflies.
-# mfe fft.cc picks up the kiss_fftr symbols via the kissfft_fixed16 namespace alias
+# kissfft must be built with 16 bit fixed point butterflies and fft.cc
+# reaches the kiss_fftr symbols through the kissfft_fixed16 namespace alias
 target_compile_definitions(melfrontend PRIVATE FIXED_POINT=16)
 
-# include root lets source file use absolute tflm paths verbatim
+# the tflm root lets sources use their upstream include paths verbatim
 target_include_directories(melfrontend PRIVATE
     ${TFLM_ROOT}
     ${MFE_DIR}
     ${MFE_DIR}/tools
 )
 
-# kissfft warns on signed/unsigned conversions... we dont care
+# the vendored c sources trip these harmless warnings
 target_compile_options(melfrontend PRIVATE
     -Wno-unused-function
     -Wno-unused-variable

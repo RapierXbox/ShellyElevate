@@ -1,9 +1,10 @@
 package me.rapierxbox.shellyelevatev2;
 
+import static me.rapierxbox.shellyelevatev2.Constants.*;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
-import static me.rapierxbox.shellyelevatev2.Constants.*;
 
 import android.content.Intent;
 import android.util.Log;
@@ -14,19 +15,15 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
-
 public class ShellyElevateJavascriptInterface {
+    private static final String TAG = "ShellyElevateV2";
+
     // written from the webview js bridge thread and read from the main thread
     private final Map<String, String> bindings = new ConcurrentHashMap<>();
 
     public ShellyElevateJavascriptInterface() {
-        init();
-    }
-
-    private void init() {
         if (eJSaEnabled()) {
-            Log.d("ShellyElevateV2", "Initializing ShellyElevateJavascriptInterface");
+            Log.d(TAG, "Initializing ShellyElevateJavascriptInterface");
         }
     }
 
@@ -76,6 +73,7 @@ public class ShellyElevateJavascriptInterface {
         return ShellyElevateApplication.mApplicationContext != null && mDeviceHelper.getScreenOn();
     }
 
+    // kept alongside getScreenBrightness for older js bridge callers same value
     @JavascriptInterface public int getCurrentScreenBrightness() {
         return mDeviceHelper.getScreenBrightness();
     }
@@ -108,38 +106,38 @@ public class ShellyElevateJavascriptInterface {
         mSharedPreferences.edit().putInt(SP_SCREEN_SAVER_ID, id).apply();
     }
 
-	@JavascriptInterface public void keepScreenAlive(boolean keepAlive) {
-		mScreenSaverManager.keepAlive(keepAlive);
-	}
+    @JavascriptInterface public void keepScreenAlive(boolean keepAlive) {
+        mScreenSaverManager.keepAlive(keepAlive);
+    }
 
     @JavascriptInterface
     public void bind(String eventName, String jsFunctionName) {
-        Log.d("ShellyElevateV2", "JS EventName binding - " + eventName + " => " + jsFunctionName);
+        Log.d(TAG, "JS EventName binding - " + eventName + " => " + jsFunctionName);
         bindings.put(eventName, jsFunctionName);
     }
 
     private void triggerEvent(String eventName, Object... params) {
-        if (eJSaEnabled()) {
-            String jsFunction = bindings.get(eventName);
-            if (jsFunction != null) {
-                Log.d("ShellyElevateV2", "ShellyElevateJavascriptInterface.notifyWebViewEvent: " + eventName);
-                String joinedParams = "";
-                if (params != null && params.length > 0) {
-                    StringBuilder sb = new StringBuilder();
-                    for (Object p : params) {
-                        if (p instanceof String) {
-                            sb.append("'").append(p.toString().replace("'", "\\'")).append("'");
-                        } else {
-                            sb.append(p);
-                        }
-                        sb.append(",");
-                    }
-                    joinedParams = sb.substring(0, sb.length() - 1);
+        if (!eJSaEnabled()) return;
+
+        String jsFunction = bindings.get(eventName);
+        if (jsFunction == null) return;
+
+        Log.d(TAG, "ShellyElevateJavascriptInterface.notifyWebViewEvent: " + eventName);
+        String joinedParams = "";
+        if (params != null && params.length > 0) {
+            StringBuilder sb = new StringBuilder();
+            for (Object p : params) {
+                if (p instanceof String) {
+                    sb.append("'").append(p.toString().replace("'", "\\'")).append("'");
+                } else {
+                    sb.append(p);
                 }
-                Log.d("ShellyElevateV2", "Sending JS: " + jsFunction + "(" + joinedParams + ");");
-                sendJavascript(jsFunction + "(" + joinedParams + ");");
+                sb.append(",");
             }
+            joinedParams = sb.substring(0, sb.length() - 1);
         }
+        Log.d(TAG, "Sending JS: " + jsFunction + "(" + joinedParams + ");");
+        sendJavascript(jsFunction + "(" + joinedParams + ");");
     }
 
     private void sendJavascript(String javascript){
@@ -165,7 +163,7 @@ public class ShellyElevateJavascriptInterface {
     }
 
     public void onMotion() {
-        // Only emit when bound; the proximity sensor fires often enough to spam logs.
+        // only emit when bound since the proximity sensor fires often and would spam logs
         if (bindings.containsKey("onMotion")) {
             triggerEvent("onMotion");
         }

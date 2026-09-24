@@ -26,6 +26,8 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+// applies the user chosen sleep optimization level while a screensaver runs
+// standard lowers the cpu governor and aggressive also throttles mqtt bluetooth and voice
 public class PowerOptimizer extends BroadcastReceiver {
 
     private static final String TAG = "PowerOptimizer";
@@ -51,16 +53,16 @@ public class PowerOptimizer extends BroadcastReceiver {
     }
 
     public void onDestroy() {
-        try {
-            LocalBroadcastManager.getInstance(appContext).unregisterReceiver(this);
-        } catch (Exception ignored) {}
+        LocalBroadcastManager.getInstance(appContext).unregisterReceiver(this);
 
         if (sleepActive) {
-            try { exitSleep(); } catch (Exception e) {
+            try {
+                exitSleep();
+            } catch (Exception e) {
                 Log.w(TAG, "exitSleep on destroy failed: " + e.getMessage());
             }
         }
-        // lets a queued restore finish before the executor goes away
+        // shutdown and not shutdownNow so a queued restore still runs
         sysfsExecutor.shutdown();
     }
 
@@ -76,7 +78,7 @@ public class PowerOptimizer extends BroadcastReceiver {
 
         switch (action) {
             case INTENT_SCREEN_SAVER_STARTED:
-                // every saver (incl aod) uses the user-defined sleep level
+                // every saver including aod uses the user defined sleep level
                 enterSleep();
                 break;
             case INTENT_SCREEN_SAVER_STOPPED:
@@ -123,6 +125,7 @@ public class PowerOptimizer extends BroadcastReceiver {
         Log.i(TAG, "Exiting sleep, level was=" + level);
         broadcastLevel(false, SLEEP_OPT_NONE);
 
+        // undone in reverse order of enterSleep
         if (level >= SLEEP_OPT_AGGRESSIVE) {
             if (mVoiceAssistantManager != null) mVoiceAssistantManager.setLowPowerMode(false);
             if (mBluetoothProxyManager != null) mBluetoothProxyManager.setLowPowerMode(false);

@@ -11,6 +11,7 @@ import android.util.Log
 import android.view.KeyEvent
 import androidx.core.view.isVisible
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import me.rapierxbox.shellyelevatev2.BuildConfig
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_END_SCREENSAVER
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -19,31 +20,32 @@ import java.text.SimpleDateFormat
 import java.util.Date
 
 class DigitalClockAndDateScreenSaverActivity : Activity() {
-    private var binding: DigitalClockAndDateScreenSaverBinding ?= null
+    private var binding: DigitalClockAndDateScreenSaverBinding? = null
 
     private val timeFormatter = SimpleDateFormat.getTimeInstance(SimpleDateFormat.SHORT)
     private val dateFormatter = SimpleDateFormat.getDateInstance(SimpleDateFormat.MEDIUM)
 
     private var showDate = false
 
-    private val mTimeTickBroadCastReciver = object : BroadcastReceiver() {
+    private val timeTickReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             updateTime()
         }
     }
 
-    private val mEndScreenSaverReciever = object : BroadcastReceiver() {
+    private val endScreenSaverReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             finish()
         }
     }
 
     private fun updateTime() {
+        val b = binding ?: return
         val now = Date()
-        binding!!.clockText.text = timeFormatter.format(now)
+        b.clockText.text = timeFormatter.format(now)
 
         if (showDate)
-            binding!!.dateText.text = dateFormatter.format(now)
+            b.dateText.text = dateFormatter.format(now)
     }
 
     @SuppressLint("ClickableViewAccessibility", "UnspecifiedRegisterReceiverFlag")
@@ -52,31 +54,32 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
 
         showDate = intent.getBooleanExtra("date", false)
 
-        binding = DigitalClockAndDateScreenSaverBinding.inflate(layoutInflater)
-        setContentView(binding!!.root)
+        val binding = DigitalClockAndDateScreenSaverBinding.inflate(layoutInflater)
+        this.binding = binding
+        setContentView(binding.root)
 
-        binding!!.dateText.isVisible = showDate
+        binding.dateText.isVisible = showDate
 
         updateTime()
 
-        binding!!.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            Log.d("DigitalClockAndDateScreenSaverActivity", "Received touch event: $event")
+        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
+            if (BuildConfig.DEBUG) Log.d(TAG, "Received touch event: $event")
             ShellyElevateApplication.mSwipeHelper?.onTouchEvent(event)
             mScreenSaverManager.onTouchEvent(event)
             true
         }
 
-        registerReceiver(mTimeTickBroadCastReciver, IntentFilter(Intent.ACTION_TIME_TICK))
+        registerReceiver(timeTickReceiver, IntentFilter(Intent.ACTION_TIME_TICK))
         // local broadcast so other apps cannot spoof the end intent
         LocalBroadcastManager.getInstance(this)
-            .registerReceiver(mEndScreenSaverReciever, IntentFilter(INTENT_END_SCREENSAVER))
+            .registerReceiver(endScreenSaverReceiver, IntentFilter(INTENT_END_SCREENSAVER))
     }
 
     override fun onDestroy() {
         super.onDestroy()
 
-        unregisterReceiver(mTimeTickBroadCastReciver)
-        LocalBroadcastManager.getInstance(this).unregisterReceiver(mEndScreenSaverReciever)
+        unregisterReceiver(timeTickReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(endScreenSaverReceiver)
         binding = null
     }
 
@@ -85,4 +88,8 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
         (ShellyElevateApplication.mSwInputHandler?.onKeyEvent(event) == true)
                 || (ShellyElevateApplication.mButtonHandler?.onKeyEvent(event) == true)
                 || super.dispatchKeyEvent(event)
+
+    companion object {
+        private const val TAG = "DigitalClockAndDateScreenSaverActivity"
+    }
 }

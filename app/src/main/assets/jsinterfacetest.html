@@ -35,8 +35,8 @@
 <pre id="output"></pre>
 
 <script>
-    function testGetRelay(button) {
-        document.getElementById("output").innerText += "\nRelay: " + ShellyElevate.getRelay(button);
+    function testGetRelay(num) {
+        document.getElementById("output").innerText += "\nRelay: " + ShellyElevate.getRelay(num);
     }
 
     function testGetLux() {
@@ -71,8 +71,8 @@
         document.getElementById("output").innerText += "\nExtended JS Enabled: " + ShellyElevate.getExtendedJavascriptInterfaceEnabled();
     }
 
-    function testSetRelay(button, state) {
-        ShellyElevate.setRelay(button, state);
+    function testSetRelay(num, state) {
+        ShellyElevate.setRelay(num, state);
         document.getElementById("output").innerText += "\nSet Relay: " + state;
     }
 
@@ -125,7 +125,7 @@
         document.getElementById("output").innerText += "\nonScreensaverOff event triggered";
     }
 
-    // Bind all events to their respective functions
+    // register test callbacks with the native bridge
     ShellyElevate.bind('onScreenOn', 'onScreenOn');
     ShellyElevate.bind('onScreenOff', 'onScreenOff');
     ShellyElevate.bind('onScreensaverOn', 'onScreensaverOn');

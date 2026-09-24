@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
+// soc thermal zones from sysfs. zone temp files report millidegrees celsius
 public final class ThermalZoneReader {
 
     private static final String TAG = "ThermalZoneReader";
@@ -17,6 +18,7 @@ public final class ThermalZoneReader {
 
     public static final class Zone {
         public final String path;
+        // sanitized so it can be used in mqtt topics and object ids
         public final String type;
 
         Zone(String path, String type) {
@@ -25,35 +27,39 @@ public final class ThermalZoneReader {
         }
     }
 
+    // zones are made by the kernel at boot so one scan is enough
     private static volatile List<Zone> cachedZones = null;
 
+    private ThermalZoneReader() {
+    }
+
     public static List<Zone> discoverZones() {
-        // an empty list is a valid cached result so devices without zones dont rescan
+        // an empty list is cached too so devices without zones dont rescan
         List<Zone> cached = cachedZones;
         if (cached != null) return cached;
 
         List<Zone> zones = new ArrayList<>();
-        File base = new File(THERMAL_BASE);
-        File[] dirs = base.listFiles(f -> f.isDirectory() && f.getName().startsWith("thermal_zone"));
+        File[] dirs = new File(THERMAL_BASE).listFiles(
+                f -> f.isDirectory() && f.getName().startsWith("thermal_zone"));
         if (dirs == null) {
             Log.w(TAG, "No thermal zones found at " + THERMAL_BASE);
-            cachedZones = Collections.unmodifiableList(zones);
-            return cachedZones;
-        }
-
-        for (File dir : dirs) {
-            String rawType = readLine(dir.getAbsolutePath() + "/type");
-            if (rawType == null) continue;
-            String sanitized = rawType.trim().replaceAll("[^a-zA-Z0-9_\\-]", "_");
-            if (!sanitized.isEmpty()) {
-                zones.add(new Zone(dir.getAbsolutePath(), sanitized));
+        } else {
+            for (File dir : dirs) {
+                String rawType = readLine(dir.getAbsolutePath() + "/type");
+                if (rawType == null) continue;
+                String sanitized = rawType.trim().replaceAll("[^a-zA-Z0-9_\\-]", "_");
+                if (!sanitized.isEmpty()) {
+                    zones.add(new Zone(dir.getAbsolutePath(), sanitized));
+                }
             }
         }
 
-        cachedZones = Collections.unmodifiableList(zones);
-        return cachedZones;
+        cached = Collections.unmodifiableList(zones);
+        cachedZones = cached;
+        return cached;
     }
 
+    // null when the zone cant be read
     public static Float readZoneTempC(Zone zone) {
         String raw = readLine(zone.path + "/temp");
         if (raw == null) return null;
@@ -64,6 +70,7 @@ public final class ThermalZoneReader {
         }
     }
 
+    // null when no zone has this sanitized type or it cant be read
     public static Float readZoneTempCByType(String type) {
         for (Zone z : discoverZones()) {
             if (z.type.equals(type)) return readZoneTempC(z);

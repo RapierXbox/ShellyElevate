@@ -1,12 +1,11 @@
 package me.rapierxbox.shellyelevatev2;
 
-import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MEDIA_ENABLED;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceSensorManager;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMediaHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mNightModeManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
@@ -21,15 +20,17 @@ import android.widget.Toast;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 
 import fi.iki.elonen.NanoHTTPD;
 public class HttpServer extends NanoHTTPD {
@@ -43,8 +44,40 @@ public class HttpServer extends NanoHTTPD {
 
     // asserts are disabled on android so missing bodies need a real check
     private static Response badRequest(String message) {
+        // escape so the response stays valid json even when message has quotes
+        String escaped = message.replace("\\", "\\\\").replace("\"", "\\\"");
         return newFixedLengthResponse(Response.Status.BAD_REQUEST, "application/json",
-                "{\"success\":false,\"error\":\"" + message + "\"}");
+                "{\"success\":false,\"error\":\"" + escaped + "\"}");
+    }
+
+    // generic 404 body for unmatched routes
+    private static Response notFound() {
+        return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", "{\"success\":false,\"error\":\"Not found\"}");
+    }
+
+    // parses raw json text and returns null when malformed instead of throwing
+    private static JSONObject parseJsonOrNull(String json) {
+        try {
+            return new JSONObject(json);
+        } catch (JSONException e) {
+            Log.w(TAG, "Invalid JSON body: " + e.getMessage());
+            return null;
+        }
+    }
+
+    // reads the postData field of a post body as json
+    // returns null when the body is missing or malformed so callers can send a bad request response
+    private static JSONObject readJsonBody(IHTTPSession session) {
+        try {
+            Map<String, String> files = new HashMap<>();
+            session.parseBody(files);
+            String postData = files.get("postData");
+            if (postData == null || postData.isEmpty()) return null;
+            return parseJsonOrNull(postData);
+        } catch (IOException | ResponseException e) {
+            Log.e(TAG, "Error reading request body", e);
+            return null;
+        }
     }
 
     @Override
@@ -65,11 +98,8 @@ public class HttpServer extends NanoHTTPD {
                     jsonResponse.put("success", true);
                     jsonResponse.put("settings", mSettingsParser.getSettings());
                 } else if (method.equals(Method.POST)) {
-                    Map<String, String> files = new HashMap<>();
-                    session.parseBody(files);
-                    String postData = files.get("postData");
-                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
-                    JSONObject jsonObject = new JSONObject(postData);
+                    JSONObject jsonObject = readJsonBody(session);
+                    if (jsonObject == null) return badRequest("Missing or invalid JSON body");
 
                     mSettingsParser.setSettings(jsonObject);
 
@@ -109,7 +139,7 @@ public class HttpServer extends NanoHTTPD {
             Log.e(TAG, "Error handling request", e);
         }
 
-        return newFixedLengthResponse(Response.Status.NOT_FOUND, "application/json", jsonResponse.toString());
+        return notFound();
     }
 
     private Response handleWebviewRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
@@ -121,18 +151,16 @@ public class HttpServer extends NanoHTTPD {
         switch (uri.replace("/webview/", "")) {
             case "refresh":
                 if (method.equals(Method.GET)) {
-                    Intent intent = new Intent(INTENT_SETTINGS_CHANGED);
+                    Intent intent = new Intent(INTENT_WEBVIEW_REFRESH);
                     LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(intent);
                     jsonResponse.put("success", true);
                 }
                 break;
             case "inject":
                 if (method.equals(Method.POST)) {
-                    Map<String, String> files = new HashMap<>();
-                    session.parseBody(files);
-                    String postData = files.get("postData");
-                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
-                    JSONObject jsonObject = new JSONObject(postData);
+                    JSONObject jsonObject = readJsonBody(session);
+                    if (jsonObject == null) return badRequest("Missing or invalid JSON body");
+                    if (!jsonObject.has("javascript")) return badRequest("Missing javascript");
 
                     String javascript = jsonObject.getString("javascript");
 
@@ -152,7 +180,9 @@ public class HttpServer extends NanoHTTPD {
     }
 
     private Response handleMediaRequest(IHTTPSession session) throws JSONException, ResponseException, IOException {
-        if (!mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false) || ShellyElevateApplication.mMediaHelper == null) {
+        // read once so a concurrent media toggle cannot null it mid request
+        MediaHelper media = ShellyElevateApplication.mMediaHelper;
+        if (!mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false) || media == null) {
             JSONObject jsonResponse = new JSONObject();
             jsonResponse.put("success", false);
             jsonResponse.put("error", "Media disabled");
@@ -166,22 +196,22 @@ public class HttpServer extends NanoHTTPD {
         switch (uri.replace("/media/", "")) {
             case "play":
                 if (method.equals(Method.POST)) {
-                    Map<String, String> files = new HashMap<>();
-                    session.parseBody(files);
-                    String postData = files.get("postData");
-                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
-                    JSONObject jsonObject = new JSONObject(postData);
+                    JSONObject jsonObject = readJsonBody(session);
+                    if (jsonObject == null) return badRequest("Missing or invalid JSON body");
+                    if (!jsonObject.has("url")) return badRequest("Missing url");
+                    if (!jsonObject.has("music")) return badRequest("Missing music");
+                    if (!jsonObject.has("volume")) return badRequest("Missing volume");
 
                     Uri mediaUri = Uri.parse(jsonObject.getString("url"));
                     boolean music = jsonObject.getBoolean("music");
                     double volume = jsonObject.getDouble("volume");
 
-                    mMediaHelper.setVolume(volume);
+                    media.setVolume(volume);
 
                     if (music) {
-                        mMediaHelper.playMusic(mediaUri);
+                        media.playMusic(mediaUri);
                     } else {
-                        mMediaHelper.playEffect(mediaUri);
+                        media.playEffect(mediaUri);
                     }
 
                     jsonResponse.put("success", true);
@@ -195,7 +225,7 @@ public class HttpServer extends NanoHTTPD {
                 break;
             case "pause":
                 if (method.equals(Method.POST)) {
-                    mMediaHelper.pauseMusic();
+                    media.pauseMusic();
                     jsonResponse.put("success", true);
                 } else {
                     jsonResponse.put("success", false);
@@ -204,7 +234,7 @@ public class HttpServer extends NanoHTTPD {
                 break;
             case "resume":
                 if (method.equals(Method.POST)) {
-                    mMediaHelper.resumeMusic();
+                    media.resumeMusic();
                     jsonResponse.put("success", true);
                 } else {
                     jsonResponse.put("success", false);
@@ -213,7 +243,7 @@ public class HttpServer extends NanoHTTPD {
                 break;
             case "stop":
                 if (method.equals(Method.POST)) {
-                    mMediaHelper.stopAll();
+                    media.stopAll();
                     jsonResponse.put("success", true);
                 } else {
                     jsonResponse.put("success", false);
@@ -222,21 +252,19 @@ public class HttpServer extends NanoHTTPD {
                 break;
             case "volume":
                 if (method.equals(Method.POST)) {
-                    Map<String, String> files = new HashMap<>();
-                    session.parseBody(files);
-                    String postData = files.get("postData");
-                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
-                    JSONObject jsonObject = new JSONObject(postData);
+                    JSONObject jsonObject = readJsonBody(session);
+                    if (jsonObject == null) return badRequest("Missing or invalid JSON body");
+                    if (!jsonObject.has("volume")) return badRequest("Missing volume");
 
                     double volume = jsonObject.getDouble("volume");
 
-                    mMediaHelper.setVolume(volume);
+                    media.setVolume(volume);
 
                     jsonResponse.put("success", true);
-                    jsonResponse.put("volume", mMediaHelper.getVolume());
+                    jsonResponse.put("volume", media.getVolume());
                 } else if (method.equals(Method.GET)) {
                     jsonResponse.put("success", true);
-                    jsonResponse.put("volume", mMediaHelper.getVolume());
+                    jsonResponse.put("volume", media.getVolume());
                 } else {
                     jsonResponse.put("success", false);
                     jsonResponse.put("error", "Invalid request method");
@@ -263,26 +291,27 @@ public class HttpServer extends NanoHTTPD {
                 Map<String, String> files = new HashMap<>();
                 Map<String, List<String>> params = new HashMap<>();
                 try {
-                    // parseBody() must be called before getParameters() to populate the
-                    // POST body into NanoHTTPD's params map; it cannot be called twice.
+                    // parseBody must run before getParameters to populate post body into the params map
+                    // it cannot be called twice
                     session.parseBody(files);
                     params.putAll(session.getParameters());
                 } catch (IOException | ResponseException e) {
                     Log.e(TAG, "Invalid parameters", e);
                 }
                 if (method.equals(Method.GET)) {
-                    int num = GetNumParameter(params, 0);
+                    int num = getNumParameter(params, 0);
                     if (num == -999 || num < 0 || num >= device.relays) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
                     jsonResponse.put("success", true);
                     jsonResponse.put("state", mDeviceHelper.getRelay(num));
                 } else if (method.equals(Method.POST)) {
                     String postData = files.get("postData");
                     if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
-                    JSONObject jsonObject = new JSONObject(postData);
+                    JSONObject jsonObject = parseJsonOrNull(postData);
+                    if (jsonObject == null) return badRequest("Invalid JSON body");
 
-                    int num = GetNumParameter(params, -1);
+                    int num = getNumParameter(params, -1);
                     if (num == -999) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
-                    // Fall back to the JSON body when ?num= isn't provided.
+                    // fall back to the json body when num is not in the query string
                     if (num == -1) num = jsonObject.optInt("num", 0);
                     if (num < 0 || num >= device.relays) return badRequest("Invalid relay number");
                     if (!jsonObject.has("state")) return badRequest("Missing state");
@@ -298,7 +327,7 @@ public class HttpServer extends NanoHTTPD {
                 break;
             case "input":
                 if (method.equals(Method.GET)) {
-                    int num = GetNumParameter(session.getParameters(), 0);
+                    int num = getNumParameter(session.getParameters(), 0);
                     if (num == -999 || num < 0 || num >= device.inputs) return newFixedLengthResponse(Response.Status.BAD_REQUEST, "text/plain", "Invalid num");
                     Boolean level = mSwInputHandler != null ? mSwInputHandler.getLevel(num) : null;
                     jsonResponse.put("success", true);
@@ -315,15 +344,9 @@ public class HttpServer extends NanoHTTPD {
                     jsonResponse.put("success", true);
                     jsonResponse.put("state", mNightModeManager != null && mNightModeManager.isEnabled());
                 } else if (method.equals(Method.POST)) {
-                    Map<String, String> nmFiles = new HashMap<>();
-                    try {
-                        session.parseBody(nmFiles);
-                    } catch (IOException | ResponseException e) {
-                        Log.e(TAG, "Invalid night_mode body", e);
-                    }
-                    String nmPostData = nmFiles.get("postData");
-                    if (nmPostData == null || nmPostData.isEmpty()) return badRequest("Missing JSON body");
-                    JSONObject nmJson = new JSONObject(nmPostData);
+                    JSONObject nmJson = readJsonBody(session);
+                    if (nmJson == null) return badRequest("Missing or invalid JSON body");
+                    if (!nmJson.has("state")) return badRequest("Missing state");
                     boolean state = nmJson.getBoolean("state");
                     if (mNightModeManager != null) {
                         mNightModeManager.setEnabled(state);
@@ -458,20 +481,14 @@ public class HttpServer extends NanoHTTPD {
                         jsonResponse.put("current", dp.currentA);
                     }
                 } else if (method.equals(Method.POST)) {
-                    Map<String, String> dimmerFiles = new HashMap<>();
-                    try {
-                        session.parseBody(dimmerFiles);
-                    } catch (ResponseException e) {
-                        Log.e(TAG, "Error parsing request: ", e);
-                    }
-
-                    String postData = dimmerFiles.get("postData");
-                    if (postData == null || postData.isEmpty()) return badRequest("Missing JSON body");
-                    JSONObject body = new JSONObject(postData);
+                    JSONObject body = readJsonBody(session);
+                    if (body == null) return badRequest("Missing or invalid JSON body");
                     if (body.has("brightness")) {
                         mDeviceHelper.setDimmerBrightness(body.getInt("brightness"), null);
                     } else if (body.has("on")) {
                         mDeviceHelper.setDimmerOn(body.getBoolean("on"));
+                    } else {
+                        return badRequest("Missing brightness or on");
                     }
                     jsonResponse.put("success", true);
                 } else {
@@ -485,38 +502,37 @@ public class HttpServer extends NanoHTTPD {
                     Process process = null;
                     try {
                         process = Runtime.getRuntime().exec("free -m");
-                        BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()));
-
-                        String line;
-                        while ((line = reader.readLine()) != null) {
-                            // Android's `free -m` lacks the "available" column, so we read
-                            // "free" (token[3]) instead of the more accurate "available".
-                            //   Mem:  total  used  free  shared  buffers
-                            if (line.startsWith("Mem:")) {
-                                String[] tokens = line.split("\\s+");
-                                if (tokens.length >= 4) {
-                                    try {
-                                        long totalMemory = Long.parseLong(tokens[1]);
-                                        long availableMemory = Long.parseLong(tokens[3]);
-                                        jsonResponse.put("success", true);
-                                        jsonResponse.put("Mem total memory", totalMemory + "MiB");
-                                        jsonResponse.put("Mem free memory", availableMemory + "MiB");
-                                    } catch (NumberFormatException e) {
-                                        Log.w(TAG, "Unparseable Mem line: " + line);
+                        // android free -m has no available column so free (index 3) is used instead
+                        // mem line format: total used free shared buffers
+                        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+                            String line;
+                            while ((line = reader.readLine()) != null) {
+                                if (line.startsWith("Mem:")) {
+                                    String[] tokens = line.split("\\s+");
+                                    if (tokens.length >= 4) {
+                                        try {
+                                            long totalMemory = Long.parseLong(tokens[1]);
+                                            long availableMemory = Long.parseLong(tokens[3]);
+                                            jsonResponse.put("success", true);
+                                            jsonResponse.put("Mem total memory", totalMemory + "MiB");
+                                            jsonResponse.put("Mem free memory", availableMemory + "MiB");
+                                        } catch (NumberFormatException e) {
+                                            Log.w(TAG, "Unparseable Mem line: " + line);
+                                        }
                                     }
                                 }
-                            }
-                            if (line.startsWith("Swap:")) {
-                                String[] tokens = line.split("\\s+");
-                                if (tokens.length >= 4) {
-                                    try {
-                                        long totalMemory = Long.parseLong(tokens[1]);
-                                        long availableMemory = Long.parseLong(tokens[3]);
-                                        jsonResponse.put("success", true);
-                                        jsonResponse.put("Swap total memory", totalMemory + "MiB");
-                                        jsonResponse.put("Swap free memory", availableMemory + "MiB");
-                                    } catch (NumberFormatException e) {
-                                        Log.w(TAG, "Unparseable Swap line: " + line);
+                                if (line.startsWith("Swap:")) {
+                                    String[] tokens = line.split("\\s+");
+                                    if (tokens.length >= 4) {
+                                        try {
+                                            long totalMemory = Long.parseLong(tokens[1]);
+                                            long availableMemory = Long.parseLong(tokens[3]);
+                                            jsonResponse.put("success", true);
+                                            jsonResponse.put("Swap total memory", totalMemory + "MiB");
+                                            jsonResponse.put("Swap free memory", availableMemory + "MiB");
+                                        } catch (NumberFormatException e) {
+                                            Log.w(TAG, "Unparseable Swap line: " + line);
+                                        }
                                     }
                                 }
                             }
@@ -538,9 +554,10 @@ public class HttpServer extends NanoHTTPD {
 
         return newFixedLengthResponse(jsonResponse.optBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
     }
-    private static int GetNumParameter(Map<String, List<String>> params, int defaultValue) {
+
+    private static int getNumParameter(Map<String, List<String>> params, int defaultValue) {
         List<String> numParam = params.get("num");
-        if (!(numParam == null) && !numParam.isEmpty()) {
+        if (numParam != null && !numParam.isEmpty()) {
             try {
                 return Integer.parseInt(numParam.get(0));
             } catch (NumberFormatException e) {

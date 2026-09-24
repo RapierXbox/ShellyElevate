@@ -9,7 +9,7 @@ import java.util.Locale;
 
 public enum DeviceModel {
 
-    // V1
+    // v1 hardware
     STARGATE(new Config("Stargate", "Shelly Wall Display",    "SAWD-0A1XX10EU1")
             .offsets(-2.7, 7.0).io(0, 1, 1)),
     ATLANTIS(new Config("Atlantis", "Shelly Wall Display 2",  "SAWD-1A1XX10EU1")
@@ -17,7 +17,7 @@ public enum DeviceModel {
     PEGASUS (new Config("Pegasus",  "Shelly Wall Display X2", "SAWD-2A1XX10EU1")
             .proximity().offsets(-2.6, 8.0).io(0, 1, 2)),
 
-    // V2
+    // v2 hardware
     BLAKE   (new Config("Blake",    "Shelly Wall Display XL",  "SAWD-3A1XE10EU2")
             .proximity().powerButton().offsets(-1.2, 7.0).io(4, 1, 2).invertRelay()
             .initRelay("cloud.shelly.blake.relay")
@@ -27,20 +27,13 @@ public enum DeviceModel {
             .initRelay("cloud.shelly.maverick.relay1", "cloud.shelly.maverick.relay2")),
     JENNA   (new Config("Jenna",    "Shelly Wall Display X2i", "SAWD-5A1XX10EU0")
             .proximity().invertProximity().powerButton().io(0, 1, 2).panelMinBacklight(3)
-            // X2i (SKU SAWD-5A1XX10EU0): direct sysfs writes to the backlight node are denied
-            // with EACCES; brightness is controlled via Android Settings.System instead.
-            // Android PowerManager is used for sleep/wake because keyevent-26 is more reliable
-            // than brightness=0 for actually blanking the panel on this hardware.
+            // the backlight sysfs node is denied with eacces so brightness goes through settings.system
+            // and sleep uses the power manager since brightness 0 does not reliably blank this panel
             .androidBrightness().androidPowerManager()
             .initRelay("cloud.shelly.jenna.relay1", "cloud.shelly.jenna.relay2")
-            // event4 is JENNA's proximity gpio_keys node; event5/event7 carry the regular keys.
-            // NOTE: JENNA's proximity sensor reports ~1 cm when an object is detected and 0 cm
-            // when no object is detected, which is the inverse of the standard convention
-            // (small value = near).  The invertProximity flag causes DeviceSensorManager to
-            // mirror the raw value (normalized = max - raw) before broadcasting so all
-            // downstream consumers see the standard near-is-small, far-is-large semantics.
+            // event4 is the proximity gpio_keys node and event5 and event7 carry the regular keys
             .inputEvents("/dev/input/event4", "/dev/input/event5", "/dev/input/event7")),
-    // SAWD-6A1XX10EU0 is the Wall Display X1i per the official knowledge base
+    // sku SAWD-6A1XX10EU0 is the x1i per the official knowledge base
     CALLY   (new Config("Cally",    "Shelly Wall Display X1i", "SAWD-6A1XX10EU0")
             .proximity().powerButton().io(4, 1, 2).panelMinBacklight(3)
             .initRelay("cloud.shelly.cally.relay1", "cloud.shelly.cally.relay2")
@@ -59,30 +52,16 @@ public enum DeviceModel {
     public final int     inputs;
     public final int     relays;
     public final boolean invertRelay;
-    /**
-     * When true the hardware reports proximity with inverted polarity: the raw
-     * sensor value is large when an object is near and small (0) when no object
-     * is detected.  DeviceSensorManager normalizes the raw reading to the
-     * standard convention (0 = near, max = far) before broadcasting so all
-     * downstream consumers (ScreenSaverManager, MQTT, JS interface, HTTP API)
-     * do not need to be aware of the hardware quirk.
-     */
+    // hardware reports near as large and far as 0 so DeviceSensorManager mirrors it
+    // to the usual small is near convention before any consumer sees it
     public final boolean invertProximity;
     public final String[] initRelayScripts;
     public final String[] inputEventPaths;
     // lowest 0..255 backlight value at which the panel stays lit
     public final int     panelMinBacklight;
-    /**
-     * When true, brightness is controlled via Android's {@code Settings.System.SCREEN_BRIGHTNESS}
-     * API rather than a direct sysfs write.  Required on devices where the backlight sysfs node
-     * is not accessible to the app (e.g. X2i / JENNA, SKU SAWD-5A1XX10EU0).
-     */
+    // brightness goes through settings.system because the backlight sysfs node is not writable
     public final boolean usesAndroidBrightness;
-    /**
-     * When true, screen sleep and wake are driven through Android's {@code PowerManager}
-     * (or a root shell fallback) rather than relying solely on brightness=0.  Required on
-     * the X2i / JENNA where setting brightness to 0 alone does not reliably blank the panel.
-     */
+    // sleep and wake go through the power manager or a shell fallback instead of brightness 0
     public final boolean usesAndroidPowerManager;
 
     private final String codename;
@@ -111,6 +90,7 @@ public enum DeviceModel {
         return initRelayScripts != null && initRelayScripts.length > 0;
     }
 
+    // unknown hardware falls back to the original wall display
     public static DeviceModel getReportedDevice() {
         String reportedModel   = normalize(Build.MODEL);
         String reportedDevice  = normalize(Build.DEVICE);
@@ -122,6 +102,7 @@ public enum DeviceModel {
                 .orElse(DeviceModel.STARGATE);
     }
 
+    // the codename only ever shows up in build.model while the sku can appear in any build field
     private static boolean matches(DeviceModel d, String model, String device, String product) {
         String name = normalize(d.codename);
         String sku  = normalize(d.sku);
@@ -137,12 +118,6 @@ public enum DeviceModel {
 
     public String[] getInputEventPaths() {
         return inputEventPaths != null ? inputEventPaths : new String[0];
-    }
-
-    /** @deprecated use getInputEventPaths() */
-    @Deprecated
-    public String getGpioProximityEventPath() {
-        return inputEventPaths != null && inputEventPaths.length > 0 ? inputEventPaths[0] : null;
     }
 
     @NonNull @Override

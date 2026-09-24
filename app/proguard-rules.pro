@@ -1,21 +1,19 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# minify is off in build.gradle.kts so these only matter once it gets turned on
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# the webview calls the bridge by name so its methods must survive shrinking
+-keepclassmembers class me.rapierxbox.shellyelevatev2.ShellyElevateJavascriptInterface {
+    @android.webkit.JavascriptInterface <methods>;
+}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# jni binds native methods by name
+-keepclasseswithmembernames class * {
+    native <methods>;
+}
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# native code looks up the key callback by name
+-keepclassmembers class * implements me.rapierxbox.shellyelevatev2.helper.InputMonitor$KeyCallback {
+    void onHardwareKey(int, int, int);
+}
+
+# readable stack traces in the crash log
+-keepattributes SourceFile,LineNumberTable

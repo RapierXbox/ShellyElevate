@@ -62,21 +62,18 @@
             window.location.href = 'shellyelevate:reload';
         }
 
-        // Retry button click
         retryButton.addEventListener('click', retry);
 
-        // Automatically retry when network is back
         window.addEventListener('online', () => {
             console.log('Network back, retrying...');
             retry();
         });
 
-        // Optional: show offline message when network lost
         window.addEventListener('offline', () => {
             console.log('Network offline');
         });
 
-        // Fallback polling in case online event missed
+        // fallback poll in case the online event is missed
         setInterval(() => {
             if (navigator.onLine) retry();
         }, 15000);

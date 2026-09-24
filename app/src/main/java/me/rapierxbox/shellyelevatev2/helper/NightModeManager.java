@@ -30,6 +30,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.WeakHashMap;
 
+// draws a translucent red overlay on top of every activity while night mode is on
 public class NightModeManager implements Application.ActivityLifecycleCallbacks {
 
     private static final String TAG = "NightModeManager";
@@ -71,8 +72,7 @@ public class NightModeManager implements Application.ActivityLifecycleCallbacks 
         enabled = value;
         prefs.edit().putBoolean(SP_NIGHT_MODE_ENABLED, value).apply();
         refreshOverlays();
-        LocalBroadcastManager.getInstance(appContext)
-                .sendBroadcast(new Intent(INTENT_SETTINGS_CHANGED));
+        // no settings broadcast since only this class reads the pref and every listener would reapply
         if (mMQTTServer != null) {
             mMQTTServer.publishNightModeState();
         }
@@ -81,9 +81,7 @@ public class NightModeManager implements Application.ActivityLifecycleCallbacks 
     public void onDestroy() {
         // unregister to avoid leaking the receiver
         LocalBroadcastManager.getInstance(appContext).unregisterReceiver(settingsReceiver);
-        for (java.util.Map.Entry<Activity, NightModeOverlayView> e : overlays.entrySet()) {
-            detachOverlay(e.getKey(), e.getValue());
-        }
+        overlays.forEach(this::detachOverlay);
         overlays.clear();
     }
 

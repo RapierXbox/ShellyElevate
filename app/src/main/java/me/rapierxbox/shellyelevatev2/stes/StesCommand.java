@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2.stes;
 
+// command byte sent after the length in every stes frame
 public enum StesCommand {
     GET_VERSION(0x30),
     WRITE_VPORT(0x40),
@@ -18,7 +19,7 @@ public enum StesCommand {
 
     public final byte value;
 
-    StesCommand(int v) {
-        this.value = (byte) v;
+    StesCommand(int value) {
+        this.value = (byte) value;
     }
 }

@@ -7,57 +7,46 @@ import android.content.pm.PackageManager;
 import android.media.AudioFormat;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
-import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
 
-import androidx.annotation.RequiresPermission;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
-import org.json.JSONObject;
-
-import java.io.BufferedReader;
-import java.io.FileReader;
-
-import me.rapierxbox.shellyelevatev2.BuildConfig;
-import me.rapierxbox.shellyelevatev2.Constants;
-
-import org.tensorflow.lite.Interpreter;
-
 import java.io.File;
-import java.io.FileInputStream;
-import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
-import java.nio.MappedByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
-// Generic microWakeWord runner. Should accept any model that follows the mWW
-// tensor layout, though only "okay nabu" is exercised in CI.
-//
-// Models live in <filesDir>/wakewords/<name>.tflite plus an optional <name>.json.
-// Expected input  shape: [1, N, 40] or [1, N, 40, 1], dtype f32 or i8.
-// Expected output shape: [1, 1] or [1, num_classes], scores in [0, 1], dtype f32 or i8.
+import me.rapierxbox.shellyelevatev2.BuildConfig;
+import me.rapierxbox.shellyelevatev2.Constants;
+
+// generic microwakeword runner for any model with the mww tensor layout
+// though only okay nabu is exercised in ci
+// models live in files/wakewords/<name>.tflite plus an optional <name>.json
+// all model and stream state is guarded by this so a reload or destroy can never
+// close an interpreter while the listen loop is inside an inference
 public class WakeWordDetector {
     private static final String TAG = "WakeWordDetector";
 
     private static final int SAMPLE_RATE = NativeMelExtractor.SAMPLE_RATE;
     private static final int CHANNEL_CFG = AudioFormat.CHANNEL_IN_MONO;
     private static final int AUDIO_FMT = AudioFormat.ENCODING_PCM_16BIT;
-    private static final int CHUNK_BYTES = NativeMelExtractor.HOP_SAMPLES * 2 * 10; // 100 ms = 10 mel hops
-    private volatile float scoreThreshold = 0.5f;
-    private volatile long cooldownMs = 5_000L;
-    private volatile boolean scoreBroadcastEnabled = false;
+    // 100 ms which is 10 mel hops
+    private static final int CHUNK_BYTES = NativeMelExtractor.HOP_SAMPLES * 2 * 10;
     private static final long SHUTDOWN_TIMEOUT_MS = 1_000L;
-
+    private static final long SCORE_BROADCAST_INTERVAL_MS = 50L;
     private static final int MIN_SLICES_BEFORE_DETECTION = 100;
+
+    // mww v2 defaults used when the companion json leaves them out
+    private static final int DEFAULT_WAKE_WINDOW = 10;
+    private static final int DEFAULT_VAD_WINDOW = 5;
+    private static final float DEFAULT_CUTOFF = 0.5f;
 
     public static final String VAD_MODEL_NAME = "vad";
 
@@ -67,100 +56,47 @@ public class WakeWordDetector {
         void onWakeDetected();
     }
 
-    private final Context   context;
-    private final Callback  callback;
-    private final ExecutorService          executor       = Executors.newSingleThreadExecutor();
-    private final AtomicBoolean            running        = new AtomicBoolean(false);
+    private final Context context;
+    private final Callback callback;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final AtomicBoolean running = new AtomicBoolean(false);
     private final AtomicReference<AudioRecord> activeRecorder = new AtomicReference<>();
-    private volatile CountDownLatch shutdownLatch;
     // bumped on every start so a stale loop cannot clobber the next session
     private final AtomicLong sessionId = new AtomicLong();
+    private volatile CountDownLatch shutdownLatch;
 
     private volatile ModelStatus modelStatus = ModelStatus.NOT_LOADED;
-    private Interpreter tflite;
-    // true once a session ran the interpreter so its variable state is dirty
-    private volatile boolean tfliteUsed = false;
-    private volatile boolean vadTfliteUsed = false;
-    // Remembered so we can rebuild the interpreter on start(); see listenLoop().
-    private File modelFile;
-    private int nFrames;
-    private boolean hasChannelDim;
-    private float[][][] input3d;
-    private float[][][][] input4d;
-    private ByteBuffer inputBufferByte;
-    private ByteBuffer outputBufferByte;
-    private boolean inputIs8bit;
-    private boolean inputIsUnsigned;
-    private float inputScale;
-    private int inputZeroPoint;
-    private float[][] outputBuf;
-    private boolean outputIs8bit;
-    private boolean outputIsUnsigned;
-    private float outputScale;
-    private int outputZeroPoint;
-    private int outputCols;
+    private volatile float scoreThreshold = DEFAULT_CUTOFF;
+    private volatile float baseThreshold = DEFAULT_CUTOFF;
+    private volatile long cooldownMs = 5_000L;
+    private volatile boolean scoreBroadcastEnabled = false;
+    private volatile boolean lowPowerMode = false;
 
-    private float[][] frameRing;
-    // long so ring index math never overflows on long uptimes
-    private long frameRingPos = 0;
-    private long framesCollected = 0;
-    private int newFramesSinceInfer = 0;
-    private volatile long lastTriggerAt = 0L;
-
-
-    // Loaded from the companion JSON if present; otherwise mWW v2 defaults.
-    private float baseThreshold = 0.5f;
-    private int slidingWindowSize = 10;
+    // wake model state
+    private StreamingModel wakeModel;
+    private StreamingModel.ScoreWindow scoreWindow;
     private int positiveOutputIdx = 0;
-
-    // Score-smoothing window matching the mWW reference implementation.
-    private float[] scoreWindow;
-    private int scoreWindowPos = 0;
-    private float scoreWindowSum = 0f;
-    private int effectiveWinSize = 10;
-
     private int wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
     private float lastRawScore = 0f;
-
-    private volatile boolean lowPowerMode = false;
     private boolean skipNextInference = false;
+    private long lastTriggerAt = 0L;
+    // set during a chunk so the callback runs after the lock is released
+    private boolean wakePending = false;
 
-    private Interpreter vadTflite;
-    private File vadModelFile;
-    private int vadNFrames;
-    private boolean vadHasChannelDim;
-    private ByteBuffer vadInputBufferByte;
-    private ByteBuffer vadOutputBufferByte;
-    private float[][][] vadInput3dFloat;
-    private float[][][][] vadInput4dFloat;
-    private float[][] vadOutputBufFloat;
-    private boolean vadInputIs8bit;
-    private boolean vadInputIsUnsigned;
-    private int vadInputZeroPoint;
-    private boolean vadOutputIs8bit;
-    private boolean vadOutputIsUnsigned;
-    private float vadOutputScale;
-    private int vadOutputZeroPoint;
-    private int vadOutputCols;
+    // optional vad model that gates wake detections on voice activity
+    private StreamingModel vadModel;
+    private StreamingModel.ScoreWindow vadScoreWindow;
     private int vadPositiveOutputIdx = 0;
-    private float vadThreshold = 0.5f;
-    private float[] vadScoreWindow;
-    private int vadScoreWindowPos = 0;
-    private float vadScoreWindowSum = 0f;
-    private int vadSlidingWindowSize = 5;
-    private int vadNewFramesSinceInfer = 0;
-    private float[][] vadFrameRing;
-    private long vadFrameRingPos = 0;
-    private long vadFramesCollected = 0;
-    private volatile boolean vadDetected = false;
+    private float vadThreshold = DEFAULT_CUTOFF;
+    private boolean vadDetected = false;
 
-    private int debugFrameCount = 0;
-    private float debugMaxEver = 0f;
+    private int debugInferCount = 0;
+    private float debugMaxScore = 0f;
     private long lastScoreBroadcastMs = 0;
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     public WakeWordDetector(Context context, Callback callback) {
-        this.context  = context;
+        this.context = context;
         this.callback = callback;
     }
 
@@ -171,8 +107,10 @@ public class WakeWordDetector {
             modelStatus = ModelStatus.NOT_LOADED;
             return modelStatus;
         }
+        String name = modelName.trim();
 
-        File file = new File(new File(context.getFilesDir(), "wakewords"), modelName.trim() + ".tflite");
+        File dir = StreamingModel.modelDir(context);
+        File file = new File(dir, name + ".tflite");
         if (!file.exists()) {
             Log.w(TAG, "model file not found: " + file.getAbsolutePath());
             modelStatus = ModelStatus.FILE_NOT_FOUND;
@@ -180,146 +118,46 @@ public class WakeWordDetector {
         }
 
         try {
-            tflite = buildInterpreter(loadMappedFile(file));
-            tfliteUsed = false;
-            modelFile = file;
+            wakeModel = StreamingModel.load(file, true);
+            StreamingModel.Config cfg = StreamingModel.Config.read(
+                    new File(dir, name + ".json"), wakeModel.outputCols, DEFAULT_WAKE_WINDOW, DEFAULT_CUTOFF);
+            baseThreshold = cfg.cutoff;
+            if (cfg.cutoffFromJson) scoreThreshold = baseThreshold;
+            positiveOutputIdx = cfg.positiveIdx;
+            scoreWindow = new StreamingModel.ScoreWindow(cfg.windowSize);
 
-            int[] shape = tflite.getInputTensor(0).shape();
-            if (shape.length == 3) {
-                nFrames = shape[1]; hasChannelDim = false;
-            } else if (shape.length == 4) {
-                nFrames = shape[1]; hasChannelDim = true;
-            } else {
-                Log.e(TAG, "unsupported input rank: " + shape.length);
-                closeModel(); modelStatus = ModelStatus.LOAD_ERROR; return modelStatus;
-            }
-
-            if (nFrames <= 0) {
-                Log.e(TAG, "invalid nFrames=" + nFrames);
-                closeModel(); modelStatus = ModelStatus.LOAD_ERROR; return modelStatus;
-            }
-
-            frameRing    = new float[nFrames][NativeMelExtractor.N_MELS];
-            frameRingPos = 0; framesCollected = 0;
-
-            org.tensorflow.lite.DataType inType = tflite.getInputTensor(0).dataType();
-            org.tensorflow.lite.DataType outType = tflite.getOutputTensor(0).dataType();
-            inputIs8bit = inType == org.tensorflow.lite.DataType.INT8 || inType == org.tensorflow.lite.DataType.UINT8;
-            outputIs8bit = outType == org.tensorflow.lite.DataType.INT8 || outType == org.tensorflow.lite.DataType.UINT8;
-            inputIsUnsigned = inType == org.tensorflow.lite.DataType.UINT8;
-            outputIsUnsigned = outType == org.tensorflow.lite.DataType.UINT8;
-            inputScale = inputIs8bit ? tflite.getInputTensor(0).quantizationParams().getScale() : 1f;
-            inputZeroPoint = inputIs8bit ? tflite.getInputTensor(0).quantizationParams().getZeroPoint() : 0;
-            outputScale = outputIs8bit ? tflite.getOutputTensor(0).quantizationParams().getScale(): 1f;
-            outputZeroPoint = outputIs8bit ? tflite.getOutputTensor(0).quantizationParams().getZeroPoint() : 0;
-            // Some models ship without input quantisation params (scale=0). Without
-            // a fallback, val/scale is inf and the result rounds to 127 for every
-            // bin. Use the mWW v2 mapping (zp=-128, scale = OUT_MAX / 255).
-            if (inputIs8bit && inputScale == 0f) {
-                inputScale = NativeMelExtractor.OUT_MAX / 255f;
-                inputZeroPoint = -128;
-                Log.w(TAG, "input quant params missing for " + modelName + ", using fallback");
-            }
-
-            int outCols = tflite.getOutputTensor(0).shape()[tflite.getOutputTensor(0).shape().length - 1];
-            this.outputCols = outCols;
-            if (inputIs8bit) {
-                inputBufferByte = ByteBuffer.allocateDirect(nFrames * NativeMelExtractor.N_MELS).order(ByteOrder.nativeOrder());
-                input3d = null; input4d = null;
-            } else {
-                if (hasChannelDim) input4d = new float[1][nFrames][NativeMelExtractor.N_MELS][1];
-                else               input3d = new float[1][nFrames][NativeMelExtractor.N_MELS];
-                inputBufferByte = null;
-            }
-            if (outputIs8bit) {
-                outputBufferByte = ByteBuffer.allocateDirect(outCols).order(ByteOrder.nativeOrder());
-                outputBuf = null;
-            } else {
-                outputBuf = new float[1][outCols];
-                outputBufferByte = null;
-            }
-
-            loadJsonConfig(modelName.trim(), outCols);
-
-            effectiveWinSize = slidingWindowSize;
-            scoreWindow = new float[effectiveWinSize];
-            scoreWindowPos = 0;
-            scoreWindowSum = 0f;
-
-            Log.i(TAG, "loaded " + modelName
-                    + " input=" + java.util.Arrays.toString(shape)
-                    + " inType=" + tflite.getInputTensor(0).dataType()
-                    + " outType=" + tflite.getOutputTensor(0).dataType()
-                    + " inScale=" + inputScale + " inZP=" + inputZeroPoint
-                    + " outScale=" + outputScale + " outZP=" + outputZeroPoint
-                    + " window=" + slidingWindowSize
+            Log.i(TAG, "loaded " + modelName + " " + wakeModel.describe()
+                    + " window=" + cfg.windowSize
                     + " cutoff=" + baseThreshold
                     + " posIdx=" + positiveOutputIdx);
             modelStatus = ModelStatus.LOADED;
 
-            loadVadModel();
+            loadVadModel(dir);
         } catch (Exception e) {
             Log.e(TAG, "failed to load " + modelName, e);
-            closeModel(); modelStatus = ModelStatus.LOAD_ERROR;
+            closeModel();
+            modelStatus = ModelStatus.LOAD_ERROR;
         }
         return modelStatus;
     }
 
-    private synchronized void loadVadModel() {
+    private void loadVadModel(File dir) {
         closeVadModel();
-        File file = new File(new File(context.getFilesDir(), "wakewords"), VAD_MODEL_NAME + ".tflite");
+        File file = new File(dir, VAD_MODEL_NAME + ".tflite");
         if (!file.exists()) {
             Log.w(TAG, "VAD model not present, wake detection will not be gated on voice activity");
             return;
         }
         try {
-            vadTflite = buildInterpreter(loadMappedFile(file));
-            vadTfliteUsed = false;
-            vadModelFile = file;
+            vadModel = StreamingModel.load(file, false);
+            StreamingModel.Config cfg = StreamingModel.Config.read(
+                    new File(dir, VAD_MODEL_NAME + ".json"), vadModel.outputCols, DEFAULT_VAD_WINDOW, DEFAULT_CUTOFF);
+            vadThreshold = cfg.cutoff;
+            vadPositiveOutputIdx = cfg.positiveIdx;
+            vadScoreWindow = new StreamingModel.ScoreWindow(cfg.windowSize);
 
-            int[] shape = vadTflite.getInputTensor(0).shape();
-            if (shape.length == 3) { vadNFrames = shape[1]; vadHasChannelDim = false; }
-            else if (shape.length == 4) { vadNFrames = shape[1]; vadHasChannelDim = true; }
-            else { Log.e(TAG, "VAD unsupported input rank: " + shape.length); closeVadModel(); return; }
-            if (vadNFrames <= 0) { Log.e(TAG, "VAD invalid nFrames"); closeVadModel(); return; }
-
-            vadFrameRing = new float[vadNFrames][NativeMelExtractor.N_MELS];
-            vadFrameRingPos = 0; vadFramesCollected = 0; vadNewFramesSinceInfer = 0;
-
-            org.tensorflow.lite.DataType inType = vadTflite.getInputTensor(0).dataType();
-            org.tensorflow.lite.DataType outType = vadTflite.getOutputTensor(0).dataType();
-            vadInputIs8bit = inType == org.tensorflow.lite.DataType.INT8 || inType == org.tensorflow.lite.DataType.UINT8;
-            vadOutputIs8bit = outType == org.tensorflow.lite.DataType.INT8 || outType == org.tensorflow.lite.DataType.UINT8;
-            vadInputIsUnsigned = inType == org.tensorflow.lite.DataType.UINT8;
-            vadOutputIsUnsigned = outType == org.tensorflow.lite.DataType.UINT8;
-            vadInputZeroPoint = vadInputIs8bit ? vadTflite.getInputTensor(0).quantizationParams().getZeroPoint() : 0;
-            vadOutputScale = vadOutputIs8bit ? vadTflite.getOutputTensor(0).quantizationParams().getScale() : 1f;
-            vadOutputZeroPoint = vadOutputIs8bit ? vadTflite.getOutputTensor(0).quantizationParams().getZeroPoint() : 0;
-
-            int outCols = vadTflite.getOutputTensor(0).shape()[vadTflite.getOutputTensor(0).shape().length - 1];
-            this.vadOutputCols = outCols;
-            if (vadInputIs8bit) {
-                vadInputBufferByte = ByteBuffer.allocateDirect(vadNFrames * NativeMelExtractor.N_MELS).order(ByteOrder.nativeOrder());
-                vadInput3dFloat = null; vadInput4dFloat = null;
-            } else {
-                if (vadHasChannelDim) vadInput4dFloat = new float[1][vadNFrames][NativeMelExtractor.N_MELS][1];
-                else                  vadInput3dFloat = new float[1][vadNFrames][NativeMelExtractor.N_MELS];
-                vadInputBufferByte = null;
-            }
-            if (vadOutputIs8bit) {
-                vadOutputBufferByte = ByteBuffer.allocateDirect(outCols).order(ByteOrder.nativeOrder());
-                vadOutputBufFloat = null;
-            } else {
-                vadOutputBufFloat = new float[1][outCols];
-                vadOutputBufferByte = null;
-            }
-
-            loadVadJsonConfig(outCols);
-            vadScoreWindow = new float[Math.max(1, vadSlidingWindowSize)];
-            vadScoreWindowPos = 0; vadScoreWindowSum = 0f;
-
-            Log.i(TAG, "VAD loaded input=" + java.util.Arrays.toString(shape)
-                    + " window=" + vadSlidingWindowSize
+            Log.i(TAG, "VAD loaded " + vadModel.describe()
+                    + " window=" + cfg.windowSize
                     + " cutoff=" + vadThreshold
                     + " posIdx=" + vadPositiveOutputIdx);
         } catch (Exception e) {
@@ -328,55 +166,14 @@ public class WakeWordDetector {
         }
     }
 
-    private void loadVadJsonConfig(int outCols) {
-        File jsonFile = new File(new File(context.getFilesDir(), "wakewords"), VAD_MODEL_NAME + ".json");
-        if (!jsonFile.exists()) { Log.d(TAG, "no VAD json, using defaults"); return; }
-        try {
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new FileReader(jsonFile))) {
-                String line; while ((line = br.readLine()) != null) sb.append(line);
-            }
-            JSONObject json = new JSONObject(sb.toString());
-            JSONObject cfg = json.has("micro") ? json.getJSONObject("micro") : json;
-
-            if (cfg.has("sliding_window_size"))
-                vadSlidingWindowSize = Math.max(1, cfg.getInt("sliding_window_size"));
-            else if (cfg.has("sliding_window_average_size"))
-                vadSlidingWindowSize = Math.max(1, cfg.getInt("sliding_window_average_size"));
-            if (cfg.has("probability_cutoff"))
-                vadThreshold = (float) cfg.getDouble("probability_cutoff");
-
-            if (json.has("class_mapping") && json.has("positive_output_class")) {
-                String posClass = json.getString("positive_output_class");
-                JSONObject mapping = json.getJSONObject("class_mapping");
-                for (int idx = 0; idx < outCols; idx++) {
-                    String key = String.valueOf(idx);
-                    if (mapping.has(key) && posClass.equals(mapping.getString(key))) {
-                        vadPositiveOutputIdx = idx; break;
-                    }
-                }
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "could not parse VAD JSON: " + e.getMessage());
-        }
-    }
-
+    // callers hold the lock
     private void closeModel() {
-        if (tflite != null) { try { tflite.close(); } catch (Exception ignored) {} tflite = null; }
-        modelFile = null;
-        frameRing = null;
-        input3d = null; input4d = null;
-        inputBufferByte = null; outputBufferByte = null;
-        outputBuf = null;
-        hasChannelDim = false;
-        inputIs8bit = false; inputIsUnsigned = false;
-        outputIs8bit = false; outputIsUnsigned = false;
+        if (wakeModel != null) {
+            wakeModel.close();
+            wakeModel = null;
+        }
         scoreWindow = null;
-        scoreWindowPos = 0;
-        scoreWindowSum = 0f;
-        slidingWindowSize = 10;
-        effectiveWinSize = 10;
-        baseThreshold = 0.5f;
+        baseThreshold = DEFAULT_CUTOFF;
         positiveOutputIdx = 0;
         wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
         lastRawScore = 0f;
@@ -385,75 +182,22 @@ public class WakeWordDetector {
     }
 
     private void closeVadModel() {
-        if (vadTflite != null) { try { vadTflite.close(); } catch (Exception ignored) {} vadTflite = null; }
-        vadModelFile = null;
-        vadFrameRing = null;
-        vadInput3dFloat = null; vadInput4dFloat = null;
-        vadInputBufferByte = null; vadOutputBufferByte = null;
-        vadOutputBufFloat = null;
+        if (vadModel != null) {
+            vadModel.close();
+            vadModel = null;
+        }
         vadScoreWindow = null;
-        vadScoreWindowPos = 0;
-        vadScoreWindowSum = 0f;
-        vadFrameRingPos = 0; vadFramesCollected = 0; vadNewFramesSinceInfer = 0;
+        vadThreshold = DEFAULT_CUTOFF;
+        vadPositiveOutputIdx = 0;
         vadDetected = false;
     }
 
-    private void loadJsonConfig(String modelName, int outCols) {
-        File jsonFile = new File(new File(context.getFilesDir(), "wakewords"), modelName + ".json");
-        if (!jsonFile.exists()) {
-            Log.d(TAG, "no JSON config found for " + modelName + ", using defaults");
-            return;
-        }
-        try {
-            StringBuilder sb = new StringBuilder();
-            try (BufferedReader br = new BufferedReader(new FileReader(jsonFile))) {
-                String line;
-                while ((line = br.readLine()) != null) sb.append(line);
-            }
-            JSONObject json = new JSONObject(sb.toString());
-
-            // TaterTotterson models nest config under "micro"; ESPHome models are flat.
-            JSONObject cfg = json.has("micro") ? json.getJSONObject("micro") : json;
-
-            if (cfg.has("sliding_window_size"))
-                slidingWindowSize = Math.max(1, cfg.getInt("sliding_window_size"));
-            else if (cfg.has("sliding_window_average_size"))
-                slidingWindowSize = Math.max(1, cfg.getInt("sliding_window_average_size"));
-
-            if (cfg.has("probability_cutoff")) {
-                baseThreshold = (float) cfg.getDouble("probability_cutoff");
-                scoreThreshold = baseThreshold;
-            }
-
-            // Resolve the positive-class index from class_mapping. TaterTotterson
-            // models lack the mapping and effectively use index 0.
-            if (json.has("class_mapping") && json.has("positive_output_class")) {
-                String posClass = json.getString("positive_output_class");
-                JSONObject mapping = json.getJSONObject("class_mapping");
-                for (int idx = 0; idx < outCols; idx++) {
-                    String key = String.valueOf(idx);
-                    if (mapping.has(key) && posClass.equals(mapping.getString(key))) {
-                        positiveOutputIdx = idx;
-                        break;
-                    }
-                }
-            }
-
-            Log.i(TAG, "JSON config: window=" + slidingWindowSize
-                    + " cutoff=" + baseThreshold + " posIdx=" + positiveOutputIdx);
-        } catch (Exception e) {
-            Log.w(TAG, "could not parse JSON config for " + modelName + ": " + e.getMessage());
-        }
-    }
-
     public ModelStatus getModelStatus() { return modelStatus; }
-    public String getModelDirectory()   { return new File(context.getFilesDir(), "wakewords").getAbsolutePath(); }
 
-    /**
-     * Map a 0..100 user-facing slider onto the score threshold around the
-     * model's published cutoff: 50 = baseThreshold, 100 = baseThreshold - 0.4
-     * (more sensitive), 0 = baseThreshold + 0.4 (less sensitive).
-     */
+    public String getModelDirectory() { return StreamingModel.modelDir(context).getAbsolutePath(); }
+
+    // maps the 0..100 slider around the published cutoff where 50 is the cutoff
+    // itself and 100 or 0 move it 0.4 towards more or less sensitive
     public void setSensitivity(int sensitivity) {
         float delta = (50 - sensitivity) / 100f * 0.8f;
         scoreThreshold = Math.max(0.01f, Math.min(0.99f, baseThreshold + delta));
@@ -467,32 +211,67 @@ public class WakeWordDetector {
         scoreBroadcastEnabled = enabled;
     }
 
+    // skips every other inference for roughly half the cpu at twice the latency
     public void setLowPowerMode(boolean low) {
         lowPowerMode = low;
     }
 
     public void start() {
         if (modelStatus != ModelStatus.LOADED) {
-            Log.w(TAG, "can't start: model not loaded (" + modelStatus + ")"); return;
+            Log.w(TAG, "can't start: model not loaded (" + modelStatus + ")");
+            return;
         }
         if (running.getAndSet(true)) return;
-        sessionId.incrementAndGet();
-        shutdownLatch = new CountDownLatch(1);
-        executor.execute(this::listenLoop);
+        // the loop gets its own token and latch so a queued stale loop can
+        // never adopt the state of a newer session
+        final long session = sessionId.incrementAndGet();
+        final CountDownLatch latch = new CountDownLatch(1);
+        shutdownLatch = latch;
+        try {
+            executor.execute(() -> listenLoop(session, latch));
+        } catch (RejectedExecutionException e) {
+            Log.w(TAG, "can't start: detector already destroyed");
+            running.set(false);
+            latch.countDown();
+            return;
+        }
         Log.i(TAG, "detector started");
     }
 
-    /** Blocks until the mic is released or SHUTDOWN_TIMEOUT_MS elapses. */
+    // blocks until the mic is released or the shutdown timeout elapses
     public boolean stopAndWait() {
         if (!running.getAndSet(false)) {
             // a loop stopped via stop() may still be unwinding so wait for it
             return awaitShutdown();
         }
         Log.i(TAG, "detector stopping (waiting for mic release)");
-        // recorder.stop() is required to unblock a pending read() on the loop.
-        AudioRecord r = activeRecorder.get();
-        if (r != null) { try { r.stop(); } catch (Exception ignored) {} }
+        stopActiveRecorder();
         return awaitShutdown();
+    }
+
+    // non blocking variant where the loop unwinds on the executor thread
+    public void stop() {
+        if (!running.getAndSet(false)) return;
+        Log.i(TAG, "detector stopping (non blocking)");
+        stopActiveRecorder();
+    }
+
+    public boolean isRunning() { return running.get(); }
+
+    public void onDestroy() {
+        stopAndWait();
+        synchronized (this) {
+            closeModel();
+        }
+        executor.shutdownNow();
+    }
+
+    // stopping the recorder is what unblocks a pending read on the loop
+    private void stopActiveRecorder() {
+        AudioRecord r = activeRecorder.get();
+        if (r != null) {
+            try { r.stop(); } catch (Exception ignored) {}
+        }
     }
 
     private boolean awaitShutdown() {
@@ -500,7 +279,10 @@ public class WakeWordDetector {
         if (latch == null) return true;
         try {
             boolean ok = latch.await(SHUTDOWN_TIMEOUT_MS, TimeUnit.MILLISECONDS);
-            if (!ok) { Log.w(TAG, "shutdown timeout, force releasing"); forceReleaseRecorder(); }
+            if (!ok) {
+                Log.w(TAG, "shutdown timeout, force releasing");
+                forceReleaseRecorder();
+            }
             return ok;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -508,32 +290,23 @@ public class WakeWordDetector {
         }
     }
 
-    /** Non-blocking variant; the listen loop unwinds on the executor thread. */
-    public void stop() {
-        if (!running.getAndSet(false)) return;
-        Log.i(TAG, "detector stopping (non blocking)");
-        AudioRecord r = activeRecorder.get();
-        if (r != null) { try { r.stop(); } catch (Exception ignored) {} }
-    }
-
-    public boolean isRunning() { return running.get(); }
-
     private void forceReleaseRecorder() {
         AudioRecord r = activeRecorder.getAndSet(null);
         if (r != null) {
-            try { r.stop();    } catch (Exception ignored) {}
+            try { r.stop(); } catch (Exception ignored) {}
             try { r.release(); } catch (Exception ignored) {}
             Log.d(TAG, "force-released recorder");
         }
     }
 
-    private void listenLoop() {
-        // capture this sessions token and latch so a stale loop can never
-        // clobber the flag or latch of a newer session
-        final long session = sessionId.get();
-        final CountDownLatch latch = shutdownLatch;
+    private boolean isCurrentSession(long session) {
+        return running.get() && session == sessionId.get();
+    }
+
+    private void listenLoop(long session, CountDownLatch latch) {
         AudioRecord recorder = null;
         try {
+            if (!isCurrentSession(session)) return;
             if (context.checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 Log.e(TAG, "RECORD_AUDIO permission not granted");
                 return;
@@ -554,78 +327,91 @@ public class WakeWordDetector {
 
             activeRecorder.set(recorder);
             recorder.startRecording();
-            // resetVariableTensors() is unreliable for converted v2 streaming graphs:
-            // some models accumulate LSTM state across stop/start and gradually drift
-            // the score upward on pure silence until they false-fire. Rebuilding the
-            // interpreter from the file guarantees fresh variable state.
-            // a fresh interpreter from loadModel is reused instead of rebuilt
-            if (modelFile != null && (tflite == null || tfliteUsed)) {
-                try {
-                    if (tflite != null) { tflite.close(); tflite = null; }
-                    tflite = buildInterpreter(loadMappedFile(modelFile));
-                } catch (Exception e) {
-                    Log.e(TAG, "failed to rebuild interpreter on start", e);
-                    return;
-                }
-            }
-            tfliteUsed = true;
-            if (vadModelFile != null && (vadTflite == null || vadTfliteUsed)) {
-                try {
-                    if (vadTflite != null) { vadTflite.close(); vadTflite = null; }
-                    vadTflite = buildInterpreter(loadMappedFile(vadModelFile));
-                } catch (Exception e) {
-                    Log.e(TAG, "failed to rebuild VAD interpreter on start", e);
-                    vadModelFile = null;
-                }
-            }
-            vadTfliteUsed = true;
-            if (scoreWindow != null) {
-                java.util.Arrays.fill(scoreWindow, 0f);
-                scoreWindowPos = 0; scoreWindowSum = 0f;
-            }
-            if (vadScoreWindow != null) {
-                java.util.Arrays.fill(vadScoreWindow, 0f);
-                vadScoreWindowPos = 0; vadScoreWindowSum = 0f;
-            }
-            debugMaxEver = 0f; debugFrameCount = 0;
-            framesCollected = 0; frameRingPos = 0; newFramesSinceInfer = 0;
-            vadFramesCollected = 0; vadFrameRingPos = 0; vadNewFramesSinceInfer = 0;
-            vadDetected = false;
-            wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
-            lastRawScore = 0f;
-            lastTriggerAt = 0L;
+            if (!prepareSession()) return;
 
-            FeatureFrontend extractor = new NativeFeatureFrontend();
+            FeatureFrontend frontend = new NativeFeatureFrontend();
             byte[] buf = new byte[CHUNK_BYTES];
-
             try {
-                while (running.get() && session == sessionId.get()) {
+                while (isCurrentSession(session)) {
                     int read;
-                    try { read = recorder.read(buf, 0, CHUNK_BYTES); }
-                    catch (IllegalStateException e) { break; }
-                    if (read < 0) { Log.e(TAG, "read error: " + read); break; }
+                    try {
+                        read = recorder.read(buf, 0, CHUNK_BYTES);
+                    } catch (IllegalStateException e) {
+                        break;
+                    }
+                    if (read < 0) {
+                        Log.e(TAG, "read error: " + read);
+                        break;
+                    }
                     if (read == 0) continue;
-                    extractor.feed(buf, read, this::processFrame);
+
+                    boolean wake;
+                    synchronized (this) {
+                        // recheck under the lock since a destroy may have closed the model
+                        if (!isCurrentSession(session)) break;
+                        wakePending = false;
+                        frontend.feed(buf, read, this::processFrame);
+                        wake = wakePending;
+                    }
+                    if (wake) callback.onWakeDetected();
                 }
             } finally {
-                extractor.close();
+                frontend.close();
             }
 
             try { recorder.stop(); } catch (Exception ignored) {}
-
         } catch (Exception e) {
             Log.e(TAG, "listen loop error", e);
         } finally {
-            activeRecorder.set(null);
-            if (recorder != null) { try { recorder.release(); } catch (Exception ignored) {} }
+            activeRecorder.compareAndSet(recorder, null);
+            if (recorder != null) {
+                try { recorder.release(); } catch (Exception ignored) {}
+            }
             // only clear the flag if no newer session took over
             if (session == sessionId.get()) running.compareAndSet(true, false);
-            if (latch != null) latch.countDown();
+            latch.countDown();
         }
     }
 
+    // resets all stream state and hands out fresh interpreters for a new session
+    private synchronized boolean prepareSession() {
+        if (wakeModel == null) {
+            Log.w(TAG, "model closed before the session started");
+            return false;
+        }
+        try {
+            wakeModel.ensureFreshInterpreter();
+        } catch (Exception e) {
+            Log.e(TAG, "failed to rebuild interpreter on start", e);
+            return false;
+        }
+        if (vadModel != null) {
+            try {
+                vadModel.ensureFreshInterpreter();
+            } catch (Exception e) {
+                Log.e(TAG, "failed to rebuild VAD interpreter on start", e);
+                closeVadModel();
+            }
+        }
+
+        wakeModel.resetStream();
+        scoreWindow.reset();
+        if (vadModel != null) {
+            vadModel.resetStream();
+            vadScoreWindow.reset();
+        }
+        vadDetected = false;
+        debugMaxScore = 0f;
+        debugInferCount = 0;
+        wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
+        lastRawScore = 0f;
+        lastTriggerAt = 0L;
+        return true;
+    }
+
+    // runs on the loop thread with the lock held
     private void processFrame(float[] melFrame) {
-        if (tflite == null || frameRing == null) return;
+        if (wakeModel == null || !wakeModel.hasInterpreter()) return;
 
         processVadFrame(melFrame);
 
@@ -633,268 +419,107 @@ public class WakeWordDetector {
             wakeIgnoreWindows = Math.min(wakeIgnoreWindows + 1, 0);
         }
 
-        // melFrame is reused by the extractor, so copy into our ring buffer.
-        System.arraycopy(melFrame, 0, frameRing[(int) (frameRingPos % nFrames)], 0, NativeMelExtractor.N_MELS);
-        frameRingPos++;
-        framesCollected++;
-        newFramesSinceInfer++;
+        if (!wakeModel.pushFrame(melFrame)) return;
 
-        // ESPHome fills a full stride-sized input then invokes once. Running on
-        // every incoming frame with overlapping windows corrupts the LSTM state
-        // for any model with nFrames > 1, so we mirror that batching here.
-        if (framesCollected < nFrames || newFramesSinceInfer < nFrames) return;
-        newFramesSinceInfer = 0;
-
-        // Low-power: skip every other inference. ~2x detection latency, ~50% CPU.
         if (lowPowerMode) {
             skipNextInference = !skipNextInference;
             if (skipNextInference) return;
         }
 
-        int base = (int) (frameRingPos % nFrames);
         try {
-            if (inputIs8bit) {
-                inputBufferByte.rewind();
-                for (int t = 0; t < nFrames; t++) {
-                    float[] row = frameRing[(base + t) % nFrames];
-                    for (int f = 0; f < NativeMelExtractor.N_MELS; f++)
-                        inputBufferByte.put(quantizeMel(row[f], inputZeroPoint, inputIsUnsigned));
-                }
-                inputBufferByte.rewind();
-                Object out = outputIs8bit ? prepOutputBuf(outputBufferByte) : outputBuf;
-                tflite.run(inputBufferByte, out);
-            } else {
-                if (hasChannelDim) {
-                    for (int t = 0; t < nFrames; t++) {
-                        float[] row = frameRing[(base + t) % nFrames];
-                        for (int f = 0; f < NativeMelExtractor.N_MELS; f++) input4d[0][t][f][0] = row[f];
-                    }
-                    Object out = outputIs8bit ? prepOutputBuf(outputBufferByte) : outputBuf;
-                    tflite.run(input4d, out);
-                } else {
-                    for (int t = 0; t < nFrames; t++)
-                        System.arraycopy(frameRing[(base + t) % nFrames], 0, input3d[0][t], 0, NativeMelExtractor.N_MELS);
-                    Object out = outputIs8bit ? prepOutputBuf(outputBufferByte) : outputBuf;
-                    tflite.run(input3d, out);
-                }
-            }
+            wakeModel.run();
         } catch (Exception e) {
-            Log.e(TAG, "inference error", e); return;
+            Log.e(TAG, "inference error", e);
+            return;
         }
 
-        scoreAndMaybeDetect();
+        float rawScore = wakeModel.readScore(positiveOutputIdx);
+        lastRawScore = rawScore;
+        float avgScore = scoreWindow.add(rawScore);
+
+        if (BuildConfig.DEBUG) logScore(avgScore, rawScore);
+        maybeBroadcastScore(avgScore);
+
+        if (avgScore < scoreThreshold || wakeIgnoreWindows < 0) return;
+        if (vadModel != null && vadModel.hasInterpreter() && !vadDetected) {
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "wake candidate blocked by VAD (score=" + String.format("%.3f", avgScore) + ")");
+            }
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        if ((now - lastTriggerAt) < cooldownMs) return;
+        lastTriggerAt = now;
+        Log.i(TAG, "wake word detected (score=" + String.format("%.3f", avgScore) + ")");
+
+        resetProbabilities();
+        wakePending = true;
     }
 
-    private static ByteBuffer prepOutputBuf(ByteBuffer b) { b.rewind(); return b; }
+    private void logScore(float avgScore, float rawScore) {
+        debugInferCount++;
+        if (avgScore > debugMaxScore) debugMaxScore = avgScore;
+        boolean firstFew = debugInferCount <= 5;
+        boolean periodic = debugInferCount % 100 == 0;
+        boolean notable = avgScore > 0.05f;
+        if (!firstFew && !periodic && !notable) return;
 
-    private void scoreAndMaybeDetect() {
-        float rawScore;
-        int rawByte = -1;
-        if (outputIs8bit) {
-            int idx = Math.min(positiveOutputIdx, outputCols - 1);
-            byte b = outputBufferByte.get(idx);
-            float scale = outputScale;
-            int zp = outputZeroPoint;
-            if (scale == 0f) {
-                // No quant params: assume the byte is an unsigned probability
-                // ([0, 255] -> [0, 1]).
-                scale = 1f / 255f;
-                rawByte = b & 0xFF;
-                zp = 0;
-            } else {
-                rawByte = outputIsUnsigned ? (b & 0xFF) : (int) b;
-            }
-            rawScore = (rawByte - zp) * scale;
-        } else {
-            int idx = Math.min(positiveOutputIdx, outputBuf[0].length - 1);
-            rawScore = outputBuf[0][idx];
+        float melMin = Float.MAX_VALUE;
+        float melMax = -Float.MAX_VALUE;
+        for (float v : wakeModel.latestFrame()) {
+            if (v < melMin) melMin = v;
+            if (v > melMax) melMax = v;
         }
-        rawScore = Math.max(0f, rawScore);
-        lastRawScore = rawScore;
+        String msg = (notable ? "!!! " : "    ")
+                + "avg=" + String.format("%.4f", avgScore)
+                + " raw=" + String.format("%.4f", rawScore)
+                + " rawByte=" + wakeModel.lastRawByte()
+                + " thr=" + String.format("%.2f", scoreThreshold)
+                + " maxEver=" + String.format("%.4f", debugMaxScore)
+                + " mel=[" + String.format("%.1f", melMin) + ".." + String.format("%.1f", melMax) + "]";
+        if (firstFew) Log.i(TAG, "infer#" + debugInferCount + " " + msg);
+        else Log.d(TAG, msg);
+    }
 
-        if (scoreWindow != null) {
-            scoreWindowSum -= scoreWindow[scoreWindowPos];
-            scoreWindow[scoreWindowPos] = rawScore;
-            scoreWindowSum += rawScore;
-            scoreWindowPos = (scoreWindowPos + 1) % effectiveWinSize;
-        }
-        float avgScore = (scoreWindow != null) ? scoreWindowSum / effectiveWinSize : rawScore;
-
-        debugFrameCount++;
-        if (avgScore > debugMaxEver) debugMaxEver = avgScore;
-        if (BuildConfig.DEBUG) {
-            boolean firstFew = (debugFrameCount <= 5);
-            boolean periodic = (debugFrameCount % 100 == 0);
-            boolean notable  = (avgScore > 0.05f);
-            if (firstFew || periodic || notable) {
-                float melMin = Float.MAX_VALUE, melMax = -Float.MAX_VALUE;
-                float[] recent = frameRing[(int) ((frameRingPos - 1 + nFrames) % nFrames)];
-                for (float v : recent) { if (v < melMin) melMin = v; if (v > melMax) melMax = v; }
-                String msg = (notable ? "!!! " : "    ")
-                    + "avg=" + String.format("%.4f", avgScore)
-                    + " raw=" + String.format("%.4f", rawScore)
-                    + " rawByte=" + rawByte
-                    + " thr=" + String.format("%.2f", scoreThreshold)
-                    + " maxEver=" + String.format("%.4f", debugMaxEver)
-                    + " mel=[" + String.format("%.1f", melMin) + ".." + String.format("%.1f", melMax) + "]";
-                if (firstFew) Log.i(TAG, "infer#" + debugFrameCount + " " + msg);
-                else          Log.d(TAG, msg);
-            }
-        }
-
-        if (scoreBroadcastEnabled) {
-            long nowMs = System.currentTimeMillis();
-            if (nowMs - lastScoreBroadcastMs >= 50) {
-                lastScoreBroadcastMs = nowMs;
-                final float bs = avgScore, bt = scoreThreshold;
-                mainHandler.post(() -> LocalBroadcastManager.getInstance(context).sendBroadcast(
-                        new Intent(Constants.INTENT_VOICE_SCORE)
-                                .putExtra(Constants.INTENT_VOICE_SCORE_KEY, bs)
-                                .putExtra(Constants.INTENT_VOICE_THRESHOLD_KEY, bt)));
-            }
-        }
-
-        if (avgScore >= scoreThreshold) {
-            if (wakeIgnoreWindows < 0) return;
-
-            if (vadTflite != null && !vadDetected) {
-                if (BuildConfig.DEBUG) {
-                    Log.d(TAG, "wake candidate blocked by VAD (score=" + String.format("%.3f", avgScore) + ")");
-                }
-                return;
-            }
-
-            long now = System.currentTimeMillis();
-            if ((now - lastTriggerAt) < cooldownMs) return;
-            lastTriggerAt = now;
-            Log.i(TAG, "wake word detected (score=" + String.format("%.3f", avgScore) + ")");
-
-            resetProbabilities();
-            callback.onWakeDetected();
-        }
+    private void maybeBroadcastScore(float avgScore) {
+        if (!scoreBroadcastEnabled) return;
+        long nowMs = System.currentTimeMillis();
+        if (nowMs - lastScoreBroadcastMs < SCORE_BROADCAST_INTERVAL_MS) return;
+        lastScoreBroadcastMs = nowMs;
+        final float score = avgScore;
+        final float threshold = scoreThreshold;
+        mainHandler.post(() -> LocalBroadcastManager.getInstance(context).sendBroadcast(
+                new Intent(Constants.INTENT_VOICE_SCORE)
+                        .putExtra(Constants.INTENT_VOICE_SCORE_KEY, score)
+                        .putExtra(Constants.INTENT_VOICE_THRESHOLD_KEY, threshold)));
     }
 
     private void resetProbabilities() {
-        if (scoreWindow != null) {
-            java.util.Arrays.fill(scoreWindow, 0f);
-            scoreWindowPos = 0; scoreWindowSum = 0f;
-        }
+        scoreWindow.reset();
         wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
         lastRawScore = 0f;
     }
 
     private void processVadFrame(float[] melFrame) {
-        if (vadTflite == null || vadFrameRing == null) return;
-
-        System.arraycopy(melFrame, 0, vadFrameRing[(int) (vadFrameRingPos % vadNFrames)], 0, NativeMelExtractor.N_MELS);
-        vadFrameRingPos++;
-        vadFramesCollected++;
-        vadNewFramesSinceInfer++;
-
-        if (vadFramesCollected < vadNFrames || vadNewFramesSinceInfer < vadNFrames) return;
-        vadNewFramesSinceInfer = 0;
-
-        int base = (int) (vadFrameRingPos % vadNFrames);
+        if (vadModel == null || !vadModel.hasInterpreter()) return;
+        if (!vadModel.pushFrame(melFrame)) return;
         try {
-            if (vadInputIs8bit) {
-                vadInputBufferByte.rewind();
-                for (int t = 0; t < vadNFrames; t++) {
-                    float[] row = vadFrameRing[(base + t) % vadNFrames];
-                    for (int f = 0; f < NativeMelExtractor.N_MELS; f++)
-                        vadInputBufferByte.put(quantizeMel(row[f], vadInputZeroPoint, vadInputIsUnsigned));
-                }
-                vadInputBufferByte.rewind();
-                Object out = vadOutputIs8bit ? prepOutputBuf(vadOutputBufferByte) : vadOutputBufFloat;
-                vadTflite.run(vadInputBufferByte, out);
-            } else if (vadHasChannelDim) {
-                for (int t = 0; t < vadNFrames; t++) {
-                    float[] row = vadFrameRing[(base + t) % vadNFrames];
-                    for (int f = 0; f < NativeMelExtractor.N_MELS; f++) vadInput4dFloat[0][t][f][0] = row[f];
-                }
-                Object out = vadOutputIs8bit ? prepOutputBuf(vadOutputBufferByte) : vadOutputBufFloat;
-                vadTflite.run(vadInput4dFloat, out);
-            } else {
-                for (int t = 0; t < vadNFrames; t++)
-                    System.arraycopy(vadFrameRing[(base + t) % vadNFrames], 0, vadInput3dFloat[0][t], 0, NativeMelExtractor.N_MELS);
-                Object out = vadOutputIs8bit ? prepOutputBuf(vadOutputBufferByte) : vadOutputBufFloat;
-                vadTflite.run(vadInput3dFloat, out);
-            }
+            vadModel.run();
         } catch (Exception e) {
             Log.e(TAG, "VAD inference error", e);
             return;
         }
-
-        float rawScore;
-        if (vadOutputIs8bit) {
-            int idx = Math.min(vadPositiveOutputIdx, vadOutputCols - 1);
-            byte b = vadOutputBufferByte.get(idx);
-            float scale = vadOutputScale;
-            int zp = vadOutputZeroPoint;
-            int rawByte;
-            if (scale == 0f) { scale = 1f / 255f; rawByte = b & 0xFF; zp = 0; }
-            else { rawByte = vadOutputIsUnsigned ? (b & 0xFF) : (int) b; }
-            rawScore = (rawByte - zp) * scale;
-        } else {
-            int idx = Math.min(vadPositiveOutputIdx, vadOutputBufFloat[0].length - 1);
-            rawScore = vadOutputBufFloat[0][idx];
-        }
-        rawScore = Math.max(0f, rawScore);
-
-        if (vadScoreWindow != null) {
-            vadScoreWindowSum -= vadScoreWindow[vadScoreWindowPos];
-            vadScoreWindow[vadScoreWindowPos] = rawScore;
-            vadScoreWindowSum += rawScore;
-            vadScoreWindowPos = (vadScoreWindowPos + 1) % vadScoreWindow.length;
-        }
-        float avg = (vadScoreWindow != null) ? vadScoreWindowSum / vadScoreWindow.length : rawScore;
-        vadDetected = avg >= vadThreshold;
-    }
-
-    // Map our [0, OUT_MAX] mel float to INT8/UINT8 while ignoring the model's
-    // declared inputScale. Training pipelines disagree on the scale:
-    //   okay_nabu      uses float [0, 26]   features (scale ~= 0.102)
-    //   TaterTotterson uses uint16 [0, 666] features (scale ~= 2.61)
-    // Both represent the same signal up to a 25.6x linear rescale. Mapping
-    // directly to the full INT8 range using only the zero-point produces
-    // identical quantized values regardless of which scale the model expects.
-    private static byte quantizeMel(float val, int zeroPoint, boolean unsigned) {
-        float range = unsigned ? 255f : (127f - zeroPoint);
-        int q = Math.round(val * range / NativeMelExtractor.OUT_MAX) + zeroPoint;
-        return unsigned ? (byte) Math.max(0, Math.min(255, q))
-                        : (byte) Math.max(-128, Math.min(127, q));
+        vadDetected = vadScoreWindow.add(vadModel.readScore(vadPositiveOutputIdx)) >= vadThreshold;
     }
 
     static float calculateRms(byte[] buf, int length) {
-        long sum = 0; int samples = length / 2;
+        long sum = 0;
+        int samples = length / 2;
         for (int i = 0; i < length - 1; i += 2) {
             short s = (short) (((buf[i + 1] & 0xFF) << 8) | (buf[i] & 0xFF));
             sum += (long) s * s;
         }
         return samples == 0 ? 0f : (float) (Math.sqrt((double) sum / samples) / 32768.0);
-    }
-
-    private static MappedByteBuffer loadMappedFile(File file) throws Exception {
-        try (FileInputStream fis = new FileInputStream(file); FileChannel ch = fis.getChannel()) {
-            return ch.map(FileChannel.MapMode.READ_ONLY, 0, ch.size());
-        }
-    }
-
-    static Interpreter buildInterpreter(MappedByteBuffer model) {
-        Interpreter.Options opts = new Interpreter.Options().setNumThreads(1);
-        // Plain CPU kernels only (#105):
-        // - XNNPACK's aarch32 qs8 gemm kernel segfaults on the 32-bit Wall Displays
-        //   (X2/PEGASUS, Gen1/STARGATE) as soon as a model runs on live audio.
-        // - NNAPI on these SoCs spawns a thread and leaks memory mappings per
-        //   inference until pthread_create fails (~3 min on the X2), and brings
-        //   nothing for these tiny models.
-        opts.setUseXNNPACK(false);
-        opts.setUseNNAPI(false);
-        return new Interpreter(model, opts);
-    }
-
-    public void onDestroy() {
-        stopAndWait();
-        closeModel();
-        executor.shutdownNow();
     }
 }

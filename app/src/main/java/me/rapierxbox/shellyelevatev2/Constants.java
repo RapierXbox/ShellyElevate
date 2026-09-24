@@ -1,23 +1,26 @@
 package me.rapierxbox.shellyelevatev2;
 
-public class Constants {
+// pref keys topics and intents are persisted or sent on the wire so never change their values
+public final class Constants {
+    private Constants() {}
+
     public static final String SHARED_PREFERENCES_NAME = "ShellyElevateV2";
 
-    //Generic SP Keys
+    // generic prefs
     public static final String SP_DEVICE = "device";
     public static final String SP_LITE_MODE = "liteMode";
     public static final String SP_SETTINGS_EVER_SHOWN = "settingEverShown";
 
-    //Media SP keys
+    // media prefs
     public static final String SP_MEDIA_ENABLED = "mediaEnabled";
 
-    //IO SP Keys
+    // io prefs
     public static final String SP_SWITCH_ON_SWIPE = "switchOnSwipe";
     public static final String SP_PUBLISH_SWIPE_EVENTS = "publishSwipeEvents";
     public static final String SP_POWER_BUTTON_AUTO_REBOOT = "powerButtonAutoReboot";
     public static final String SP_BUTTON_RELAY_ENABLED = "buttonRelayEnabled";
     public static final String SP_BUTTON_RELAY_MAP_FORMAT = "buttonRelayMap%d";
-    // sw terminal input behavior; mirrors the stock firmware input type setting
+    // sw terminal input behavior mirroring the stock firmware input type setting
     public static final String SP_SW_INPUT_MODE_FORMAT = "swInputMode%d";
     public static final String SP_SW_INPUT_RELAY_MAP_FORMAT = "swInputRelayMap%d";
     public static final String SP_SW_INPUT_INVERT_FORMAT = "swInputInvert%d";
@@ -26,33 +29,35 @@ public class Constants {
     public static final int SW_INPUT_MODE_SWITCH_EDGE = 2;
     public static final int SW_INPUT_MODE_SWITCH_FOLLOW = 3;
 
-    //Webserver SP Keys
+    // http server prefs
     public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
     public static final String SP_EXTENDED_JAVASCRIPT_INTERFACE = "extendedJavascriptInterface";
 
-    //ADB SP Keys
+    // adb prefs
     public static final String SP_ADB_WIFI_ENABLED = "adbWifiEnabled";
 
-    //HA SP Keys
+    // home assistant prefs
     public static final String SP_WEBVIEW_URL = "webviewUrl";
     public static final String SP_DEPRECATED_HA_IP = "homeAssistantIp";
     public static final String SP_IGNORE_SSL_ERRORS = "ignoreSslErrors";
 
-    //WebView OTA SP Keys
+    // webview ota prefs
     public static final String SP_WEBVIEW_UPDATE_PROMPTED = "webviewUpdatePrompted";
+    // webview version before the reboot into recovery so a set value means an ota is in flight
+    public static final String SP_WEBVIEW_UPDATE_PENDING_FROM = "webviewUpdatePendingFrom";
 
-    //Priv-app install SP Keys
+    // priv app install prefs
     public static final String SP_PRIVAPP_PROMOTION_ATTEMPTED = "privAppPromotionAttempted";
 
-    //Screen SP Keys
+    // screen prefs
     public static final String SP_AUTOMATIC_BRIGHTNESS = "automaticBrightness";
     public static final String SP_MIN_BRIGHTNESS = "minBrightness";
     public static final String SP_BRIGHTNESS = "brightness";
 
-    //Night Mode SP Keys
+    // night mode prefs
     public static final String SP_NIGHT_MODE_ENABLED = "nightModeEnabled";
 
-    //Screen Saver SP Keys
+    // screen saver prefs
     public static final String SP_SCREEN_SAVER_ENABLED = "screenSaver";
     public static final String SP_SCREEN_SAVER_DELAY = "screenSaverDelay";
     public static final String SP_SCREEN_SAVER_ID = "screenSaverId";
@@ -61,22 +66,22 @@ public class Constants {
     public static final String SP_SCREEN_SAVER_MIN_BRIGHTNESS = "screenSaverMinBrightness";
     public static final String SP_TOUCH_TO_WAKE = "touchToWake";
 
-    //Sleep Optimization SP Keys
+    // sleep optimization prefs
     public static final String SP_SLEEP_OPTIMIZATION_LEVEL = "sleepOptimizationLevel";
     public static final int SLEEP_OPT_NONE = 0;
     public static final int SLEEP_OPT_STANDARD = 1;
     public static final int SLEEP_OPT_AGGRESSIVE = 2;
 
-    //Sleep Optimization Intents
+    // sleep optimization intents
     public static final String INTENT_SLEEP_LEVEL_CHANGED = "me.rapierxbox.shellyelevatev2.SLEEP_LEVEL_CHANGED";
     public static final String EXTRA_SLEEP_ACTIVE = "sleepActive";
     public static final String EXTRA_SLEEP_LEVEL  = "sleepLevel";
 
-    //Bluetooth Proxy SP Keys
+    // bluetooth proxy prefs
     public static final String SP_BLUETOOTH_PROXY_ENABLED = "bluetoothProxyEnabled";
     public static final String SP_BLUETOOTH_PROXY_NAME    = "bluetoothProxyName";
 
-    //Voice Assistant SP Keys
+    // voice assistant prefs
     public static final String SP_VOICE_ASSISTANT_ENABLED = "voiceAssistantEnabled";
     public static final String SP_VOICE_ASSISTANT_TOKEN = "voiceAssistantToken";
     public static final String SP_VOICE_ASSISTANT_PIPELINE_ID = "voiceAssistantPipelineId";
@@ -84,25 +89,25 @@ public class Constants {
     public static final String SP_VOICE_WAKE_ENABLED = "voiceWakeEnabled";
     public static final String SP_VOICE_WAKE_MODEL_NAME = "voiceWakeModelName";
     public static final String SP_VOICE_WAKE_SOUND_ENABLED = "voiceWakeSoundEnabled";
-    public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 0..100, 50 = model's published cutoff
+    public static final String SP_VOICE_WAKE_SENSITIVITY    = "voiceWakeSensitivity"; // 0..100 where 50 is the published model cutoff
     public static final String SP_VOICE_SCORE_BAR_ENABLED   = "voiceScoreBarEnabled";
     public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
     public static final String SP_VOICE_WAKE_EXPERIMENTAL_MODELS = "voiceWakeExperimentalModels";
     public static final String SP_VOICE_ASSISTANT_MUTED = "voiceAssistantMuted";
 
-    //MQTT SP Keys
+    // mqtt prefs
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
     public static final String SP_MQTT_BROKER = "mqttBroker";
     public static final String SP_MQTT_PORT = "mqttPort";
     public static final String SP_MQTT_USERNAME = "mqttUsername";
     public static final String SP_MQTT_PASSWORD = "mqttPassword";
     public static final String SP_MQTT_CLIENTID = "mqttDeviceId";
-    // Disable for non-HA brokers (ioBroker etc.) that can't parse the discovery JSON.
+    // off for non ha brokers like iobroker that cannot parse the discovery json
     public static final String SP_MQTT_HA_DISCOVERY = "mqttHomeAssistantDiscovery";
-    // Retain per-state topics so a fresh subscriber sees current values immediately.
+    // retain state topics so a fresh subscriber sees current values immediately
     public static final String SP_MQTT_RETAIN_STATE = "mqttRetainState";
 
-    //ScreenSaver intents
+    // screen saver intents
     public static final String INTENT_SCREEN_SAVER_STARTED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STARTED";
     public static final String INTENT_SCREEN_SAVER_STOPPED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STOPPED";
     public static final String INTENT_END_SCREENSAVER = "me.rapierxbox.shellyelevatev2.END_SCREENSAVER";
@@ -113,35 +118,38 @@ public class Constants {
     // saver id stamped on start/stop intents so receivers do not race getCurrentScreenSaver
     public static final String EXTRA_SCREEN_SAVER_ID = "screenSaverIdExtra";
 
+    // screen saver ids are stored in prefs
     public static final int SCREEN_SAVER_ID_SCREEN_OFF          = 0;
     public static final int SCREEN_SAVER_ID_DIGITAL_CLOCK       = 1;
     public static final int SCREEN_SAVER_ID_DIGITAL_CLOCK_DATE  = 2;
     public static final int SCREEN_SAVER_ID_AOD                 = 3;
 
-    //IO Intents
+    // io intents
     public static final String INTENT_LIGHT_UPDATED = "me.rapierxbox.shellyelevatev2.LIGHT_UPDATED";
     public static final String INTENT_LIGHT_KEY = "lightValue";
 
     public static final String INTENT_PROXIMITY_UPDATED = "me.rapierxbox.shellyelevatev2.PROXIMITY_UPDATED";
     public static final String INTENT_PROXIMITY_KEY = "proximityValue";
 
-    //Screen Intents
+    // screen intents
     public static final String INTENT_TURN_SCREEN_ON = "me.rapierxbox.shellyelevatev2.INTENT_TURN_SCREEN_ON";
     public static final String INTENT_TURN_SCREEN_OFF = "me.rapierxbox.shellyelevatev2.INTENT_TURN_SCREEN_OFF";
 
-    //User Actions Intents
+    // user action intents
     public static final String ACTION_USER_INTERACTION = "shellyelevate.ACTION_USER_INTERACTION";
     public static final String INTENT_SETTINGS_CHANGED = "me.rapierxbox.shellyelevatev2.SETTINGS_CHANGED";
     public static final String INTENT_WEBVIEW_INJECT_JAVASCRIPT = "me.rapierxbox.shellyelevatev2.WEBVIEW_INJECT_JAVASCRIPT";
+    // reloads the dashboard without the full settings reapply that SETTINGS_CHANGED triggers
+    public static final String INTENT_WEBVIEW_REFRESH = "me.rapierxbox.shellyelevatev2.WEBVIEW_REFRESH";
 
-    //Thermal SP Keys
+    // thermal prefs
     public static final String SP_PUBLISH_THERMAL_SENSORS      = "publishThermalSensors";
     public static final String SP_DYNAMIC_TEMP_OFFSET_ENABLED  = "dynamicTempOffsetEnabled";
     public static final String SP_DYNAMIC_TEMP_OFFSET_ZONE     = "dynamicTempOffsetZone";
     public static final String SP_DYNAMIC_TEMP_OFFSET_BASELINE = "dynamicTempOffsetBaseline";
     public static final String SP_DYNAMIC_TEMP_OFFSET_K        = "dynamicTempOffsetK";
 
-    //MQTT Topics
+    // mqtt topics
     public static final String MQTT_TOPIC_CONFIG_DEVICE = "homeassistant/device/%s/config";
     public static final String MQTT_TOPIC_STATUS = "shellyelevatev2/%s/status";
     public static final String MQTT_TOPIC_TEMP_SENSOR = "shellyelevatev2/%s/temp";
@@ -169,7 +177,7 @@ public class Constants {
     public static final String MQTT_TOPIC_THERMAL_ZONE = "shellyelevatev2/%s/thermal/%s";
     public static final String MQTT_TOPIC_HOME_ASSISTANT_STATUS = "homeassistant/status";
 
-    //Voice Assistant Intents
+    // voice assistant intents
     public static final String INTENT_VOICE_STATE_CHANGED = "me.rapierxbox.shellyelevatev2.VOICE_STATE_CHANGED";
     public static final String INTENT_VOICE_STATE_KEY     = "voiceState";
     public static final String INTENT_VOICE_TEXT          = "me.rapierxbox.shellyelevatev2.VOICE_TEXT";
@@ -178,25 +186,25 @@ public class Constants {
     public static final String INTENT_VOICE_SCORE_KEY     = "wakeScore";
     public static final String INTENT_VOICE_THRESHOLD_KEY = "wakeThreshold";
 
-    //Voice MQTT Topics
+    // voice mqtt topics
     public static final String MQTT_TOPIC_VOICE_STATUS       = "shellyelevatev2/%s/voice/status";
     public static final String MQTT_TOPIC_VOICE_TRIGGER      = "shellyelevatev2/%s/voice/trigger";
     public static final String MQTT_TOPIC_VOICE_MUTE_STATE   = "shellyelevatev2/%s/voice/mute";
     public static final String MQTT_TOPIC_VOICE_MUTE_COMMAND = "shellyelevatev2/%s/voice/mute_set";
 
-    //Voice status sensor values
+    // voice status sensor values
     public static final String VOICE_STATUS_READY     = "ready";
     public static final String VOICE_STATUS_MUTED     = "muted";
     public static final String VOICE_STATUS_LISTENING = "listening";
     public static final String VOICE_STATUS_ANSWERING = "answering";
 
-    //Button Press Types
+    // button press types
     public static final String BUTTON_PRESS_TYPE_SHORT = "short";
     public static final String BUTTON_PRESS_TYPE_LONG = "long";
     public static final String BUTTON_PRESS_TYPE_DOUBLE = "double";
     public static final String BUTTON_PRESS_TYPE_TRIPLE = "triple";
 
-    //Swipe Event Types
+    // swipe event types
     public static final String SWIPE_EVENT_TYPE_SINGLE              = "swipe";
     public static final String SWIPE_EVENT_TYPE_TWO_FINGER_UP       = "two_finger_swipe_up";
     public static final String SWIPE_EVENT_TYPE_TWO_FINGER_DOWN     = "two_finger_swipe_down";
@@ -215,13 +223,13 @@ public class Constants {
     public static final String SWIPE_EVENT_TYPE_FIVE_FINGER_LEFT    = "five_finger_swipe_left";
     public static final String SWIPE_EVENT_TYPE_FIVE_FINGER_RIGHT   = "five_finger_swipe_right";
 
-    //Dimmer MQTT Topics
+    // dimmer mqtt topics
     public static final String MQTT_TOPIC_DIMMER_STATE   = "shellyelevatev2/%s/dimmer";
     public static final String MQTT_TOPIC_DIMMER_COMMAND = "shellyelevatev2/%s/dimmer_set";
     public static final String MQTT_TOPIC_DIMMER_BRI     = "shellyelevatev2/%s/dimmer_bri";
     public static final String MQTT_TOPIC_DIMMER_POWER   = "shellyelevatev2/%s/dimmer_power";
 
-    //Dimmer SP Keys
+    // dimmer prefs
     public static final String SP_DIMMER_LAST_BRIGHTNESS = "dimmerLastBrightness";
     public static final String SP_DIMMER_LAST_STATE      = "dimmerLastState";
 }

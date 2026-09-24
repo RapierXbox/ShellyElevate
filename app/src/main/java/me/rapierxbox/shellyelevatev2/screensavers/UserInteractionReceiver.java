@@ -9,6 +9,7 @@ import android.content.Intent;
 
 import java.util.Objects;
 
+// exported entry point so an external trigger like adb or automation can reset the idle timer
 public class UserInteractionReceiver extends BroadcastReceiver {
     @Override
     public void onReceive(Context context, Intent intent) {

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Backup ShellyElevate settings via HTTP API
-# Usage: ./backup.sh <device-ip> [output-file]
-#   device-ip   IP address of the Shelly device (required)
-#   output-file Path to save the backup JSON (default: backup_<ip>_<timestamp>.json)
+# backup shellyelevate settings via http api
+# usage: ./backup.sh <device-ip> [output-file]
+#   device-ip   ip address of the shelly device (required)
+#   output-file path to save the backup json (default: backup_<ip>_<timestamp>.json)
 
 set -euo pipefail
 
@@ -30,7 +30,7 @@ if [[ "$HTTP_CODE" != "200" ]]; then
   exit 1
 fi
 
-# Verify the response contains "success": true
+# verify the response contains "success": true
 if ! grep -q '"success"\s*:\s*true' "$OUTPUT"; then
   echo "Error: device returned an unsuccessful response:" >&2
   cat "$OUTPUT" >&2

@@ -28,16 +28,16 @@ public final class HttpDownloader {
         void onProgress(int percent);
     }
 
-    // Build the SSL context once and share it across all the file fetchers
-    // (wake-word models, WebView OTA, ...). Not free to construct.
+    // build the ssl context once and share it across the file fetchers such as
+    // wake word models and webview ota since it is not free to construct
     private static volatile OkHttpClient sharedClient;
 
     private HttpDownloader() {}
 
-    // Android 7's CA store is missing modern roots (Sectigo, Let's Encrypt
-    // cross-signs) and rejects fine hosts like github.com and repo.shelly.cloud.
-    // The payloads here aren't authenticated beyond the byte stream anyway, so
-    // trust-all is the pragmatic choice.
+    // android 7 ca store is missing modern roots like sectigo and the lets
+    // encrypt cross-signs and rejects fine hosts like github.com and
+    // repo.shelly.cloud. the payloads here arent authenticated beyond the byte
+    // stream anyway so trust-all is the pragmatic choice
     public static OkHttpClient defaultClient() {
         OkHttpClient c = sharedClient;
         if (c != null) return c;
@@ -65,6 +65,19 @@ public final class HttpDownloader {
         } catch (Exception e) {
             Log.e(TAG, "Failed to build trust-all client", e);
             return new OkHttpClient();
+        }
+    }
+
+    // -1 when the server does not report a length
+    public static long contentLength(OkHttpClient client, String url) {
+        Request req = new Request.Builder().url(url).head().header("User-Agent", "ShellyElevateV2").build();
+        try (Response res = client.newCall(req).execute()) {
+            if (!res.isSuccessful()) return -1;
+            String len = res.header("Content-Length");
+            return len == null ? -1 : Long.parseLong(len.trim());
+        } catch (IOException | NumberFormatException e) {
+            Log.w(TAG, "HEAD failed for " + url + ": " + e.getMessage());
+            return -1;
         }
     }
 

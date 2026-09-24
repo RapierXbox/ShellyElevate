@@ -4,10 +4,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <!-- X2i (JENNA, SKU SAWD-5A1XX10EU0): PowerManager.goToSleep/wakeUp require DEVICE_POWER.
-         On a rooted device this is granted by the platform; on non-rooted devices the shell
-         fallback (cmd power sleep / input keyevent 26) is used instead. -->
-    <uses-permission android:name="android.permission.DEVICE_POWER" />
+    <!-- the x2i uses power manager sleep and wake when this is granted and falls back to the shell otherwise -->
+    <uses-permission android:name="android.permission.DEVICE_POWER"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -31,6 +30,13 @@
         tools:targetApi="s"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="s"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>
+    <!-- webview ota via recovery on the android 7 era firmware -->
+    <uses-permission android:name="android.permission.ACCESS_CACHE_FILESYSTEM"
+        android:maxSdkVersion="25" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.RECOVERY"
+        android:maxSdkVersion="25" tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.REBOOT"
+        android:maxSdkVersion="25" tools:ignore="ProtectedPermissions" />
     <uses-feature android:name="android.hardware.sensor.proximity" android:required="false"/>
 
     <application
