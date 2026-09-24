@@ -9,7 +9,11 @@ import android.webkit.WebView
 import androidx.constraintlayout.widget.ConstraintLayout
 import me.rapierxbox.shellyelevatev2.R
 import kotlin.math.abs
+import kotlin.math.hypot
+import kotlin.math.sign
 
+// root of the kiosk layout that feeds every touch to the swipe helper and steals
+// multi finger swipes from the webview while leaving pinch zoom to the page
 class GestureInterceptLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
@@ -19,7 +23,7 @@ class GestureInterceptLayout @JvmOverloads constructor(
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private val minMovePx = touchSlop * 0.3f
-    private val pinchDeltaRatio = 0.35f
+    private val stealMovePx = touchSlop * 1.5f
 
     private var intercepting = false
     private val downX = SparseArray<Float>()
@@ -31,29 +35,20 @@ class GestureInterceptLayout @JvmOverloads constructor(
                 intercepting = false
                 downX.clear()
                 downY.clear()
-                downX.put(ev.getPointerId(0), ev.x)
-                downY.put(ev.getPointerId(0), ev.y)
+                rememberDown(ev, 0)
             }
 
-            MotionEvent.ACTION_POINTER_DOWN -> {
-                val idx = ev.actionIndex
-                downX.put(ev.getPointerId(idx), ev.getX(idx))
-                downY.put(ev.getPointerId(idx), ev.getY(idx))
-            }
+            MotionEvent.ACTION_POINTER_DOWN -> rememberDown(ev, ev.actionIndex)
 
             MotionEvent.ACTION_MOVE -> {
-                if (ev.pointerCount >= 2 && !intercepting) {
-                    intercepting = shouldStealGesture(ev)
-                    if (intercepting) {
-                        cancelWebViewTouchStream(ev)
-                    }
+                if (!intercepting && shouldStealGesture(ev)) {
+                    intercepting = true
+                    cancelWebViewTouchStream(ev)
                 }
             }
         }
 
-        if (!intercepting) {
-            swipeHelper?.onTouchEvent(ev)
-        }
+        if (!intercepting) swipeHelper?.onTouchEvent(ev)
         return intercepting
     }
 
@@ -65,11 +60,15 @@ class GestureInterceptLayout @JvmOverloads constructor(
         return true
     }
 
+    private fun rememberDown(ev: MotionEvent, index: Int) {
+        val id = ev.getPointerId(index)
+        downX.put(id, ev.getX(index))
+        downY.put(id, ev.getY(index))
+    }
+
+    // viewgroup would send the cancel on the next event anyway but doing it now
+    // avoids a frame where the webview still thinks it owns the touch
     private fun cancelWebViewTouchStream(sourceEvent: MotionEvent) {
-        // Explicitly forward a cancel into the WebView's input pipeline when we steal
-        // the gesture mid-sequence. Android's ViewGroup sends this automatically on
-        // the *next* event, but dispatching it immediately avoids a one-frame gap
-        // where the WebView still considers itself the active touch target.
         val webView = findViewById<WebView?>(R.id.myWebView) ?: return
         val cancel = MotionEvent.obtain(sourceEvent)
         cancel.action = MotionEvent.ACTION_CANCEL
@@ -77,63 +76,58 @@ class GestureInterceptLayout @JvmOverloads constructor(
         cancel.recycle()
     }
 
+    // true for a multi finger swipe where every moving finger travels the same axis and direction
     private fun shouldStealGesture(ev: MotionEvent): Boolean {
-        val n = ev.pointerCount
-        if (n < 2) return false
+        val pointerCount = ev.pointerCount
+        if (pointerCount < 2) return false
 
         var maxMove = 0f
         var refSign = 0f
         var refIsVertical = false
         var activeCount = 0
-        var signMismatch = false
-        var axisMismatch = false
 
-        for (i in 0 until n) {
+        for (i in 0 until pointerCount) {
             val id = ev.getPointerId(i)
-            val sx = downX.get(id) ?: return false
-            val sy = downY.get(id) ?: return false
-            val dx = ev.getX(i) - sx
-            val dy = ev.getY(i) - sy
-            val mag = maxOf(abs(dx), abs(dy))
-            if (mag > maxMove) maxMove = mag
+            val startX = downX.get(id) ?: return false
+            val startY = downY.get(id) ?: return false
+            val dx = ev.getX(i) - startX
+            val dy = ev.getY(i) - startY
+            val move = maxOf(abs(dx), abs(dy))
+            if (move > maxMove) maxMove = move
 
-            if (mag < minMovePx) continue
+            if (move < minMovePx) continue
 
             val isVertical = abs(dy) >= abs(dx)
-            val sign = Math.signum(if (isVertical) dy else dx)
+            val sign = (if (isVertical) dy else dx).sign
             activeCount++
             if (refSign == 0f) {
                 refSign = sign
                 refIsVertical = isVertical
-            } else {
-                if (sign != refSign) signMismatch = true
-                if (isVertical != refIsVertical) axisMismatch = true
+            } else if (sign != refSign || isVertical != refIsVertical) {
+                return false
             }
         }
 
-        if (maxMove < touchSlop * 1.5f) return false
-        if (activeCount < 2) return false
-        if (signMismatch || axisMismatch) return false
+        if (maxMove < stealMovePx || activeCount < 2) return false
+        return pointerCount != 2 || !isPinch(ev)
+    }
 
-        if (n == 2) {
-            val id0 = ev.getPointerId(0)
-            val id1 = ev.getPointerId(1)
-            val sx0 = downX.get(id0)
-            val sy0 = downY.get(id0)
-            val sx1 = downX.get(id1)
-            val sy1 = downY.get(id1)
-            if (sx0 != null && sy0 != null && sx1 != null && sy1 != null) {
-                val startDist = Math.hypot((sx1 - sx0).toDouble(), (sy1 - sy0).toDouble())
-                val curDist = Math.hypot(
-                    (ev.getX(1) - ev.getX(0)).toDouble(),
-                    (ev.getY(1) - ev.getY(0)).toDouble()
-                )
-                if (startDist > 0 && abs(curDist - startDist) / startDist > pinchDeltaRatio) {
-                    return false
-                }
-            }
-        }
+    // two fingers whose distance changed a lot are zooming and not swiping
+    private fun isPinch(ev: MotionEvent): Boolean {
+        val id0 = ev.getPointerId(0)
+        val id1 = ev.getPointerId(1)
+        val startX0 = downX.get(id0) ?: return false
+        val startY0 = downY.get(id0) ?: return false
+        val startX1 = downX.get(id1) ?: return false
+        val startY1 = downY.get(id1) ?: return false
 
-        return true
+        val startDist = hypot(startX1 - startX0, startY1 - startY0)
+        if (startDist <= 0f) return false
+        val curDist = hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0))
+        return abs(curDist - startDist) / startDist > PINCH_DELTA_RATIO
+    }
+
+    private companion object {
+        const val PINCH_DELTA_RATIO = 0.35f
     }
 }
