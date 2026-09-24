@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2.stes;
 
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.io.File;
@@ -7,24 +8,35 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Arrays;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.Consumer;
 
 import me.rapierxbox.shellyelevatev2.helper.UartHelper;
 
 public class StesProtocolHandler {
 
     private static final String TAG = "STES";
-    // STES UART frame: AA 55 [len] [cmd] [payload...] [checksum]
+
+    // frame layout is aa 55 [len] [cmd] [payload...] [checksum]
     private static final byte HEADER_0 = (byte) 0xAA;
     private static final byte HEADER_1 = (byte) 0x55;
+    private static final int FRAME_OVERHEAD = 4;
+    private static final int MIN_FRAME_LENGTH = 5;
     private static final int DEFAULT_GAMMA = 50;
+    private static final byte[] NO_PAYLOAD = new byte[0];
 
-    // CALIBRATE payload byte values.
+    private static final long PROBE_TIMEOUT_MS = 600;
+    // extra wait on top of the uart timeout so its own timeout callback wins
+    private static final long BLOCKING_GRACE_MS = 500;
+
+    // calibrate payload values
     public static final byte CALIB_CLEAR = 0;
     public static final byte CALIB_FULL  = 1;
     public static final byte CALIB_SHORT = 2;
 
-    static UartHelper sUart;
+    private static volatile UartHelper sUart;
     private static volatile boolean sOperational = false;
+    private static volatile boolean sFwUpdateInProgress = false;
 
     public static volatile DimmerStatus lastStatus;
     public static volatile DimmerPower  lastPower;
@@ -64,22 +76,31 @@ public class StesProtocolHandler {
         public boolean trailLead;
     }
 
+    // stes mcu firmware update via the stm32 uart bootloader (an3155)
+    // callbacks run on the bootloader thread
+    public interface BootloaderUpdateListener {
+        void onConnected(int deviceId);
+        void onProgress(int pagesWritten, int totalPages);
+        void onComplete();
+        void onError(String reason);
+    }
+
+    // turns a parsed response into a value or null when the response is too short
+    private interface ResponseParser<T> { T parse(byte[] resp); }
+
     public static void init() {
         String path = UartHelper.findTtyPath();
         if (path == null) {
             Log.i(TAG, "No UART device found, dimmer not available");
             return;
         }
-        sUart = new UartHelper();
-        if (!sUart.open(path)) {
-            sUart = null;
-            return;
-        }
-        // The UART node exists on every wall display, even without a STES backplate
-        // attached, so we probe the MCU before declaring the dimmer present.
+        UartHelper uart = new UartHelper();
+        if (!uart.open(path)) return;
+        sUart = uart;
+        // the uart node exists on every wall display even without a backplate so probe the mcu first
         if (!probeBackplate()) {
             Log.i(TAG, "STES backplate not responding on " + path + ", dimmer disabled");
-            sUart.close();
+            uart.close();
             sUart = null;
             return;
         }
@@ -88,250 +109,228 @@ public class StesProtocolHandler {
     }
 
     private static boolean probeBackplate() {
-        final byte[][] result = {null};
-        final Object lock = new Object();
         byte[] frame = buildFrame(StesCommand.GET_VERSION, new byte[]{0});
-        final long probeTimeoutMs = 600;
-        synchronized (lock) {
-            sUart.sendData(frame, new UartHelper.OnDataTransferListener() {
-                @Override public void dataReceived(byte[] data) {
-                    synchronized (lock) { result[0] = data; lock.notifyAll(); }
-                }
-                @Override public void readTimeout() {
-                    synchronized (lock) { result[0] = new byte[0]; lock.notifyAll(); }
-                }
-            }, probeTimeoutMs);
-            try {
-                lock.wait(probeTimeoutMs + 400);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return false;
-            }
+        try {
+            byte[] resp = transferBlocking(frame, PROBE_TIMEOUT_MS);
+            return resp != null && parseResponse(resp) != null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return false;
         }
-        if (result[0] == null || result[0].length < 5) return false;
-        return parseResponse(result[0]) != null;
     }
 
     public static boolean isOperational() {
         return sOperational;
     }
 
-    public static void close() {
-        if (sUart != null) sUart.close();
+    public static synchronized void close() {
         sOperational = false;
+        UartHelper uart = sUart;
+        sUart = null;
+        if (uart != null) uart.close();
     }
 
     public static synchronized void setDimmer(int brightness0to1000, OnDimmerListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
         int bri = Math.max(0, Math.min(1000, brightness0to1000));
-        byte[] payload = {(byte)(bri >> 8), (byte)(bri & 0xFF), 0, 0, (byte) DEFAULT_GAMMA};
-        send(StesCommand.SET_DIMMER, payload, data -> {
-            DimmerStatus s = parseStatus(data);
-            if (s == null) { if (cb != null) cb.onError("Short response"); return; }
+        byte[] payload = {(byte) (bri >> 8), (byte) (bri & 0xFF), 0, 0, (byte) DEFAULT_GAMMA};
+        request(StesCommand.SET_DIMMER, payload, StesProtocolHandler::parseStatus, s -> {
             lastStatus = s;
             if (cb != null) cb.onResult(s);
         }, e -> { if (cb != null) cb.onError(e); });
     }
 
     public static synchronized void clearDimmer(OnSimpleListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.SET_DIMMER_CLR, new byte[0], data -> {
-            if (cb != null) cb.onDone();
-        }, e -> { if (cb != null) cb.onError(e); });
+        requestSimple(StesCommand.SET_DIMMER_CLR, NO_PAYLOAD, cb);
     }
 
     public static synchronized void getStatus(OnStatusListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.GET_STATUS, new byte[0], data -> {
-            DimmerStatus s = parseStatus(data);
-            if (s == null) { if (cb != null) cb.onError("Short response"); return; }
+        request(StesCommand.GET_STATUS, NO_PAYLOAD, StesProtocolHandler::parseStatus, s -> {
             lastStatus = s;
             if (cb != null) cb.onResult(s);
         }, e -> { if (cb != null) cb.onError(e); });
     }
 
     public static synchronized void getPowerMeter(OnPowerListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.POWER_METER, new byte[]{0}, data -> {
-            if (data.length < 9) { if (cb != null) cb.onError("Short response"); return; }
-            DimmerPower p = parsePowerMeter(data);
+        request(StesCommand.POWER_METER, new byte[]{0}, StesProtocolHandler::parsePowerMeter, p -> {
             lastPower = p;
             if (cb != null) cb.onResult(p);
         }, e -> { if (cb != null) cb.onError(e); });
     }
 
     public static synchronized void getConfig(OnConfigListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.GET_CONFIG, new byte[0], data -> {
-            if (data.length < 3) { if (cb != null) cb.onError("Short response"); return; }
-            DimmerConfig c = new DimmerConfig();
-            c.edgeButton = (data[2] & 0x01) != 0;
-            c.trailLead  = (data[2] & 0x02) != 0;
+        request(StesCommand.GET_CONFIG, NO_PAYLOAD, StesProtocolHandler::parseConfig, c -> {
             lastConfig = c;
             if (cb != null) cb.onResult(c);
         }, e -> { if (cb != null) cb.onError(e); });
     }
 
     public static synchronized void setConfig(boolean edgeButton, boolean trailLead, OnSimpleListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        byte cfg = (byte)((edgeButton ? 0x01 : 0) | (trailLead ? 0x02 : 0));
-        send(StesCommand.SET_CONFIG, new byte[]{cfg}, data -> {
-            if (cb != null) cb.onDone();
-        }, e -> { if (cb != null) cb.onError(e); });
+        byte cfg = (byte) ((edgeButton ? 0x01 : 0) | (trailLead ? 0x02 : 0));
+        requestSimple(StesCommand.SET_CONFIG, new byte[]{cfg}, cb);
     }
 
     public static synchronized void calibrate(byte mode, OnSimpleListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.CALIBRATE, new byte[]{mode}, data -> {
-            if (cb != null) cb.onDone();
-        }, e -> { if (cb != null) cb.onError(e); });
+        requestSimple(StesCommand.CALIBRATE, new byte[]{mode}, cb);
     }
 
     public static synchronized void resetMcu(OnSimpleListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.RESET_MCU, new byte[0], data -> {
-            if (cb != null) cb.onDone();
-        }, e -> { if (cb != null) cb.onError(e); });
+        requestSimple(StesCommand.RESET_MCU, NO_PAYLOAD, cb);
     }
 
     public static synchronized void setLatchRelay(int channel, OnSimpleListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.SET_LRELAY, new byte[]{(byte) channel}, data -> {
-            if (cb != null) cb.onDone();
-        }, e -> { if (cb != null) cb.onError(e); });
+        requestSimple(StesCommand.SET_LRELAY, new byte[]{(byte) channel}, cb);
     }
 
     public static synchronized void resetLatchRelay(int channel, OnSimpleListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.RESET_LRELAY, new byte[]{(byte) channel}, data -> {
-            if (cb != null) cb.onDone();
-        }, e -> { if (cb != null) cb.onError(e); });
+        requestSimple(StesCommand.RESET_LRELAY, new byte[]{(byte) channel}, cb);
     }
 
     public static synchronized void readLatchRelay(int channel, OnRelayListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.READ_LRELAY, new byte[]{(byte) channel}, data -> {
-            boolean state = data.length > 2 && (data[2] & 0x01) != 0;
-            if (cb != null) cb.onResult(state);
-        }, e -> { if (cb != null) cb.onError(e); });
+        StesProtocolHandler.<Boolean>request(StesCommand.READ_LRELAY, new byte[]{(byte) channel},
+                resp -> resp.length > 2 ? (resp[2] & 0x01) != 0 : null,
+                state -> { if (cb != null) cb.onResult(state); },
+                e -> { if (cb != null) cb.onError(e); });
     }
 
     public static synchronized void writeVPort(boolean on, OnSimpleListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.WRITE_VPORT, new byte[]{(byte)(on ? 1 : 0)}, data -> {
-            if (cb != null) cb.onDone();
-        }, e -> { if (cb != null) cb.onError(e); });
+        requestSimple(StesCommand.WRITE_VPORT, new byte[]{(byte) (on ? 1 : 0)}, cb);
     }
 
     public static synchronized void readVPort(OnVPortListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.READ_VPORT, new byte[0], data -> {
-            int val = data.length > 2 ? (data[2] & 0xFF) : 0;
-            if (cb != null) cb.onResult(val);
-        }, e -> { if (cb != null) cb.onError(e); });
+        StesProtocolHandler.<Integer>request(StesCommand.READ_VPORT, NO_PAYLOAD,
+                resp -> resp.length > 2 ? (resp[2] & 0xFF) : null,
+                value -> { if (cb != null) cb.onResult(value); },
+                e -> { if (cb != null) cb.onError(e); });
     }
 
     public static synchronized void getVersion(OnVersionListener cb) {
-        if (!sOperational) { if (cb != null) cb.onError("Not operational"); return; }
-        send(StesCommand.GET_VERSION, new byte[]{0}, data -> {
-            if (data.length < 4) { if (cb != null) cb.onError("Short response"); return; }
-            String version = (data[2] & 0xFF) + "." + (data[3] & 0xFF);
-            if (data.length > 8) {
-                version += " fw=" + (data[6] & 0xFF) + "." + (data[7] & 0xFF) + "." + (data[8] & 0xFF);
-            }
-            if (data.length > 11) {
-                version += " hw=" + (data[9] & 0xFF) + "." + (data[10] & 0xFF) + "." + (data[11] & 0xFF);
-            }
-            if (cb != null) cb.onResult(version);
-        }, e -> { if (cb != null) cb.onError(e); });
+        request(StesCommand.GET_VERSION, new byte[]{0}, StesProtocolHandler::parseVersion,
+                version -> { if (cb != null) cb.onResult(version); },
+                e -> { if (cb != null) cb.onError(e); });
     }
 
-    // STES MCU firmware update via the STM32 UART bootloader (AN3155).
-    public interface BootloaderUpdateListener {
-        void onConnected(int deviceId);
-        void onProgress(int pagesWritten, int totalPages);
-        void onComplete();
-        void onError(String reason);
-    }
-
-    private static volatile boolean fwUpdateInProgress = false;
-
-    public static void startFirmwareUpdate(File firmwareFile, BootloaderUpdateListener listener) {
-        if (fwUpdateInProgress) { listener.onError("Update already in progress"); return; }
-        if (!sOperational)      { listener.onError("STES not operational");       return; }
-        fwUpdateInProgress = true;
+    public static synchronized void startFirmwareUpdate(File firmwareFile, BootloaderUpdateListener listener) {
+        if (sFwUpdateInProgress) { listener.onError("Update already in progress"); return; }
+        if (!sOperational)       { listener.onError("STES not operational");       return; }
+        sFwUpdateInProgress = true;
         new Thread(() -> {
             try {
                 Bootloader.run(firmwareFile, listener);
             } finally {
-                fwUpdateInProgress = false;
+                sFwUpdateInProgress = false;
             }
         }, "StesBootloader").start();
     }
 
-    public static boolean isFirmwareUpdateInProgress() { return fwUpdateInProgress; }
+    public static boolean isFirmwareUpdateInProgress() { return sFwUpdateInProgress; }
 
-    // ----- frame encode/decode -----
+    // request plumbing
 
-    private interface DataCallback { void onData(byte[] resp); }
-
-    private static void send(StesCommand cmd, byte[] payload, DataCallback onData, java.util.function.Consumer<String> onError) {
-        send(cmd, payload, onData, onError, UartHelper.DEFAULT_TIMEOUT_MS);
+    private static void requestSimple(StesCommand cmd, byte[] payload, OnSimpleListener cb) {
+        request(cmd, payload, resp -> resp,
+                resp -> { if (cb != null) cb.onDone(); },
+                e -> { if (cb != null) cb.onError(e); });
     }
 
-    static void send(StesCommand cmd, byte[] payload, DataCallback onData,
-                     java.util.function.Consumer<String> onError, long timeoutMs) {
-        byte[] frame = buildFrame(cmd, payload);
-        sUart.sendData(frame, new UartHelper.OnDataTransferListener() {
+    private static <T> void request(StesCommand cmd, byte[] payload, ResponseParser<T> parser,
+                                    Consumer<T> onResult, Consumer<String> onError) {
+        if (!sOperational) { onError.accept("Not operational"); return; }
+        // regular traffic would collide with the bootloader on the shared uart
+        if (sFwUpdateInProgress) { onError.accept("Firmware update in progress"); return; }
+        transmit(cmd, payload, resp -> {
+            T value = parser.parse(resp);
+            if (value == null) { onError.accept("Short response"); return; }
+            onResult.accept(value);
+        }, onError, UartHelper.DEFAULT_TIMEOUT_MS);
+    }
+
+    private static void transmit(StesCommand cmd, byte[] payload, Consumer<byte[]> onResponse,
+                                 Consumer<String> onError, long timeoutMs) {
+        UartHelper uart = sUart;
+        if (uart == null) { onError.accept("Not operational"); return; }
+        // uart helper keeps its listener after a transfer so late chunks would fire the callback twice
+        AtomicBoolean done = new AtomicBoolean(false);
+        boolean sent = uart.sendData(buildFrame(cmd, payload), new UartHelper.OnDataTransferListener() {
             @Override public void dataReceived(byte[] data) {
+                if (!done.compareAndSet(false, true)) return;
                 byte[] resp = parseResponse(data);
                 if (resp == null) { onError.accept("Bad response or checksum"); return; }
-                onData.onData(resp);
+                onResponse.accept(resp);
             }
-            @Override public void readTimeout() { onError.accept("Timeout"); }
+            @Override public void readTimeout() {
+                if (done.compareAndSet(false, true)) onError.accept("Timeout");
+            }
         }, timeoutMs);
+        // false also means queued so only a closed port is a failure here
+        if (!sent && !uart.isReady() && done.compareAndSet(false, true)) onError.accept("Not operational");
     }
 
+    // returns the raw reply or an empty array on timeout or null if nothing came back in time
+    private static byte[] transferBlocking(byte[] data, long timeoutMs) throws InterruptedException {
+        UartHelper uart = sUart;
+        if (uart == null || !uart.isReady()) return null;
+        final Object lock = new Object();
+        final byte[][] result = {null};
+        uart.sendData(data, new UartHelper.OnDataTransferListener() {
+            @Override public void dataReceived(byte[] r) { deliver(r); }
+            @Override public void readTimeout() { deliver(new byte[0]); }
+            private void deliver(byte[] r) {
+                synchronized (lock) {
+                    if (result[0] != null) return;
+                    result[0] = r;
+                    lock.notifyAll();
+                }
+            }
+        }, timeoutMs);
+        long deadline = SystemClock.uptimeMillis() + timeoutMs + BLOCKING_GRACE_MS;
+        synchronized (lock) {
+            // loop guards against spurious wakeups
+            while (result[0] == null) {
+                long remaining = deadline - SystemClock.uptimeMillis();
+                if (remaining <= 0) break;
+                lock.wait(remaining);
+            }
+            return result[0];
+        }
+    }
+
+    // frame encode and decode
+
     static byte[] buildFrame(StesCommand cmd, byte[] payload) {
-        // len byte counts cmd+payload only (not the AA 55 header or checksum).
-        byte len = (byte)(payload.length + 1);
-        byte[] frame = new byte[payload.length + 5];
+        // len counts cmd and payload but not the header or checksum
+        int len = payload.length + 1;
+        byte[] frame = new byte[payload.length + MIN_FRAME_LENGTH];
         frame[0] = HEADER_0;
         frame[1] = HEADER_1;
-        frame[2] = len;
+        frame[2] = (byte) len;
         frame[3] = cmd.value;
         System.arraycopy(payload, 0, frame, 4, payload.length);
-        // Checksum covers cmd + payload, matching the response side in parseResponse.
-        byte[] checksumInput = new byte[len];
-        checksumInput[0] = cmd.value;
-        System.arraycopy(payload, 0, checksumInput, 1, payload.length);
-        frame[frame.length - 1] = checksum(checksumInput);
+        frame[frame.length - 1] = checksum(frame, 3, len);
         return frame;
     }
 
+    // strips header and len and checksum and returns cmd plus payload
     static byte[] parseResponse(byte[] raw) {
-        if (raw.length < 5) return null;
+        if (raw.length < MIN_FRAME_LENGTH) return null;
         if (raw[0] != HEADER_0 || raw[1] != HEADER_1) return null;
-        int payloadLen = raw.length - 4;
-        byte[] payload = new byte[payloadLen];
-        System.arraycopy(raw, 3, payload, 0, payloadLen);
-        if (checksum(payload) != raw[raw.length - 1]) {
+        int bodyLen = raw.length - FRAME_OVERHEAD;
+        if (checksum(raw, 3, bodyLen) != raw[raw.length - 1]) {
             Log.w(TAG, "Checksum mismatch");
             return null;
         }
-        return payload;
+        return Arrays.copyOfRange(raw, 3, 3 + bodyLen);
     }
 
-    // ~(sum_of_bytes + length - 1) mod 256. Matches the firmware's verifier.
-    static byte checksum(byte[] data) {
-        int sum = data.length;
-        for (byte b : data) sum += (b & 0xFF);
-        return (byte)(((sum - 1) ^ 0xFF) & 0xFF);
+    // not(sum of bytes plus length minus 1) mod 256 which matches the firmware verifier
+    private static byte checksum(byte[] data, int from, int len) {
+        int sum = len;
+        for (int i = from; i < from + len; i++) sum += (data[i] & 0xFF);
+        return (byte) (((sum - 1) ^ 0xFF) & 0xFF);
     }
 
-    // Status payload (after stripping AA 55 [len] [cmd]):
+    // response layout after stripping the frame
     //   [0..1] reserved | [2] on flag | [3] warning bitmap
-    //   [4..5] target brightness (BE) | [6..7] actual brightness (BE)
+    //   [4..5] target brightness be | [6..7] actual brightness be
     private static DimmerStatus parseStatus(byte[] resp) {
         // null instead of a zeroed status so callers dont publish a bogus off state
         if (resp.length < 8) return null;
@@ -346,43 +345,67 @@ public class StesProtocolHandler {
         s.noSync         = (warn & 0x20) != 0;
         s.noLoad         = (warn & 0x40) != 0;
         s.notDimmable    = (warn & 0x80) != 0;
-        s.targetBrightness = toShort(resp[4], resp[5]);
-        s.actualBrightness = toShort(resp[6], resp[7]);
+        s.targetBrightness = u16(resp[4], resp[5]);
+        s.actualBrightness = u16(resp[6], resp[7]);
         return s;
     }
 
-    // Power-meter scaling: power in 0.1 W, voltage in V, current in mA.
+    // power in 0.1 w and voltage in v and current in ma
     private static DimmerPower parsePowerMeter(byte[] resp) {
+        if (resp.length < 9) return null;
         DimmerPower p = new DimmerPower();
-        p.powerW   = toShort(resp[3], resp[4]) / 10.0f;
-        p.voltageV = toShort(resp[5], resp[6]);
-        p.currentA = toShort(resp[7], resp[8]) / 1000.0f;
+        p.powerW   = u16(resp[3], resp[4]) / 10.0f;
+        p.voltageV = u16(resp[5], resp[6]);
+        p.currentA = u16(resp[7], resp[8]) / 1000.0f;
         return p;
     }
 
-    static int toShort(byte hi, byte lo) {
+    private static DimmerConfig parseConfig(byte[] resp) {
+        if (resp.length < 3) return null;
+        DimmerConfig c = new DimmerConfig();
+        c.edgeButton = (resp[2] & 0x01) != 0;
+        c.trailLead  = (resp[2] & 0x02) != 0;
+        return c;
+    }
+
+    private static String parseVersion(byte[] resp) {
+        if (resp.length < 4) return null;
+        StringBuilder version = new StringBuilder()
+                .append(resp[2] & 0xFF).append('.').append(resp[3] & 0xFF);
+        if (resp.length > 8) {
+            version.append(" fw=").append(resp[6] & 0xFF).append('.')
+                    .append(resp[7] & 0xFF).append('.').append(resp[8] & 0xFF);
+        }
+        if (resp.length > 11) {
+            version.append(" hw=").append(resp[9] & 0xFF).append('.')
+                    .append(resp[10] & 0xFF).append('.').append(resp[11] & 0xFF);
+        }
+        return version.toString();
+    }
+
+    private static int u16(byte hi, byte lo) {
         return ((hi & 0xFF) << 8) | (lo & 0xFF);
     }
 
-    // STM32 UART bootloader (AN3155) sequence used to flash the STES MCU.
-    // Layout: SYNCHRO -> GET_ID -> WRITE_UNPROTECT -> EXTENDED_ERASE -> WRITE_MEMORY (chunked).
+    // stm32 uart bootloader sequence used to flash the stes mcu
+    // synchro then get id then write unprotect then extended erase then chunked write memory
     private static final class Bootloader {
-        private static final byte BL_SYNCHRO          = 0x7F;
-        private static final byte BL_ACK              = 0x79;
-        private static final byte BL_NAK              = 0x1F;
-        private static final byte BL_CMD_GET_ID       = 0x02;
+        private static final byte BL_SYNCHRO             = 0x7F;
+        private static final byte BL_ACK                 = 0x79;
+        private static final byte BL_CMD_GET_ID          = 0x02;
         private static final byte BL_CMD_WRITE_UNPROTECT = 0x73;
-        private static final byte BL_CMD_EXTEND_ERASE = 0x44;
-        private static final byte BL_CMD_WRITE_MEMORY = 0x31;
+        private static final byte BL_CMD_EXTEND_ERASE    = 0x44;
+        private static final byte BL_CMD_WRITE_MEMORY    = 0x31;
 
-        private static final int FLASH_BASE         = 0x08000000;
-        private static final int FLASH_APP_START    = 0x08010000;
-        private static final int BL_PAGE_SIZE       = 2048;
-        private static final int BL_CHUNK_SIZE      = 256;
+        private static final int FLASH_BASE        = 0x08000000;
+        private static final int FLASH_APP_START   = 0x08010000;
+        private static final int BL_PAGE_SIZE      = 2048;
+        private static final int BL_CHUNK_SIZE     = 256;
         // derived from the write start address so erase and write cover the same pages
-        private static final int BL_FIRST_APP_PAGE  = (FLASH_APP_START - FLASH_BASE) / BL_PAGE_SIZE;
-        private static final int BL_MAX_PAGES       = 40;
-        private static final int BL_MAX_RETRIES     = 3;
+        private static final int BL_FIRST_APP_PAGE = (FLASH_APP_START - FLASH_BASE) / BL_PAGE_SIZE;
+        private static final int BL_MAX_PAGES      = 40;
+        private static final int BL_MAX_BYTES      = BL_MAX_PAGES * BL_PAGE_SIZE;
+        private static final int BL_MAX_RETRIES    = 3;
 
         private static final long TIMEOUT_NORMAL    = 1000;
         private static final long TIMEOUT_LONG      = 3000;
@@ -390,20 +413,25 @@ public class StesProtocolHandler {
 
         static void run(File firmwareFile, BootloaderUpdateListener listener) {
             try {
+                long fileSize = firmwareFile.length();
+                if (fileSize > BL_MAX_BYTES) {
+                    listener.onError(tooLargeMessage(fileSize));
+                    return;
+                }
                 byte[] firmware = readFile(firmwareFile);
                 if (firmware == null || firmware.length == 0) {
                     listener.onError("Firmware file empty or unreadable");
                     return;
                 }
-                int maxBytes = BL_MAX_PAGES * BL_PAGE_SIZE;
-                if (firmware.length > maxBytes) {
-                    listener.onError("Firmware too large: " + firmware.length
-                            + " bytes, max " + maxBytes + " bytes (" + BL_MAX_PAGES + " pages)");
+                if (firmware.length > BL_MAX_BYTES) {
+                    listener.onError(tooLargeMessage(firmware.length));
                     return;
                 }
 
                 Log.i(TAG, "BL: resetting MCU into bootloader");
-                resetMcu(null);
+                // bypasses request() since that refuses traffic while an update runs
+                transmit(StesCommand.RESET_MCU, NO_PAYLOAD, resp -> { },
+                        e -> Log.w(TAG, "BL: reset MCU: " + e), UartHelper.DEFAULT_TIMEOUT_MS);
                 Thread.sleep(500);
 
                 if (!syncBootloader()) { listener.onError("BL sync failed"); return; }
@@ -414,121 +442,122 @@ public class StesProtocolHandler {
                 Log.i(TAG, "BL: device ID = 0x" + Integer.toHexString(deviceId));
 
                 if (!writeUnprotect()) { listener.onError("BL write-unprotect failed"); return; }
-                // The STM32 reboots after WRITE_UNPROTECT, so re-sync before continuing.
+                // the stm32 reboots after write unprotect so sync again
                 Thread.sleep(200);
                 if (!syncBootloader()) { listener.onError("BL re-sync failed"); return; }
 
-                int totalPages = (int)Math.ceil((double)firmware.length / BL_PAGE_SIZE);
+                int totalPages = (firmware.length + BL_PAGE_SIZE - 1) / BL_PAGE_SIZE;
                 if (!extendedErase(BL_FIRST_APP_PAGE, totalPages)) { listener.onError("BL erase failed"); return; }
 
-                int pagesWritten = 0;
                 int offset = 0;
                 while (offset < firmware.length) {
                     int chunkLen = Math.min(BL_CHUNK_SIZE, firmware.length - offset);
                     byte[] chunk = Arrays.copyOfRange(firmware, offset, offset + chunkLen);
-                    int address = FLASH_APP_START + offset;
-                    if (!writeMemory(address, chunk)) {
+                    if (!writeMemory(FLASH_APP_START + offset, chunk)) {
                         listener.onError("BL write failed at offset " + offset);
                         return;
                     }
                     offset += chunkLen;
-                    pagesWritten = offset / BL_PAGE_SIZE;
+                    // a trailing partial page still counts so progress reaches the total
+                    int pagesWritten = offset == firmware.length ? totalPages : offset / BL_PAGE_SIZE;
                     listener.onProgress(pagesWritten, totalPages);
                 }
 
                 listener.onComplete();
                 Log.i(TAG, "BL: firmware update complete");
-
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                listener.onError("Firmware update interrupted");
             } catch (Exception e) {
-                listener.onError(e.getMessage());
+                Log.e(TAG, "BL: firmware update failed", e);
+                listener.onError(e.getMessage() != null ? e.getMessage() : e.toString());
             }
+        }
+
+        private static String tooLargeMessage(long size) {
+            return "Firmware too large: " + size + " bytes, max " + BL_MAX_BYTES
+                    + " bytes (" + BL_MAX_PAGES + " pages)";
         }
 
         private static boolean syncBootloader() throws InterruptedException {
             for (int i = 0; i < BL_MAX_RETRIES; i++) {
-                byte[] resp = sendBlocking(new byte[]{BL_SYNCHRO}, TIMEOUT_NORMAL);
-                if (resp != null && resp.length > 0 && resp[0] == BL_ACK) return true;
+                if (isAck(transferBlocking(new byte[]{BL_SYNCHRO}, TIMEOUT_NORMAL))) return true;
                 Thread.sleep(200);
             }
             return false;
         }
 
         private static int getDeviceId() throws InterruptedException {
-            if (!sendCommand(BL_CMD_GET_ID)) return -1;
-            byte[] resp = sendBlocking(new byte[0], TIMEOUT_NORMAL);
-            if (resp == null || resp.length < 3) return -1;
-            return ((resp[1] & 0xFF) << 8) | (resp[2] & 0xFF);
+            byte[] resp = transferBlocking(commandFrame(BL_CMD_GET_ID), TIMEOUT_NORMAL);
+            if (!isAck(resp)) return -1;
+            // reply is [n] [pid hi] [pid lo] [ack] and may share a read with the command ack
+            byte[] idResp = Arrays.copyOfRange(resp, 1, resp.length);
+            if (idResp.length < 3) {
+                // keep any id bytes that came with the ack and append the rest
+                byte[] more = transferBlocking(new byte[0], TIMEOUT_NORMAL);
+                if (more == null) return -1;
+                byte[] joined = Arrays.copyOf(idResp, idResp.length + more.length);
+                System.arraycopy(more, 0, joined, idResp.length, more.length);
+                idResp = joined;
+            }
+            if (idResp.length < 3) return -1;
+            return u16(idResp[1], idResp[2]);
         }
 
         private static boolean writeUnprotect() throws InterruptedException {
             if (!sendCommand(BL_CMD_WRITE_UNPROTECT)) return false;
-            byte[] resp = sendBlocking(new byte[0], TIMEOUT_LONG);
-            return resp != null && resp.length > 0 && resp[0] == BL_ACK;
+            return isAck(transferBlocking(new byte[0], TIMEOUT_LONG));
         }
 
         private static boolean extendedErase(int firstPage, int numPages) throws InterruptedException {
             if (!sendCommand(BL_CMD_EXTEND_ERASE)) return false;
+            // [n-1 be] then each page number be then xor
             byte[] data = new byte[2 + numPages * 2 + 1];
             int n = numPages - 1;
-            data[0] = (byte)(n >> 8);
-            data[1] = (byte)(n & 0xFF);
+            data[0] = (byte) (n >> 8);
+            data[1] = (byte) (n & 0xFF);
             for (int i = 0; i < numPages; i++) {
                 int page = firstPage + i;
-                data[2 + i * 2]     = (byte)(page >> 8);
-                data[2 + i * 2 + 1] = (byte)(page & 0xFF);
+                data[2 + i * 2]     = (byte) (page >> 8);
+                data[2 + i * 2 + 1] = (byte) (page & 0xFF);
             }
-            data[data.length - 1] = blXor(data, 0, data.length - 1);
-            byte[] resp = sendBlocking(data, TIMEOUT_VERY_LONG);
-            return resp != null && resp.length > 0 && resp[0] == BL_ACK;
+            data[data.length - 1] = xor(data, 0, data.length - 1);
+            return isAck(transferBlocking(data, TIMEOUT_VERY_LONG));
         }
 
         private static boolean writeMemory(int address, byte[] chunk) throws InterruptedException {
             if (!sendCommand(BL_CMD_WRITE_MEMORY)) return false;
-            // Address frame: 4 big-endian bytes + XOR checksum.
-            byte[] addrBytes = {
-                (byte)(address >> 24), (byte)(address >> 16),
-                (byte)(address >> 8),  (byte)(address)
+
+            byte[] addrFrame = {
+                (byte) (address >> 24), (byte) (address >> 16),
+                (byte) (address >> 8),  (byte) address,
+                0
             };
-            byte[] addrFrame = new byte[5];
-            System.arraycopy(addrBytes, 0, addrFrame, 0, 4);
-            addrFrame[4] = blXor(addrBytes, 0, 4);
-            byte[] ackAddr = sendBlocking(addrFrame, TIMEOUT_NORMAL);
-            if (ackAddr == null || ackAddr.length == 0 || ackAddr[0] != BL_ACK) return false;
-            // Data frame: [n-1][bytes...][XOR over all preceding bytes].
-            byte[] dataFrame = new byte[1 + chunk.length + 1];
-            dataFrame[0] = (byte)(chunk.length - 1);
+            addrFrame[4] = xor(addrFrame, 0, 4);
+            if (!isAck(transferBlocking(addrFrame, TIMEOUT_NORMAL))) return false;
+
+            // [n-1] then data then xor over everything before it
+            byte[] dataFrame = new byte[chunk.length + 2];
+            dataFrame[0] = (byte) (chunk.length - 1);
             System.arraycopy(chunk, 0, dataFrame, 1, chunk.length);
-            dataFrame[dataFrame.length - 1] = blXor(dataFrame, 0, dataFrame.length - 1);
-            byte[] ackData = sendBlocking(dataFrame, TIMEOUT_LONG);
-            return ackData != null && ackData.length > 0 && ackData[0] == BL_ACK;
+            dataFrame[dataFrame.length - 1] = xor(dataFrame, 0, dataFrame.length - 1);
+            return isAck(transferBlocking(dataFrame, TIMEOUT_LONG));
         }
 
-        /** Send the [cmd, ~cmd] header and expect an ACK. */
+        // sends [cmd] [not cmd] and expects an ack
         private static boolean sendCommand(byte cmd) throws InterruptedException {
-            byte[] frame = {cmd, (byte)(~cmd & 0xFF)};
-            byte[] resp = sendBlocking(frame, TIMEOUT_NORMAL);
+            return isAck(transferBlocking(commandFrame(cmd), TIMEOUT_NORMAL));
+        }
+
+        private static byte[] commandFrame(byte cmd) {
+            return new byte[]{cmd, (byte) (~cmd & 0xFF)};
+        }
+
+        private static boolean isAck(byte[] resp) {
             return resp != null && resp.length > 0 && resp[0] == BL_ACK;
         }
 
-        /** Blocks until UartHelper's listener fires or times out. */
-        private static byte[] sendBlocking(byte[] data, long timeoutMs) throws InterruptedException {
-            final byte[][] result = {null};
-            final Object lock = new Object();
-            synchronized (lock) {
-                sUart.sendData(data, new UartHelper.OnDataTransferListener() {
-                    @Override public void dataReceived(byte[] r) {
-                        synchronized (lock) { result[0] = r; lock.notifyAll(); }
-                    }
-                    @Override public void readTimeout() {
-                        synchronized (lock) { result[0] = new byte[0]; lock.notifyAll(); }
-                    }
-                }, timeoutMs);
-                lock.wait(timeoutMs + 500);
-            }
-            return result[0];
-        }
-
-        private static byte blXor(byte[] data, int from, int len) {
+        private static byte xor(byte[] data, int from, int len) {
             byte x = 0;
             for (int i = from; i < from + len; i++) x ^= data[i];
             return x;
@@ -537,11 +566,13 @@ public class StesProtocolHandler {
         private static byte[] readFile(File f) {
             try (InputStream in = new FileInputStream(f)) {
                 byte[] buf = new byte[(int) f.length()];
-                int read = 0, n;
+                int read = 0;
+                int n;
                 while (read < buf.length && (n = in.read(buf, read, buf.length - read)) != -1) read += n;
-                return buf;
+                // the file may shrink between length() and the read
+                return read < buf.length ? Arrays.copyOf(buf, read) : buf;
             } catch (IOException e) {
-                Log.e(TAG, "readFile: " + e.getMessage());
+                Log.e(TAG, "BL: readFile failed: " + e.getMessage());
                 return null;
             }
         }
