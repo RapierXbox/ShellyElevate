@@ -935,6 +935,25 @@
                 android:alpha="0.7" />
 
             <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/mqttRetainState"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:layout_marginTop="16dp"
+                android:text="@string/mqtt_retain_state"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <TextView
+                android:id="@+id/mqttRetainStateHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="48dp"
+                android:text="@string/mqtt_retain_state_hint"
+                android:textSize="14sp"
+                android:alpha="0.7" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/publishThermalSensors"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"

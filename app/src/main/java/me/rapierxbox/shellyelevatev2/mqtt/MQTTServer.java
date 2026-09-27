@@ -735,8 +735,9 @@ public class MQTTServer {
                 ? parseTopic(MQTT_TOPIC_POWER_BUTTON)
                 : parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
 
-        // not coalesced so rapid presses all reach ha
-        publishInternal(topic, json.toString(), 1, false);
+        // retained (when enabled) so the last-press timestamp sensor survives a reconnect instead of going unknown;
+        // the ha mqtt event entity already discards replayed retained messages on its own, so it won't refire
+        publishInternal(topic, json.toString(), 1, shouldRetainState());
     }
 
     public void publishVoiceState() {
