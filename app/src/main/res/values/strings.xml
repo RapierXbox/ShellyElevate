@@ -99,7 +99,7 @@
     <string name="mqtt_ha_discovery">Home Assistant auto-discovery</string>
     <string name="mqtt_ha_discovery_hint">Disable for non-HA brokers (ioBroker, etc.). Each value is then published to its own topic instead of one big config blob.</string>
     <string name="mqtt_retain_state">Retain published state</string>
-    <string name="mqtt_retain_state_hint">Keep sensor, relay and button state on the broker so it survives a reconnect. Momentary events (switch press/release) are never retained regardless of this setting.</string>
+    <string name="mqtt_retain_state_hint">Keep sensor, relay and button state on the broker so it survives a reconnect. Momentary switch press/release events are never retained regardless of this setting.</string>
     <string name="proximity_sensor_available">Proximity sensor available to app: %1$s</string>
     <string name="sensor_available_yes">Yes</string>
     <string name="sensor_available_no">No</string>
