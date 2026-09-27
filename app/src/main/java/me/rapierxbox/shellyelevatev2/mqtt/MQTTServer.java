@@ -28,7 +28,9 @@ import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -85,6 +87,7 @@ public class MQTTServer {
     // guarded by coalesce lock
     private Map<String, PendingPublish> pendingPublishes = new LinkedHashMap<>();
     private boolean flushScheduled = false;
+    private final Set<String> retainedButtonTopics = new LinkedHashSet<>();
 
     private BroadcastReceiver settingsChangedReceiver;
     private BroadcastReceiver voiceStateReceiver;
@@ -540,9 +543,16 @@ public class MQTTServer {
         MqttClient client = mMqttClient;
         if (client == null || !client.isConnected()) return;
         try {
-            client.publish(parseTopic(MQTT_TOPIC_POWER_BUTTON), new byte[0], 1, true);
+            Set<String> topicsToClear = new LinkedHashSet<>();
+            topicsToClear.add(parseTopic(MQTT_TOPIC_POWER_BUTTON));
             for (int button = 0; button < DeviceModel.getReportedDevice().buttons; button++) {
-                client.publish(parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + button, new byte[0], 1, true);
+                topicsToClear.add(parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + button);
+            }
+            synchronized (retainedButtonTopics) {
+                topicsToClear.addAll(retainedButtonTopics);
+            }
+            for (String topic : topicsToClear) {
+                client.publish(topic, new byte[0], 1, true);
             }
             clearRetainedButtonsPending = false;
         } catch (MqttException e) {
@@ -758,10 +768,16 @@ public class MQTTServer {
         String topic = (number == 140)
                 ? parseTopic(MQTT_TOPIC_POWER_BUTTON)
                 : parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
+        boolean retain = shouldRetainState();
+        if (retain) {
+            synchronized (retainedButtonTopics) {
+                retainedButtonTopics.add(topic);
+            }
+        }
 
         // retained (when enabled) so the last-press timestamp sensor survives a reconnect instead of going unknown;
         // the ha mqtt event entity already discards replayed retained messages on its own, so it won't refire
-        publishInternal(topic, json.toString(), 1, shouldRetainState());
+        publishInternal(topic, json.toString(), 1, retain);
     }
 
     public void publishVoiceState() {
