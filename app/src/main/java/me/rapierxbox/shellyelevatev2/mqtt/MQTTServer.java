@@ -791,15 +791,15 @@ public class MQTTServer {
         if (mVoiceAssistantManager == null) return;
         if (!mVoiceAssistantManager.isEnabled() && !mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)) return;
         publishInternal(parseTopic(MQTT_TOPIC_VOICE_STATUS),
-                mVoiceAssistantManager.getPublishedStatus(), 1, true);
+                mVoiceAssistantManager.getPublishedStatus(), 1, shouldRetainState());
         publishInternal(parseTopic(MQTT_TOPIC_VOICE_MUTE_STATE),
-                mVoiceAssistantManager.isMuted() ? "ON" : "OFF", 1, true);
+                mVoiceAssistantManager.isMuted() ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     public void publishNightModeState() {
         if (mNightModeManager == null) return;
         publishInternal(parseTopic(MQTT_TOPIC_NIGHT_MODE_STATE),
-                mNightModeManager.isEnabled() ? "ON" : "OFF", 1, true);
+                mNightModeManager.isEnabled() ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     public void publishSwipeEvent(String eventType) {
