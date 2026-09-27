@@ -67,6 +67,8 @@ public class MQTTServer {
     private volatile boolean validForConnection;
     // connection settings the current client was built from
     private volatile String appliedConnectionKey = "";
+    private volatile boolean appliedRetainState = shouldRetainState();
+    private volatile boolean clearRetainedButtonsPending = false;
 
     // guarded by this
     private ScheduledFuture<?> periodicFuture;
@@ -161,6 +163,12 @@ public class MQTTServer {
 
     private void reconnectWithNewSettings() {
         execute(() -> {
+            boolean currentRetainState = shouldRetainState();
+            if (appliedRetainState && !currentRetainState) {
+                clearRetainedButtonsPending = true;
+            }
+            appliedRetainState = currentRetainState;
+
             // settings the connection does not depend on only need a fresh state and discovery sync
             if (connectionKey().equals(appliedConnectionKey) && isClientConnected()) {
                 Log.d(TAG, "Connection settings unchanged - republishing state only");
@@ -501,6 +509,7 @@ public class MQTTServer {
 
         execute(() -> {
             try {
+                clearRetainedButtonPayloadsIfPending();
                 publishHello();
                 if (isHaDiscoveryEnabled()) {
                     publishConfig();
@@ -524,6 +533,21 @@ public class MQTTServer {
                 Log.e(TAG, "publishStatus failed", e);
             }
         });
+    }
+
+    private void clearRetainedButtonPayloadsIfPending() {
+        if (!clearRetainedButtonsPending) return;
+        MqttClient client = mMqttClient;
+        if (client == null || !client.isConnected()) return;
+        try {
+            client.publish(parseTopic(MQTT_TOPIC_POWER_BUTTON), new byte[0], 1, true);
+            for (int button = 0; button < DeviceModel.getReportedDevice().buttons; button++) {
+                client.publish(parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + button, new byte[0], 1, true);
+            }
+            clearRetainedButtonsPending = false;
+        } catch (MqttException e) {
+            Log.w(TAG, "Failed to clear retained button payloads", e);
+        }
     }
 
     private void publishRelaysAndInputs() {
