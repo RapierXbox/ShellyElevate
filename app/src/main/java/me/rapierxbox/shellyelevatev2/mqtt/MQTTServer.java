@@ -70,7 +70,7 @@ public class MQTTServer {
     // connection settings the current client was built from
     private volatile String appliedConnectionKey = "";
     private volatile boolean appliedRetainState = shouldRetainState();
-    private volatile boolean clearRetainedButtonsPending = false;
+    private volatile boolean clearRetainedStatePending = false;
 
     // guarded by this
     private ScheduledFuture<?> periodicFuture;
@@ -87,7 +87,7 @@ public class MQTTServer {
     // guarded by coalesce lock
     private Map<String, PendingPublish> pendingPublishes = new LinkedHashMap<>();
     private boolean flushScheduled = false;
-    private final Set<String> retainedButtonTopics = new LinkedHashSet<>();
+    private final Set<String> retainedStateTopics = new LinkedHashSet<>();
 
     private BroadcastReceiver settingsChangedReceiver;
     private BroadcastReceiver voiceStateReceiver;
@@ -168,7 +168,7 @@ public class MQTTServer {
         execute(() -> {
             boolean currentRetainState = shouldRetainState();
             if (appliedRetainState && !currentRetainState) {
-                clearRetainedButtonsPending = true;
+                clearRetainedStatePending = true;
             }
             appliedRetainState = currentRetainState;
 
@@ -512,7 +512,7 @@ public class MQTTServer {
 
         execute(() -> {
             try {
-                clearRetainedButtonPayloadsIfPending();
+                clearRetainedStatePayloadsIfPending();
                 publishHello();
                 if (isHaDiscoveryEnabled()) {
                     publishConfig();
@@ -538,8 +538,8 @@ public class MQTTServer {
         });
     }
 
-    private void clearRetainedButtonPayloadsIfPending() {
-        if (!clearRetainedButtonsPending) return;
+    private void clearRetainedStatePayloadsIfPending() {
+        if (!clearRetainedStatePending) return;
         MqttClient client = mMqttClient;
         if (client == null || !client.isConnected()) return;
         try {
@@ -548,15 +548,15 @@ public class MQTTServer {
             for (int button = 0; button < DeviceModel.getReportedDevice().buttons; button++) {
                 topicsToClear.add(parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + button);
             }
-            synchronized (retainedButtonTopics) {
-                topicsToClear.addAll(retainedButtonTopics);
+            synchronized (retainedStateTopics) {
+                topicsToClear.addAll(retainedStateTopics);
             }
             for (String topic : topicsToClear) {
                 client.publish(topic, new byte[0], 1, true);
             }
-            clearRetainedButtonsPending = false;
+            clearRetainedStatePending = false;
         } catch (MqttException e) {
-            Log.w(TAG, "Failed to clear retained button payloads", e);
+            Log.w(TAG, "Failed to clear retained state payloads", e);
         }
     }
 
@@ -642,6 +642,13 @@ public class MQTTServer {
         if (!isEnabled() || client == null || !client.isConnected()) {
             Log.w(TAG, "publishInternal skipped, client not connected: " + topic);
             return;
+        }
+        String stateTopicPrefix = "shellyelevatev2/" + clientId + "/";
+        if (retained && topic.startsWith(stateTopicPrefix)
+                && !topic.equals(parseTopic(MQTT_TOPIC_STATUS))) {
+            synchronized (retainedStateTopics) {
+                retainedStateTopics.add(topic);
+            }
         }
         publishSync(client, topic, payload, qos, retained);
     }
@@ -770,8 +777,8 @@ public class MQTTServer {
                 : parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
         boolean retain = shouldRetainState();
         if (retain) {
-            synchronized (retainedButtonTopics) {
-                retainedButtonTopics.add(topic);
+            synchronized (retainedStateTopics) {
+                retainedStateTopics.add(topic);
             }
         }
 
