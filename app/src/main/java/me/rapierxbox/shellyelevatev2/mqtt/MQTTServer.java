@@ -28,7 +28,9 @@ import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -67,6 +69,8 @@ public class MQTTServer {
     private volatile boolean validForConnection;
     // connection settings the current client was built from
     private volatile String appliedConnectionKey = "";
+    private volatile boolean appliedRetainState = shouldRetainState();
+    private volatile boolean clearRetainedStatePending = false;
 
     // guarded by this
     private ScheduledFuture<?> periodicFuture;
@@ -83,6 +87,7 @@ public class MQTTServer {
     // guarded by coalesce lock
     private Map<String, PendingPublish> pendingPublishes = new LinkedHashMap<>();
     private boolean flushScheduled = false;
+    private final Set<String> retainedStateTopics = new LinkedHashSet<>();
 
     private BroadcastReceiver settingsChangedReceiver;
     private BroadcastReceiver voiceStateReceiver;
@@ -161,6 +166,12 @@ public class MQTTServer {
 
     private void reconnectWithNewSettings() {
         execute(() -> {
+            boolean currentRetainState = shouldRetainState();
+            if (appliedRetainState && !currentRetainState) {
+                clearRetainedStatePending = true;
+            }
+            appliedRetainState = currentRetainState;
+
             // settings the connection does not depend on only need a fresh state and discovery sync
             if (connectionKey().equals(appliedConnectionKey) && isClientConnected()) {
                 Log.d(TAG, "Connection settings unchanged - republishing state only");
@@ -501,6 +512,7 @@ public class MQTTServer {
 
         execute(() -> {
             try {
+                clearRetainedStatePayloadsIfPending();
                 publishHello();
                 if (isHaDiscoveryEnabled()) {
                     publishConfig();
@@ -524,6 +536,28 @@ public class MQTTServer {
                 Log.e(TAG, "publishStatus failed", e);
             }
         });
+    }
+
+    private void clearRetainedStatePayloadsIfPending() {
+        if (!clearRetainedStatePending) return;
+        MqttClient client = mMqttClient;
+        if (client == null || !client.isConnected()) return;
+        try {
+            Set<String> topicsToClear = new LinkedHashSet<>();
+            topicsToClear.add(parseTopic(MQTT_TOPIC_POWER_BUTTON));
+            for (int button = 0; button < DeviceModel.getReportedDevice().buttons; button++) {
+                topicsToClear.add(parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + button);
+            }
+            synchronized (retainedStateTopics) {
+                topicsToClear.addAll(retainedStateTopics);
+            }
+            for (String topic : topicsToClear) {
+                client.publish(topic, new byte[0], 1, true);
+            }
+            clearRetainedStatePending = false;
+        } catch (MqttException e) {
+            Log.w(TAG, "Failed to clear retained state payloads", e);
+        }
     }
 
     private void publishRelaysAndInputs() {
@@ -608,6 +642,13 @@ public class MQTTServer {
         if (!isEnabled() || client == null || !client.isConnected()) {
             Log.w(TAG, "publishInternal skipped, client not connected: " + topic);
             return;
+        }
+        String stateTopicPrefix = "shellyelevatev2/" + clientId + "/";
+        if (retained && topic.startsWith(stateTopicPrefix)
+                && !topic.equals(parseTopic(MQTT_TOPIC_STATUS))) {
+            synchronized (retainedStateTopics) {
+                retainedStateTopics.add(topic);
+            }
         }
         publishSync(client, topic, payload, qos, retained);
     }
@@ -734,24 +775,31 @@ public class MQTTServer {
         String topic = (number == 140)
                 ? parseTopic(MQTT_TOPIC_POWER_BUTTON)
                 : parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + number;
+        boolean retain = shouldRetainState();
+        if (retain) {
+            synchronized (retainedStateTopics) {
+                retainedStateTopics.add(topic);
+            }
+        }
 
-        // not coalesced so rapid presses all reach ha
-        publishInternal(topic, json.toString(), 1, false);
+        // retained (when enabled) so the last-press timestamp sensor survives a reconnect instead of going unknown;
+        // the ha mqtt event entity already discards replayed retained messages on its own, so it won't refire
+        publishInternal(topic, json.toString(), 1, retain);
     }
 
     public void publishVoiceState() {
         if (mVoiceAssistantManager == null) return;
         if (!mVoiceAssistantManager.isEnabled() && !mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)) return;
         publishInternal(parseTopic(MQTT_TOPIC_VOICE_STATUS),
-                mVoiceAssistantManager.getPublishedStatus(), 1, true);
+                mVoiceAssistantManager.getPublishedStatus(), 1, shouldRetainState());
         publishInternal(parseTopic(MQTT_TOPIC_VOICE_MUTE_STATE),
-                mVoiceAssistantManager.isMuted() ? "ON" : "OFF", 1, true);
+                mVoiceAssistantManager.isMuted() ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     public void publishNightModeState() {
         if (mNightModeManager == null) return;
         publishInternal(parseTopic(MQTT_TOPIC_NIGHT_MODE_STATE),
-                mNightModeManager.isEnabled() ? "ON" : "OFF", 1, true);
+                mNightModeManager.isEnabled() ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     public void publishSwipeEvent(String eventType) {

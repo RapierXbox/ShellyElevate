@@ -296,13 +296,15 @@ class SettingsFragment : Fragment() {
                 binding.mqttBrokerLayout, binding.mqttPortLayout,
                 binding.mqttUsernameLayout, binding.mqttPasswordLayout,
                 binding.mqttClientIdLayout,
-                binding.mqttHaDiscovery, binding.mqttHaDiscoveryHint)
+                binding.mqttHaDiscovery, binding.mqttHaDiscoveryHint,
+                binding.mqttRetainState, binding.mqttRetainStateHint)
             +TextPref(binding.mqttBroker, SP_MQTT_BROKER)
             +IntTextPref(binding.mqttPort, SP_MQTT_PORT, MQTT_DEFAULT_PORT)
             +TextPref(binding.mqttUsername, SP_MQTT_USERNAME)
             +TextPref(binding.mqttPassword, SP_MQTT_PASSWORD)
             +TextPref(binding.mqttClientId, SP_MQTT_CLIENTID, defaultClientId)
             +SwitchPref(binding.mqttHaDiscovery, SP_MQTT_HA_DISCOVERY, true)
+            +SwitchPref(binding.mqttRetainState, SP_MQTT_RETAIN_STATE, true)
 
             +SwitchPref(binding.switchOnSwipe, SP_SWITCH_ON_SWIPE, true)
             +SwitchPref(binding.publishSwipeEvents, SP_PUBLISH_SWIPE_EVENTS, true)
