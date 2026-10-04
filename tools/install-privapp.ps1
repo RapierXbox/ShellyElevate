@@ -1,4 +1,4 @@
-# pushes the apk into /system/priv-app and grants the manual perms then reboots
+# pushes the apk into /system/priv-app then reboots and grants the manual perms
 param(
     [Parameter(Mandatory = $true)]
     [string]$Apk
@@ -43,9 +43,40 @@ if ($labelOut -notmatch "ok") {
     Write-Error "chmod/chcon failed: $labelOut"
     exit 1
 }
-& adb shell "appops set $pkg WRITE_SETTINGS allow"
-& adb shell "dumpsys deviceidle whitelist +$pkg"
 & adb shell "mount -o ro,remount /system 2>/dev/null || mount -o ro,remount /"
-& adb reboot
 
-Write-Host "done. device is rebooting"
+# package manager only knows the app after the boot scan so grants must wait for it
+Write-Host "rebooting so the priv-app gets scanned"
+& adb reboot
+# without this the old boot can still answer boot_completed=1
+& adb wait-for-disconnect
+& adb wait-for-device
+$deadline = (Get-Date).AddMinutes(5)
+do {
+    Start-Sleep -Seconds 2
+    $booted = (& adb shell getprop sys.boot_completed 2>$null) -join ""
+    if ((Get-Date) -gt $deadline) {
+        Write-Error "device did not finish booting within 5 minutes"
+        exit 1
+    }
+} until ($booted.Trim() -eq "1")
+& adb root | Out-Null
+& adb wait-for-device
+
+$pmOut = (& adb shell "pm path $pkg") -join ""
+if ($pmOut -notmatch "package:") {
+    Write-Error "$pkg was not picked up after reboot. check logcat for PackageManager errors"
+    exit 1
+}
+
+Write-Host "applying permissions"
+& adb shell "appops set $pkg WRITE_SETTINGS allow"
+& adb shell "dumpsys deviceidle whitelist +$pkg" | Out-Null
+$opsOut = (& adb shell "appops get $pkg WRITE_SETTINGS") -join ""
+$idleOut = (& adb shell "dumpsys deviceidle whitelist") -join "`n"
+if ($opsOut -notmatch "allow" -or $idleOut -notmatch [regex]::Escape($pkg)) {
+    Write-Error "permissions did not apply. appops: $opsOut"
+    exit 1
+}
+
+Write-Host "done. installed at $pmOut with WRITE_SETTINGS and battery whitelist"

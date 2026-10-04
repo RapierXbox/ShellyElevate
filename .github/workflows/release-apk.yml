@@ -61,35 +61,27 @@ jobs:
             exit 1
           fi
 
+      # resolve the version once so the apk and the release tag can never drift apart
+      - name: Resolve version
+        id: version
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            # manual runs use the gradle date scheme
+            VERSION="3.$(date +%y%j).$(date +%H%M)"
+          fi
+          echo "name=v${VERSION}" >> "$GITHUB_OUTPUT"
+
       - name: Build release APK
         env:
           SIGNING_KEYSTORE_BASE64: ${{ secrets.SIGNING_KEYSTORE_BASE64 }}
           SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
           SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
           SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-          # on tag builds the apk version must equal the tag (see build.gradle.kts)
-          SE_RELEASE_VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+          # the apk version must equal the release tag (see build.gradle.kts)
+          SE_RELEASE_VERSION: ${{ steps.version.outputs.name }}
         run: ./gradlew clean :app:assembleRelease --no-daemon --stacktrace
-
-      - name: Extract version
-        id: version
-        run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            # fallback matching the gradle date scheme for manual runs
-            VERSION="3.$(date +%y%j).$(date +%H%M)"
-          fi
-          echo "name=v${VERSION}" >> "$GITHUB_OUTPUT"
-
-      - name: Resolve release tag
-        id: tag
-        run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          else
-            echo "name=${{ steps.version.outputs.name }}" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Prepare APK for release
         run: |
@@ -100,8 +92,8 @@ jobs:
       - name: Upload APK to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.tag.outputs.name }}
-          name: ${{ steps.tag.outputs.name }}
+          tag_name: ${{ steps.version.outputs.name }}
+          name: ${{ steps.version.outputs.name }}
           generate_release_notes: true
           files: |
             ShellyElevateV2-*.apk
