@@ -133,6 +133,8 @@ class SettingsFragment : Fragment() {
         setupModelChooser()
         setupWebViewUpdater()
         setupAppUpdater()
+        // registers itself on the view lifecycle
+        WifiSettingsSection(this, binding.wifiSection)
     }
 
     private fun setupWebViewUpdater() {

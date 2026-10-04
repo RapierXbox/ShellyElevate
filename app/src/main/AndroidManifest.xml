@@ -10,6 +10,11 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- wifi settings section: scan and add or connect networks -->
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <!-- forget or change networks another app created. only granted when the /system copy requests it -->
+    <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG"
+        tools:ignore="ProtectedPermissions" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
@@ -29,6 +34,7 @@
         android:usesPermissionFlags="neverForLocation"
         tools:targetApi="s"/>
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" tools:targetApi="s"/>
+    <!-- also gates wifi scan results. runtime perm granted by install-privapp or the settings prompt -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" android:maxSdkVersion="30"/>
     <!-- webview ota via recovery on the android 7 era firmware -->
     <uses-permission android:name="android.permission.ACCESS_CACHE_FILESYSTEM"

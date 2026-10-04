@@ -772,6 +772,12 @@
                     tools:text="192.168.1.50:5555" />
             </LinearLayout>
 
+            <include
+                android:id="@+id/wifiSection"
+                layout="@layout/settings_wifi_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
             <com.google.android.material.materialswitch.MaterialSwitch
                 android:id="@+id/mediaEnabled"
                 android:layout_width="match_parent"

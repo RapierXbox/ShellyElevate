@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- strings for the wifi networks settings section -->
+<resources>
+    <string name="wifi_title">Wi-Fi networks</string>
+    <string name="wifi_scan">Scan</string>
+    <string name="wifi_add_hidden">Add hidden network</string>
+    <string name="wifi_scanning">Scanning…</string>
+    <string name="wifi_scan_failed">Scan could not be started</string>
+    <string name="wifi_no_networks">No networks found</string>
+    <string name="wifi_current">Connected to %1$s · %2$s</string>
+    <string name="wifi_not_connected">Not connected</string>
+    <string name="wifi_off">Wi-Fi is off. Scan turns it on</string>
+    <string name="wifi_unavailable">Wi-Fi is not available on this device</string>
+    <string name="wifi_no_ip">no IP yet</string>
+
+    <string name="wifi_hint_permission">Listing nearby networks needs the location permission. Grant it below or reinstall with tools/install-privapp</string>
+    <string name="wifi_grant_permission">Grant location permission</string>
+    <string name="wifi_hint_location_off">Location is off so Android hides nearby networks. Turn location on to scan</string>
+    <string name="wifi_open_location_settings">Location settings</string>
+
+    <string name="wifi_state_connected">Connected</string>
+    <string name="wifi_state_saved">Saved</string>
+    <string name="wifi_security_open">Open</string>
+    <string name="wifi_security_enterprise">Enterprise</string>
+    <string name="wifi_security_unsupported">WPA3 / unsupported</string>
+    <string name="wifi_band_24">2.4 GHz</string>
+    <string name="wifi_band_5">5 GHz</string>
+    <string name="wifi_dbm">%1$d dBm</string>
+
+    <string name="wifi_ssid">Network name (SSID)</string>
+    <string name="wifi_security">Security</string>
+    <string name="wifi_password">Password</string>
+    <string name="wifi_password_invalid_psk">Password must be 8 to 63 characters</string>
+    <string name="wifi_password_invalid_wep">WEP key must be 5, 13, 16 or 29 characters or 10, 26, 32 or 58 hex digits</string>
+    <string name="wifi_ssid_invalid">Enter a name of up to 32 bytes</string>
+    <string-array name="wifi_security_options">
+        <item>@string/wifi_security_open</item>
+        <item>WEP</item>
+        <item>WPA/WPA2 Personal</item>
+    </string-array>
+
+    <string name="wifi_connect">Connect</string>
+    <string name="wifi_forget">Forget</string>
+    <string name="wifi_close">Close</string>
+    <string name="wifi_switch_title">Switch network?</string>
+    <string name="wifi_switch_warning">This disconnects from %1$s. A remote HTTP or adb session over Wi-Fi will drop and may not come back if the new network uses another subnet.</string>
+    <string name="wifi_saved_message">Saved network</string>
+    <string name="wifi_connected_message">Signal %1$d dBm · %2$s\nIP address %3$s</string>
+    <string name="wifi_forget_connected_title">Forget %1$s?</string>
+    <string name="wifi_forget_connected_message">The display disconnects from this network right away. A remote session over Wi-Fi will drop.</string>
+    <string name="wifi_forgotten">%1$s forgotten</string>
+    <string name="wifi_forget_failed">Could not forget %1$s</string>
+    <string name="wifi_forget_failed_permission">Could not forget %1$s. Networks added elsewhere need OVERRIDE_WIFI_CONFIG, reinstall with tools/install-privapp</string>
+    <string name="wifi_unsupported_security">%1$s uses %2$s security which cannot be set up here</string>
+    <string name="wifi_busy">Already connecting, please wait</string>
+
+    <string name="wifi_connecting">Connecting to %1$s…</string>
+    <string name="wifi_connecting_step">Connecting to %1$s: %2$s…</string>
+    <string name="wifi_step_scanning">searching</string>
+    <string name="wifi_step_associating">associating</string>
+    <string name="wifi_step_authenticating">checking password</string>
+    <string name="wifi_step_obtaining_ip">obtaining IP address</string>
+    <string name="wifi_connected_result">Connected to %1$s with IP %2$s</string>
+    <string name="wifi_failed_auth">Wrong password for %1$s</string>
+    <string name="wifi_failed_timeout">Connecting to %1$s timed out</string>
+    <string name="wifi_failed">Could not connect to %1$s</string>
+</resources>

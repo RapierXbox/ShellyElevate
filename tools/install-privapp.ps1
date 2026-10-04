@@ -72,11 +72,14 @@ if ($pmOut -notmatch "package:") {
 Write-Host "applying permissions"
 & adb shell "appops set $pkg WRITE_SETTINGS allow"
 & adb shell "dumpsys deviceidle whitelist +$pkg" | Out-Null
+# runtime perm so the wifi settings section gets scan results
+& adb shell "pm grant $pkg android.permission.ACCESS_FINE_LOCATION"
 $opsOut = (& adb shell "appops get $pkg WRITE_SETTINGS") -join ""
 $idleOut = (& adb shell "dumpsys deviceidle whitelist") -join "`n"
-if ($opsOut -notmatch "allow" -or $idleOut -notmatch [regex]::Escape($pkg)) {
+$locOut = (& adb shell "dumpsys package $pkg") -join "`n"
+if ($opsOut -notmatch "allow" -or $idleOut -notmatch [regex]::Escape($pkg) -or $locOut -notmatch "ACCESS_FINE_LOCATION: granted=true") {
     Write-Error "permissions did not apply. appops: $opsOut"
     exit 1
 }
 
-Write-Host "done. installed at $pmOut with WRITE_SETTINGS and battery whitelist"
+Write-Host "done. installed at $pmOut with WRITE_SETTINGS, location and battery whitelist"

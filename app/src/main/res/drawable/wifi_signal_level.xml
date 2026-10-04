@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the image level clips the full wedge from the bottom over the dimmed one -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/ic_wifi_signal_empty" />
+    <item>
+        <clip
+            android:clipOrientation="vertical"
+            android:drawable="@drawable/ic_wifi_signal_full"
+            android:gravity="bottom" />
+    </item>
+</layer-list>

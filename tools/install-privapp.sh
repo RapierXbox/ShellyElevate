@@ -52,10 +52,13 @@ fi
 echo "applying permissions"
 adb shell "appops set $PKG WRITE_SETTINGS allow"
 adb shell "dumpsys deviceidle whitelist +$PKG" >/dev/null
+# runtime perm so the wifi settings section gets scan results
+adb shell "pm grant $PKG android.permission.ACCESS_FINE_LOCATION" || true
 if ! adb shell "appops get $PKG WRITE_SETTINGS" | grep -q "allow" \
-    || ! adb shell "dumpsys deviceidle whitelist" | grep -q "$PKG"; then
+    || ! adb shell "dumpsys deviceidle whitelist" | grep -q "$PKG" \
+    || ! adb shell "dumpsys package $PKG" | grep -q "ACCESS_FINE_LOCATION: granted=true"; then
     echo "permissions did not apply"
     exit 1
 fi
 
-echo "done. installed with WRITE_SETTINGS and battery whitelist"
+echo "done. installed with WRITE_SETTINGS, location and battery whitelist"
