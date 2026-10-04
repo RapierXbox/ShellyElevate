@@ -21,6 +21,7 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.InputDevice;
+import android.view.KeyCharacterMap;
 import android.view.KeyEvent;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
@@ -156,6 +157,10 @@ public class SwInputHandler {
     private boolean isSwTerminalLevelKey(KeyEvent event) {
         if (!SwInputStateMachine.isAndroidSwLevelKey(event.getKeyCode())) return false;
         if (SW_INPUT_INDEX >= device.inputs) return false;
+        // digits typed on the on screen keyboard arrive as key events from the virtual
+        // keyboard and must reach the focused text field (mqtt host etc)
+        if ((event.getFlags() & KeyEvent.FLAG_SOFT_KEYBOARD) != 0
+                || event.getDeviceId() == KeyCharacterMap.VIRTUAL_KEYBOARD) return false;
         int sourceId = event.getDeviceId();
         if (sourceId != levelKeySourceId) {
             levelKeySourceId = sourceId;
