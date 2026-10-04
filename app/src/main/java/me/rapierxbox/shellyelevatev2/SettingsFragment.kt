@@ -26,10 +26,13 @@ import androidx.core.content.edit
 import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -47,6 +50,7 @@ import me.rapierxbox.shellyelevatev2.helper.AppUpdater
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
+import me.rapierxbox.shellyelevatev2.helper.WifiIpConfig
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
 import java.io.File
 import java.io.IOException
@@ -135,6 +139,7 @@ class SettingsFragment : Fragment() {
         setupAppUpdater()
         // registers itself on the view lifecycle
         WifiSettingsSection(this, binding.wifiSection)
+        setupWifiIpSection()
     }
 
     private fun setupWebViewUpdater() {
@@ -257,6 +262,177 @@ class SettingsFragment : Fragment() {
                 Toast.makeText(requireContext(), getString(R.string.app_update_failed, reason), Toast.LENGTH_LONG).show()
             }
         })
+    }
+
+    // ---- wifi ip configuration ----
+
+    private var wifiIpState: WifiIpConfig.State? = null
+    // fields are filled once so a connectivity refresh never clobbers typed values
+    private var wifiIpPrefilled = false
+    private var wifiIpApplying = false
+    private var wifiIpRefreshJob: Job? = null
+
+    private fun setupWifiIpSection() {
+        // the fragment can outlive its view so start clean
+        wifiIpPrefilled = false
+        wifiIpApplying = false
+        binding.wifiIpUseStatic.setOnCheckedChangeListener { _, isChecked -> binding.wifiIpStaticLayout.isVisible = isChecked }
+        binding.wifiIpApplyButton.setOnClickListener { confirmWifiIpApply() }
+        val ctx = requireContext().applicationContext
+        val callback = WifiIpConfig.watch(ctx) { refreshWifiIp() }
+        // unregister with the view so callbacks never touch a dead binding
+        viewLifecycleOwner.lifecycle.addObserver(LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_DESTROY) WifiIpConfig.unwatch(ctx, callback)
+        })
+        refreshWifiIp()
+    }
+
+    private fun refreshWifiIp() {
+        if (_binding == null) return
+        val ctx = requireContext().applicationContext
+        wifiIpRefreshJob?.cancel()
+        wifiIpRefreshJob = viewLifecycleOwner.lifecycleScope.launch {
+            val state = withContext(Dispatchers.IO) { WifiIpConfig.read(ctx) }
+            showWifiIpState(state)
+        }
+    }
+
+    private fun showWifiIpState(s: WifiIpConfig.State) {
+        if (_binding == null) return
+        wifiIpState = s
+        val unknown = getString(R.string.wifi_ip_unknown)
+        binding.wifiIpInfo.text = if (!s.connected && s.ssid == null) {
+            getString(R.string.wifi_ip_not_connected)
+        } else {
+            listOfNotNull(
+                getString(R.string.wifi_ip_ssid, s.ssid ?: unknown),
+                getString(R.string.wifi_ip_address, s.ipAddress ?: unknown),
+                if (s.prefixLength in 1..32) getString(R.string.wifi_ip_netmask, s.prefixLength, WifiIpConfig.prefixToNetmask(s.prefixLength)) else null,
+                getString(R.string.wifi_ip_gateway, s.gateway ?: unknown),
+                getString(R.string.wifi_ip_dns, s.dns.joinToString(", ").ifEmpty { unknown }),
+                getString(R.string.wifi_ip_mode, when {
+                    !s.configFound -> unknown
+                    s.isStatic -> getString(R.string.wifi_ip_mode_static)
+                    else -> getString(R.string.wifi_ip_mode_dhcp)
+                })
+            ).joinToString("\n")
+        }
+
+        val editable = s.configFound && s.permitted
+        binding.wifiIpPermissionHint.isVisible = !s.permitted
+        binding.wifiIpEditLayout.isVisible = editable
+        binding.wifiIpApplyButton.isEnabled = editable && !wifiIpApplying
+
+        if (editable && !wifiIpPrefilled) {
+            wifiIpPrefilled = true
+            // stored static values first otherwise start from what dhcp handed out
+            val stored = s.isStatic && s.staticIp != null
+            binding.wifiIpUseStatic.isChecked = s.isStatic
+            binding.wifiIpStaticLayout.isVisible = s.isStatic
+            binding.wifiIpAddress.setText((if (stored) s.staticIp else s.ipAddress) ?: "")
+            val prefix = if (stored) s.staticPrefix else s.prefixLength
+            binding.wifiIpPrefix.setText(if (prefix > 0) prefix.toString() else "")
+            binding.wifiIpGateway.setText((if (stored) s.staticGateway else s.gateway) ?: "")
+            val dns = if (stored) s.staticDns else s.dns.filter { WifiIpConfig.parseIpv4(it) != null }
+            binding.wifiIpDns1.setText(dns.getOrNull(0) ?: "")
+            binding.wifiIpDns2.setText(dns.getOrNull(1) ?: "")
+        }
+    }
+
+    private fun confirmWifiIpApply() {
+        val s = wifiIpState ?: return
+        if (!s.configFound || !s.permitted || wifiIpApplying) return
+        val unknown = getString(R.string.wifi_ip_unknown)
+        val ssid = s.ssid ?: unknown
+        val config: WifiIpConfig.StaticConfig?
+        val message: String
+        if (binding.wifiIpUseStatic.isChecked) {
+            val result = WifiIpConfig.parseStatic(
+                binding.wifiIpAddress.text.toString(), binding.wifiIpPrefix.text.toString(),
+                binding.wifiIpGateway.text.toString(), binding.wifiIpDns1.text.toString(),
+                binding.wifiIpDns2.text.toString())
+            val parsed = result.config
+            if (parsed == null) {
+                val field = when (result.field) {
+                    WifiIpConfig.FIELD_PREFIX -> binding.wifiIpPrefix
+                    WifiIpConfig.FIELD_GATEWAY -> binding.wifiIpGateway
+                    WifiIpConfig.FIELD_DNS1 -> binding.wifiIpDns1
+                    WifiIpConfig.FIELD_DNS2 -> binding.wifiIpDns2
+                    else -> binding.wifiIpAddress
+                }
+                field.error = getString(result.error)
+                field.requestFocus()
+                return
+            }
+            config = parsed
+            message = getString(R.string.wifi_ip_confirm_static, ssid, parsed.ip.hostAddress, parsed.prefix,
+                parsed.gateway.hostAddress, parsed.dns.joinToString(", ") { it.hostAddress ?: "" })
+        } else {
+            config = null
+            message = getString(R.string.wifi_ip_confirm_dhcp, ssid, s.ipAddress ?: unknown)
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.wifi_ip_confirm_title)
+            .setMessage(message)
+            .setPositiveButton(R.string.wifi_ip_confirm_apply) { _, _ -> applyWifiIp(s.networkId, config) }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun applyWifiIp(networkId: Int, config: WifiIpConfig.StaticConfig?) {
+        if (_binding == null) return
+        wifiIpApplying = true
+        binding.wifiIpApplyButton.isEnabled = false
+        binding.wifiIpStatus.isVisible = true
+        binding.wifiIpStatus.text = getString(R.string.wifi_ip_status_applying)
+        val ctx = requireContext().applicationContext
+        WifiIpConfig.apply(ctx, networkId, config, object : WifiIpConfig.ApplyListener {
+            override fun onApplied() {
+                if (_binding == null) return
+                verifyWifiIp(ctx, config)
+            }
+            override fun onFailed(reason: String) {
+                if (_binding == null) return
+                finishWifiIp(false, getString(R.string.wifi_ip_failed, reason))
+            }
+        })
+    }
+
+    // the save only starts the change so wait for the link to come back with the new address
+    private fun verifyWifiIp(ctx: Context, config: WifiIpConfig.StaticConfig?) {
+        val timeoutSeconds = 30
+        val target = config?.ip?.hostAddress
+        viewLifecycleOwner.lifecycleScope.launch {
+            // let the old address drop first so dhcp is not judged on a stale link
+            delay(3000)
+            var state = WifiIpConfig.State()
+            for (i in 0 until timeoutSeconds) {
+                state = withContext(Dispatchers.IO) { WifiIpConfig.read(ctx) }
+                val ok = state.connected && state.configFound && state.isStatic == (config != null) &&
+                    (target == null || state.ipAddress == target)
+                if (ok) {
+                    finishWifiIp(true, getString(R.string.wifi_ip_result_ok, state.ssid ?: "", state.ipAddress))
+                    return@launch
+                }
+                delay(1000)
+            }
+            finishWifiIp(false, getString(R.string.wifi_ip_result_timeout, timeoutSeconds + 3,
+                state.ipAddress ?: getString(R.string.wifi_ip_unknown)))
+        }
+    }
+
+    private fun finishWifiIp(ok: Boolean, message: String) {
+        if (_binding == null) return
+        wifiIpApplying = false
+        binding.wifiIpStatus.isVisible = false
+        // pick up the stored config again after a change
+        if (ok) wifiIpPrefilled = false
+        refreshWifiIp()
+        AlertDialog.Builder(requireContext())
+            .setTitle(if (ok) R.string.wifi_ip_result_ok_title else R.string.wifi_ip_result_fail_title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     override fun onPause() {

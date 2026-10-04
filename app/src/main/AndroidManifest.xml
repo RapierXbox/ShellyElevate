@@ -10,9 +10,9 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <!-- wifi settings section: scan and add or connect networks -->
+    <!-- wifi settings sections: scan and join networks and set the ip -->
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
-    <!-- forget or change networks another app created. only granted when the /system copy requests it -->
+    <!-- change networks another app created. only granted when the /system copy requests it -->
     <uses-permission android:name="android.permission.OVERRIDE_WIFI_CONFIG"
         tools:ignore="ProtectedPermissions" />
     <uses-permission
