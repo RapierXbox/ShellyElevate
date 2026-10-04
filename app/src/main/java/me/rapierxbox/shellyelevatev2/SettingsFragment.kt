@@ -23,6 +23,7 @@ import android.widget.EditText
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
+import androidx.activity.OnBackPressedCallback
 import androidx.core.view.MenuProvider
 import androidx.core.view.isVisible
 import androidx.fragment.app.Fragment
@@ -140,6 +141,50 @@ class SettingsFragment : Fragment() {
         // registers itself on the view lifecycle
         WifiSettingsSection(this, binding.wifiSection)
         setupWifiIpSection()
+        setupCategories()
+    }
+
+    // back closes an open category before it leaves settings
+    private val categoryBack = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = showCategoryMenu()
+    }
+    private var openCategory: View? = null
+
+    private fun setupCategories() {
+        val pages = listOf(
+            Triple(binding.catDashboardRow, binding.catDashboard, R.string.settings_cat_dashboard),
+            Triple(binding.catDisplayRow, binding.catDisplay, R.string.settings_cat_display),
+            Triple(binding.catScreenSaverRow, binding.catScreenSaver, R.string.settings_cat_screensaver),
+            Triple(binding.catNetworkRow, binding.catNetwork, R.string.settings_cat_network),
+            Triple(binding.catControlsRow, binding.catControls, R.string.settings_cat_controls),
+            Triple(binding.catHomeAssistantRow, binding.catHomeAssistant, R.string.settings_cat_home_assistant),
+            Triple(binding.catSensorsRow, binding.catSensors, R.string.settings_cat_sensors),
+            Triple(binding.catAudioRow, binding.catAudio, R.string.settings_cat_audio),
+            Triple(binding.catBluetoothRow, binding.catBluetooth, R.string.settings_cat_bluetooth),
+            Triple(binding.catUpdatesRow, binding.catUpdates, R.string.settings_cat_updates),
+        )
+        for ((row, page, title) in pages) {
+            row.setOnClickListener { showCategory(page, title) }
+        }
+        requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, categoryBack)
+    }
+
+    private fun showCategory(page: View, title: Int) {
+        binding.settingsMenu.isVisible = false
+        page.isVisible = true
+        openCategory = page
+        categoryBack.isEnabled = true
+        activity?.setTitle(title)
+        binding.settingsScroll.scrollTo(0, 0)
+    }
+
+    private fun showCategoryMenu() {
+        openCategory?.isVisible = false
+        openCategory = null
+        binding.settingsMenu.isVisible = true
+        categoryBack.isEnabled = false
+        activity?.setTitle(R.string.settings)
+        binding.settingsScroll.scrollTo(0, 0)
     }
 
     private fun setupWebViewUpdater() {
