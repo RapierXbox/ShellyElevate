@@ -19,7 +19,8 @@ public class BootReceiver extends BroadcastReceiver {
         String action = intent.getAction();
         Log.i(TAG, "Received intent: " + action);
 
-        if (!Intent.ACTION_BOOT_COMPLETED.equals(action)) return;
+        if (!Intent.ACTION_BOOT_COMPLETED.equals(action)
+                && !Intent.ACTION_MY_PACKAGE_REPLACED.equals(action)) return;
 
         Log.i(TAG, "Starting... (If not already started)");
         ServiceHelper.ensureKioskService(context);

@@ -46,9 +46,6 @@ public final class Constants {
     // webview version before the reboot into recovery so a set value means an ota is in flight
     public static final String SP_WEBVIEW_UPDATE_PENDING_FROM = "webviewUpdatePendingFrom";
 
-    // priv app install prefs
-    public static final String SP_PRIVAPP_PROMOTION_ATTEMPTED = "privAppPromotionAttempted";
-
     // screen prefs
     public static final String SP_AUTOMATIC_BRIGHTNESS = "automaticBrightness";
     public static final String SP_MIN_BRIGHTNESS = "minBrightness";

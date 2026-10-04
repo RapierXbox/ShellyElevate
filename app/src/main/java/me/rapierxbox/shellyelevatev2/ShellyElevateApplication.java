@@ -5,7 +5,6 @@ import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MEDIA_ENABLED;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_PRIVAPP_PROMOTION_ATTEMPTED;
 
 import android.app.Application;
 import android.content.BroadcastReceiver;
@@ -192,24 +191,13 @@ public class ShellyElevateApplication extends Application {
         }
     }
 
-    // grants the manual adb perms and self promotes to a priv app off the main thread
+    // grants the manual adb perms off the main thread
+    // promotion to a priv app is left to tools/install-privapp since the app user cannot write /system
     private void runFirstRunPrivilegeSetup() {
         // a plain thread so no idle executor thread lingers for the process lifetime
         new Thread(() -> {
             try {
                 PrivAppInstaller.autoGrantPermissions(this);
-                boolean isPriv = PrivAppInstaller.isPrivApp(this);
-                boolean attempted = mSharedPreferences.getBoolean(SP_PRIVAPP_PROMOTION_ATTEMPTED, false);
-                if (!isPriv && !attempted) {
-                    // commit the marker before any reboot so a failed promotion never loops
-                    mSharedPreferences.edit().putBoolean(SP_PRIVAPP_PROMOTION_ATTEMPTED, true).commit();
-                    if (PrivAppInstaller.promoteToPrivApp(this) == PrivAppInstaller.Result.PROMOTED) {
-                        Runtime.getRuntime().exec("reboot");
-                    }
-                } else if (isPriv && attempted) {
-                    // promotion confirmed so clear the marker
-                    mSharedPreferences.edit().putBoolean(SP_PRIVAPP_PROMOTION_ATTEMPTED, false).apply();
-                }
                 // the adb tcp port property resets on reboot so restore the saved state
                 AdbHelper.applyFromPrefs();
             } catch (Throwable t) {

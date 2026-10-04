@@ -1,18 +1,29 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageInfo;
+import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
+
+import androidx.core.content.ContextCompat;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,12 +36,15 @@ import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
 
-// checks github releases and installs a newer apk by replacing the priv-app copy then rebooting
+// checks github releases and installs a newer apk through the package installer
+// the system copy stays in /system/priv-app and the update lands in /data/app on top of it
 public final class AppUpdater {
     private static final String TAG = "AppUpdater";
 
     private static final String RELEASES_API =
             "https://api.github.com/repos/RapierXbox/ShellyElevate/releases/latest";
+
+    private static final String ACTION_INSTALL_STATUS = BuildConfig.APPLICATION_ID + ".APP_UPDATE_STATUS";
 
     private static final ExecutorService POOL = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean IN_PROGRESS = new AtomicBoolean(false);
@@ -53,7 +67,8 @@ public final class AppUpdater {
 
     public interface InstallListener {
         void onProgress(int percent);
-        void onCompleted();
+        // the package manager kills and restarts the app once the install succeeds
+        void onInstalling();
         void onFailed(String reason);
     }
 
@@ -86,54 +101,105 @@ public final class AppUpdater {
     // callbacks fire on the main thread
     public static void downloadAndInstall(Context ctx, ReleaseInfo info, InstallListener listener) {
         Handler main = new Handler(Looper.getMainLooper());
-        if (!PrivAppInstaller.isPrivApp(ctx)) {
+        Context app = ctx.getApplicationContext();
+        if (!PrivAppInstaller.isPrivApp(app)) {
             main.post(() -> listener.onFailed("Not a system app. Run install-privapp first"));
+            return;
+        }
+        if (!PrivAppInstaller.canInstallPackages(app)) {
+            main.post(() -> listener.onFailed("Install permission missing. Run install-privapp once with this version"));
             return;
         }
         if (!IN_PROGRESS.compareAndSet(false, true)) {
             main.post(() -> listener.onFailed("Update already in progress"));
             return;
         }
-        File staging = new File(ctx.getCacheDir(), "app-update.apk");
+        File staging = new File(app.getCacheDir(), "app-update.apk");
         POOL.execute(() -> {
+            boolean committed = false;
             try {
                 HttpDownloader.download(HttpDownloader.defaultClient(), info.apkUrl, staging,
                         pct -> main.post(() -> listener.onProgress(pct)));
                 if (staging.length() <= 0) throw new IOException("Downloaded file is empty");
-                if (!signaturesMatch(ctx, staging)) {
+                if (!signaturesMatch(app, staging)) {
                     Log.e(TAG, "apk signature mismatch, refusing to install");
                     throw new IOException("APK signature mismatch");
                 }
-                if (!PrivAppInstaller.hasSystemSpaceFor(staging.length()))
-                    throw new IOException("Not enough space on /system");
-                if (!PrivAppInstaller.installApk(staging))
-                    throw new IOException("Install into /system failed");
-                main.post(listener::onCompleted);
+                registerStatusReceiver(app, main, listener);
+                commitSession(app, staging);
+                committed = true;
+                main.post(listener::onInstalling);
             } catch (Exception e) {
                 Log.e(TAG, "install failed", e);
                 main.post(() -> listener.onFailed(msg(e)));
             } finally {
+                // the session holds its own copy once written
                 //noinspection ResultOfMethodCallIgnored
                 staging.delete();
-                IN_PROGRESS.set(false);
+                // after a commit the status receiver clears the flag
+                if (!committed) IN_PROGRESS.set(false);
             }
         });
     }
 
-    // exec+waitFor blocks so this must never run on the caller thread since that
-    // is the main thread when triggered from the reboot dialog button
-    public static void rebootToInstall() {
-        POOL.execute(() -> {
-            try {
-                int code = Runtime.getRuntime().exec("reboot").waitFor();
-                if (code != 0) Log.e(TAG, "reboot command exited with " + code);
-            } catch (IOException e) {
-                Log.e(TAG, "reboot failed", e);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                Log.e(TAG, "reboot interrupted", e);
+    private static void commitSession(Context ctx, File apk) throws IOException {
+        PackageInstaller installer = ctx.getPackageManager().getPackageInstaller();
+        PackageInstaller.SessionParams params =
+                new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+        params.setAppPackageName(ctx.getPackageName());
+        params.setSize(apk.length());
+        int sessionId = installer.createSession(params);
+        try (PackageInstaller.Session session = installer.openSession(sessionId)) {
+            try (InputStream in = new FileInputStream(apk);
+                 OutputStream out = session.openWrite("base.apk", 0, apk.length())) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+                session.fsync(out);
             }
-        });
+            Intent status = new Intent(ACTION_INSTALL_STATUS).setPackage(ctx.getPackageName());
+            int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+            // the installer fills in the status extras so the intent must stay mutable
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) flags |= PendingIntent.FLAG_MUTABLE;
+            PendingIntent pi = PendingIntent.getBroadcast(ctx, sessionId, status, flags);
+            session.commit(pi.getIntentSender());
+        } catch (IOException | RuntimeException e) {
+            try {
+                installer.abandonSession(sessionId);
+            } catch (RuntimeException ignored) {}
+            throw e;
+        }
+    }
+
+    // only failures arrive in practice since a successful self update kills this process
+    private static void registerStatusReceiver(Context ctx, Handler main, InstallListener listener) {
+        BroadcastReceiver receiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                int status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE);
+                if (status == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    // a privileged installer never gets here so the grant is missing
+                    finish(context, this);
+                    main.post(() -> listener.onFailed("System asked for confirmation. Run install-privapp once with this version"));
+                    return;
+                }
+                finish(context, this);
+                if (status == PackageInstaller.STATUS_SUCCESS) return;
+                String message = intent.getStringExtra(PackageInstaller.EXTRA_STATUS_MESSAGE);
+                Log.e(TAG, "install failed with status " + status + ": " + message);
+                String reason = message != null ? message : "Install failed (" + status + ")";
+                main.post(() -> listener.onFailed(reason));
+            }
+        };
+        ContextCompat.registerReceiver(ctx, receiver, new IntentFilter(ACTION_INSTALL_STATUS),
+                ContextCompat.RECEIVER_NOT_EXPORTED);
+    }
+
+    private static void finish(Context ctx, BroadcastReceiver receiver) {
+        try {
+            ctx.getApplicationContext().unregisterReceiver(receiver);
+        } catch (IllegalArgumentException ignored) {}
+        IN_PROGRESS.set(false);
     }
 
     // block installs signed with a different key than the running app

@@ -37,6 +37,9 @@
         android:maxSdkVersion="25" tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.REBOOT"
         android:maxSdkVersion="25" tools:ignore="ProtectedPermissions" />
+    <!-- silent self update. only granted when the /system/priv-app copy requests it too -->
+    <uses-permission android:name="android.permission.INSTALL_PACKAGES"
+        tools:ignore="ProtectedPermissions" />
     <uses-feature android:name="android.hardware.sensor.proximity" android:required="false"/>
 
     <application
@@ -82,6 +85,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- relaunch after a self update since the installer kills the app -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

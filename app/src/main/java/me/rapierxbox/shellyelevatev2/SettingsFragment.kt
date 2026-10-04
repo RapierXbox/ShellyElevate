@@ -243,11 +243,10 @@ class SettingsFragment : Fragment() {
                 binding.appUpdateProgressBar.progress = percent
                 binding.appUpdateProgressText.text = getString(R.string.app_update_downloading, percent)
             }
-            override fun onCompleted() {
+            override fun onInstalling() {
                 if (_binding == null) return
                 binding.appUpdateProgressLayout.visibility = View.GONE
-                binding.appUpdateButton.isEnabled = true
-                showAppRebootToInstallDialog()
+                binding.appUpdateStatus.text = getString(R.string.app_update_installing)
             }
             override fun onFailed(reason: String) {
                 if (_binding == null) return
@@ -256,16 +255,6 @@ class SettingsFragment : Fragment() {
                 Toast.makeText(requireContext(), getString(R.string.app_update_failed, reason), Toast.LENGTH_LONG).show()
             }
         })
-    }
-
-    private fun showAppRebootToInstallDialog() {
-        if (!isAdded) return
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.app_update_reboot_title)
-            .setMessage(R.string.app_update_reboot_message)
-            .setPositiveButton(R.string.app_update_reboot_now) { _, _ -> AppUpdater.rebootToInstall() }
-            .setNegativeButton(R.string.app_update_reboot_later, null)
-            .show()
     }
 
     override fun onPause() {
