@@ -16,3 +16,7 @@ build.log
 /.tmp
 *.apk
 /.claude/worktrees/
+
+# apply-settings inputs can hold mqtt passwords and ha tokens
+/tools/*.json
+/tools/ips.txt
