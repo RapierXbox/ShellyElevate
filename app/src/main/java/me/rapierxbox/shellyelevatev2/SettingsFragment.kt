@@ -532,12 +532,6 @@ class SettingsFragment : Fragment() {
                 Toast.makeText(requireContext(), R.string.http_server_not_running, Toast.LENGTH_SHORT).show()
             }
         }
-
-        binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
-            mSwipeHelper?.onTouchEvent(event)
-            mScreenSaverManager?.onTouchEvent(event)
-            false
-        }
     }
 
     private fun applyAodVisibility(saverPosition: Int, screenSaverEnabled: Boolean) {
