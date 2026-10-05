@@ -9,6 +9,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSwInputHandler
 import me.rapierxbox.shellyelevatev2.databinding.SettingsActivityBinding
+import me.rapierxbox.shellyelevatev2.helper.touch.TouchCalibrator
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -38,6 +39,7 @@ class SettingsActivity : AppCompatActivity() {
     // fed here since a view listener only sees ACTION_DOWN unless it eats the gesture
     // and the screensaver wakes on ACTION_UP
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        TouchCalibrator.onTouch(ev)
         val screenManager = mScreenManager
         if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
             consumingWakeGesture = screenManager?.shouldConsumeTouchForWake() == true

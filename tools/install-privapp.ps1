@@ -178,6 +178,14 @@ if ($labelOut -notmatch "ok") {
     Write-Error "chmod/chcon failed: $labelOut"
     exit 1
 }
+# lets the app read the touchscreen so swipes also work while another app is in front
+# init runs every rc file in /system/etc/init and a node that does not exist only logs an error
+$initRc = "/system/etc/init/shellyelevate.rc"
+$rcBody = "on property:sys.boot_completed=1\n" + ((0..15 | ForEach-Object { "    chmod 0664 /dev/input/event$_\n" }) -join "")
+$rcOut = & adb shell "mkdir -p /system/etc/init && printf '$rcBody' > $initRc && chmod 644 $initRc && chcon u:object_r:system_file:s0 $initRc && echo ok"
+if ($rcOut -notmatch "ok") {
+    Write-Warning "touchscreen access rule not installed: $rcOut"
+}
 & adb shell "mount -o ro,remount /system 2>/dev/null || mount -o ro,remount /"
 
 # package manager only knows the app after the boot scan so grants must wait for it

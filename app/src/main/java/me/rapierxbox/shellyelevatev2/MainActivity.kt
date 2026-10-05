@@ -52,6 +52,7 @@ import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry
 import me.rapierxbox.shellyelevatev2.helper.GestureInterceptLayout
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
+import me.rapierxbox.shellyelevatev2.helper.touch.TouchCalibrator
 import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager
 import java.io.File
 
@@ -411,6 +412,12 @@ class MainActivity : ComponentActivity(), DisplayHost {
                 .setMessage(getString(R.string.webview_update_failed, reason))
                 .setPositiveButton(android.R.string.ok, null)
         )
+    }
+
+    // the global touch reader learns the panel axes from touches the dashboard sees
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        TouchCalibrator.onTouch(ev)
+        return super.dispatchTouchEvent(ev)
     }
 
     // keys

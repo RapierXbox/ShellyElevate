@@ -142,6 +142,13 @@ adb shell "mkdir -p $DIR"
 adb push "$APK" "$TARGET"
 adb shell "chmod 644 $TARGET"
 adb shell "chcon u:object_r:system_file:s0 $TARGET" || true
+
+# lets the app read the touchscreen so swipes also work while another app is in front
+# init runs every rc file in /system/etc/init and a node that does not exist only logs an error
+INIT_RC="/system/etc/init/shellyelevate.rc"
+RC_BODY='on property:sys.boot_completed=1\n'
+for n in $(seq 0 15); do RC_BODY="${RC_BODY}    chmod 0664 /dev/input/event$n\n"; done
+adb shell "mkdir -p /system/etc/init && printf '$RC_BODY' > $INIT_RC && chmod 644 $INIT_RC && chcon u:object_r:system_file:s0 $INIT_RC" || true
 adb shell "mount -o ro,remount /system 2>/dev/null || mount -o ro,remount /" || true
 
 # package manager only knows the app after the boot scan so grants must wait for it

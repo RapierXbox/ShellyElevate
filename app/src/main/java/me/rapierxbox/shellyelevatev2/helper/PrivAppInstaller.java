@@ -30,6 +30,9 @@ public final class PrivAppInstaller {
         PrivilegedShell.Result a = PrivilegedShell.runShell("appops set " + pkg + " WRITE_SETTINGS allow");
         PrivilegedShell.Result b = PrivilegedShell.runShell("dumpsys deviceidle whitelist +" + pkg);
         PrivilegedShell.Result c = PrivilegedShell.runShell("appops set " + pkg + " GET_USAGE_STATS allow");
-        Log.i(TAG, "autoGrant writeSettings=" + a.exitCode + " deviceidle=" + b.exitCode + " usageStats=" + c.exitCode);
+        // overlay rights let the switcher open over other apps on android 10 and up and back the edge strip
+        PrivilegedShell.Result d = PrivilegedShell.runShell("appops set " + pkg + " SYSTEM_ALERT_WINDOW allow");
+        Log.i(TAG, "autoGrant writeSettings=" + a.exitCode + " deviceidle=" + b.exitCode
+                + " usageStats=" + c.exitCode + " overlay=" + d.exitCode);
     }
 }

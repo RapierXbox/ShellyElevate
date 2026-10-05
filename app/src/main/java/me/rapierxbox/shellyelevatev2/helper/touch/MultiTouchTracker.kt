@@ -111,13 +111,15 @@ class MultiTouchTracker(private val listener: Listener) {
             ABS_MT_TRACKING_ID -> if (currentSlot in 0 until MAX_CONTACTS) {
                 slotId[currentSlot] = if (value < 0) NO_ID else value
             }
-            ABS_MT_POSITION_X -> when {
-                protocolA -> pendingX = value
-                currentSlot in 0 until MAX_CONTACTS -> slotX[currentSlot] = value
+            // both views are kept since protocol a only reveals itself at the first SYN_MT_REPORT
+            // which comes after the position of the first contact
+            ABS_MT_POSITION_X -> {
+                pendingX = value
+                if (!protocolA && currentSlot in 0 until MAX_CONTACTS) slotX[currentSlot] = value
             }
-            ABS_MT_POSITION_Y -> when {
-                protocolA -> pendingY = value
-                currentSlot in 0 until MAX_CONTACTS -> slotY[currentSlot] = value
+            ABS_MT_POSITION_Y -> {
+                pendingY = value
+                if (!protocolA && currentSlot in 0 until MAX_CONTACTS) slotY[currentSlot] = value
             }
         }
     }

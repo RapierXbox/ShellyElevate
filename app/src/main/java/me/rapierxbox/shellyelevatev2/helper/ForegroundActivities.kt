@@ -3,6 +3,7 @@ package me.rapierxbox.shellyelevatev2.helper
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import java.util.concurrent.CopyOnWriteArraySet
 
 // counts our resumed activities so the global touch reader knows when our own views
 // already see the touches and when another app is in front
@@ -10,6 +11,9 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
 
     @Volatile
     private var resumed = 0
+
+    // run on the main thread whenever we go from no resumed activity to some or back
+    private val listeners = CopyOnWriteArraySet<(Boolean) -> Unit>()
 
     // class of our activity that paused last. when the host resumes and this is not the host itself
     // one of our own screens covered it and not an external app that went away
@@ -21,13 +25,20 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
     @JvmStatic
     fun anyResumed(): Boolean = resumed > 0
 
+    fun addListener(listener: (Boolean) -> Unit) {
+        listeners += listener
+    }
+
     override fun onActivityResumed(activity: Activity) {
         resumed++
+        if (resumed == 1) listeners.forEach { it(true) }
     }
 
     override fun onActivityPaused(activity: Activity) {
+        val wasResumed = resumed > 0
         resumed = (resumed - 1).coerceAtLeast(0)
         lastPausedClass = activity.javaClass.name
+        if (wasResumed && resumed == 0) listeners.forEach { it(false) }
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}

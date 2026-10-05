@@ -4,16 +4,13 @@
 #include <unistd.h>
 #include <poll.h>
 #include <pthread.h>
-#include <dirent.h>
 #include <sys/ioctl.h>
 #include <sys/eventfd.h>
 #include <android/log.h>
 #include <atomic>
 #include <cerrno>
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
-#include <string>
 #include <vector>
 
 #define TAG "ShellyInput"
@@ -277,35 +274,35 @@ Java_me_rapierxbox_shellyelevatev2_helper_InputMonitor_nativeStop(
     __android_log_print(ANDROID_LOG_INFO, TAG, "Monitor stopped");
 }
 
-// finds the first multitouch device and returns "path,minX,maxX,minY,maxY" or null
-extern "C" JNIEXPORT jstring JNICALL
-Java_me_rapierxbox_shellyelevatev2_helper_InputMonitor_nativeFindTouchscreen(
-        JNIEnv* env, jclass /*clazz*/) {
-    DIR* dir = opendir("/dev/input");
-    if (dir == nullptr) {
-        __android_log_print(ANDROID_LOG_WARN, TAG, "Cannot list /dev/input: %s", strerror(errno));
-        return nullptr;
-    }
-    std::string result;
-    struct dirent* entry;
-    while ((entry = readdir(dir)) != nullptr && result.empty()) {
-        if (strncmp(entry->d_name, "event", 5) != 0) continue;
-        std::string path = std::string("/dev/input/") + entry->d_name;
-        int fd = open(path.c_str(), O_RDONLY | O_NONBLOCK | O_CLOEXEC);
-        if (fd < 0) continue;
-        if (isTouchscreen(fd)) {
+// probes one node and returns {status, minX, maxX, minY, maxY}
+// status 0 is a multitouch screen, 1 is some other device and a negative value is the open errno
+// so the java side can tell a missing permission from a node that is simply not a touchscreen
+extern "C" JNIEXPORT jintArray JNICALL
+Java_me_rapierxbox_shellyelevatev2_helper_InputMonitor_nativeProbeTouch(
+        JNIEnv* env, jclass /*clazz*/, jstring jpath) {
+    jint out[5] = {1, 0, 0, 0, 0};
+    const char* path = env->GetStringUTFChars(jpath, nullptr);
+    if (path != nullptr) {
+        int fd = open(path, O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+        if (fd < 0) {
+            out[0] = -errno;
+        } else {
             struct input_absinfo x{}, y{};
-            if (ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), &x) == 0 &&
+            if (isTouchscreen(fd) &&
+                ioctl(fd, EVIOCGABS(ABS_MT_POSITION_X), &x) == 0 &&
                 ioctl(fd, EVIOCGABS(ABS_MT_POSITION_Y), &y) == 0 &&
                 x.maximum > x.minimum && y.maximum > y.minimum) {
-                char buf[256];
-                snprintf(buf, sizeof(buf), "%s,%d,%d,%d,%d", path.c_str(), x.minimum, x.maximum, y.minimum, y.maximum);
-                result = buf;
-                __android_log_print(ANDROID_LOG_INFO, TAG, "Touchscreen %s", buf);
+                out[0] = 0;
+                out[1] = x.minimum;
+                out[2] = x.maximum;
+                out[3] = y.minimum;
+                out[4] = y.maximum;
             }
+            close(fd);
         }
-        close(fd);
+        env->ReleaseStringUTFChars(jpath, path);
     }
-    closedir(dir);
-    return result.empty() ? nullptr : env->NewStringUTF(result.c_str());
+    jintArray result = env->NewIntArray(5);
+    env->SetIntArrayRegion(result, 0, 5, out);
+    return result;
 }

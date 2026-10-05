@@ -107,6 +107,38 @@ class MultiTouchTrackerTest {
         assertEquals(-150f, out[1], 0.001f)
     }
 
+    // the mtk-tpd panel of the stargate wall display. protocol a with tracking ids and BTN_TOUCH
+    // and the first SYN_MT_REPORT only arrives after the first contact position
+    @Test
+    fun mtkProtocolATwoFingerSwipeUpIsClassified() {
+        val ys = listOf(620, 560, 480, 400, 320, 240, 170, 120)
+        ys.forEachIndexed { i, y ->
+            now = i * 45L
+            if (i == 0) tracker.onEvent(0x01, 0x14a, 1, now)
+            for ((id, x) in listOf(0 to 260, 1 to 460)) {
+                abs(ABS_MT_TRACKING_ID, id)
+                abs(ABS_MT_POSITION_X, x)
+                abs(ABS_MT_POSITION_Y, y)
+                tracker.onEvent(EV_SYN, SYN_MT_REPORT, 0, now)
+            }
+            syn()
+        }
+        now += 45
+        tracker.onEvent(0x01, 0x14a, 0, now)
+        tracker.onEvent(EV_SYN, SYN_MT_REPORT, 0, now)
+        syn()
+
+        val g = ended.single()
+        assertEquals(2, g.maxPointers)
+        assertEquals(2, g.tracks.size)
+        // both fingers keep their own column from the very first frame
+        assertEquals(260, g.tracks[0].startX)
+        assertEquals(620, g.tracks[0].startY)
+        val tracks = g.tracks.map { SwipeClassifier.Track(it.startX.toFloat(), it.startY.toFloat(), it.endX.toFloat(), it.endY.toFloat()) }
+        val swipe = SwipeClassifier.classify(tracks, g.maxPointers, g.endMs - g.lastJoinMs, 720f / 3f)
+        assertEquals("swipe_2_up", swipe?.id)
+    }
+
     @Test
     fun protocolBSingleTapHasOneTrack() {
         slot(0, 5, 100, 100)

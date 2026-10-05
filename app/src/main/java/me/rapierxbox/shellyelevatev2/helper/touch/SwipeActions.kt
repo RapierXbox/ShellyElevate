@@ -4,6 +4,7 @@ import android.os.SystemClock
 import android.util.Log
 import me.rapierxbox.shellyelevatev2.BuildConfig
 import me.rapierxbox.shellyelevatev2.Constants.APP_SWITCHER_GESTURE_DEFAULT
+import me.rapierxbox.shellyelevatev2.Constants.APP_SWITCHER_GESTURE_OFF
 import me.rapierxbox.shellyelevatev2.Constants.SP_APP_SWITCHER_GESTURE
 import me.rapierxbox.shellyelevatev2.Constants.SP_PUBLISH_SWIPE_EVENTS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SWITCH_ON_SWIPE
@@ -57,10 +58,7 @@ object SwipeActions {
         // while the screensaver runs it falls through so the swipe stays a plain event
         if (isSwitcherGesture(swipe) && mScreenSaverManager?.isScreenSaverRunning != true) {
             mScreenSaverManager?.onSwipeFired()
-            val now = SystemClock.elapsedRealtime()
-            if (now - lastSwitcherOpenMs < SWITCHER_DEBOUNCE_MS || AppSwitcher.isOpen) return
-            lastSwitcherOpenMs = now
-            AppSwitcher.open(mApplicationContext)
+            openSwitcher()
             return
         }
 
@@ -77,6 +75,16 @@ object SwipeActions {
         if (!mSharedPreferences.getBoolean(SP_PUBLISH_SWIPE_EVENTS, true) || mqtt == null || !mqtt.shouldSend()) return
         mqtt.publishSwipeEvent(eventName(swipe))
         mScreenSaverManager?.onSwipeFired()
+    }
+
+    // debounced so a gesture reported by two sources never opens it twice
+    @JvmStatic
+    fun openSwitcher() {
+        if (switcherGesture() == APP_SWITCHER_GESTURE_OFF) return
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastSwitcherOpenMs < SWITCHER_DEBOUNCE_MS || AppSwitcher.isOpen) return
+        lastSwitcherOpenMs = now
+        AppSwitcher.open(mApplicationContext)
     }
 
     private fun eventName(swipe: Swipe): String {

@@ -23,6 +23,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
+import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.switcher.AppSwitcher;
 
 import org.json.JSONException;
@@ -137,6 +138,8 @@ public class HttpServer extends NanoHTTPD {
                     json.put("proximity", device.hasProximitySensor ? "true" : "false");
                     json.put("numOfButtons", device.buttons);
                     json.put("numOfInputs", device.inputs);
+                    // which touchscreen reader drives swipes over other apps
+                    json.put("touchReader", TouchGestureMonitor.getStatus());
                 } catch (JSONException e) {
                     Log.e(TAG, "Error responding with device details!", e);
                 }

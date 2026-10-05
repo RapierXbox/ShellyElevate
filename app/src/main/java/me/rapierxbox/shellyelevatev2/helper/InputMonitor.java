@@ -66,7 +66,7 @@ public class InputMonitor {
 
     private native void nativeStop(long handle);
 
-    private static native String nativeFindTouchscreen();
+    private static native int[] nativeProbeTouch(String path);
 
     public synchronized boolean start(KeyCallback callback, List<String> paths) {
         if (!sLibraryLoaded) return false;
@@ -89,19 +89,31 @@ public class InputMonitor {
         nativeStop(h);
     }
 
-    // null when no readable multitouch node exists
-    public static Touchscreen findTouchscreen() {
-        if (!sLibraryLoaded) return null;
-        String found = nativeFindTouchscreen();
-        if (found == null) return null;
-        String[] parts = found.split(",");
-        if (parts.length != 5) return null;
-        try {
-            return new Touchscreen(parts[0], Integer.parseInt(parts[1]), Integer.parseInt(parts[2]),
-                    Integer.parseInt(parts[3]), Integer.parseInt(parts[4]));
-        } catch (NumberFormatException e) {
-            Log.w(TAG, "bad touchscreen description " + found);
-            return null;
+    // result of opening one input node
+    public static final class Probe {
+        public static final int TOUCHSCREEN = 0;
+        public static final int OTHER = 1;
+        // negative values are the errno of a failed open
+        public final int status;
+        public final Touchscreen touchscreen;
+
+        Probe(int status, Touchscreen touchscreen) {
+            this.status = status;
+            this.touchscreen = touchscreen;
         }
+
+        public boolean permissionDenied() {
+            // EACCES and EPERM
+            return status == -13 || status == -1;
+        }
+    }
+
+    // null when the native library is missing
+    public static Probe probe(String path) {
+        if (!sLibraryLoaded) return null;
+        int[] r = nativeProbeTouch(path);
+        if (r == null || r.length != 5) return null;
+        Touchscreen ts = r[0] == Probe.TOUCHSCREEN ? new Touchscreen(path, r[1], r[2], r[3], r[4]) : null;
+        return new Probe(r[0], ts);
     }
 }
