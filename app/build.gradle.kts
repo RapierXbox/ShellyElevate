@@ -154,6 +154,7 @@ dependencies {
     implementation(libs.nanohttpd)
     implementation(libs.org.eclipse.paho.mqttv5.client)
     implementation(libs.webkit)
+    implementation(libs.recyclerview)
     implementation(libs.tensorflow.lite)
     implementation(libs.serialport)
 

@@ -88,6 +88,15 @@
             android:label="ShellyElevateV2"
             android:theme="@style/Theme.ShellyElevateV2" />
         <activity android:name=".screensavers.activities.DigitalClockAndDateScreenSaverActivity" />
+        <!-- own task so closing it returns to whatever app was below -->
+        <activity
+            android:name=".switcher.AppSwitcherActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:hardwareAccelerated="true"
+            android:launchMode="singleInstance"
+            android:taskAffinity="me.rapierxbox.shellyelevatev2.switcher"
+            android:theme="@style/Theme.ShellyElevateV2.Switcher" />
 
         <receiver
             android:name=".BootReceiver"

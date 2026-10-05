@@ -15,6 +15,12 @@ public final class Constants {
     public static final String SP_DISPLAY_MODULE = "displayModule";
     public static final String DISPLAY_MODULE_WEBVIEW = "webview";
 
+    // app switcher prefs. the gesture is off or a SwipeClassifier gesture id
+    public static final String SP_APP_SWITCHER_GESTURE = "appSwitcherGesture";
+    public static final String APP_SWITCHER_GESTURE_OFF = "off";
+    public static final String APP_SWITCHER_GESTURE_DEFAULT = "swipe_2_up";
+    public static final String SP_APP_SWITCHER_PREVIEWS = "appSwitcherPreviews";
+
     // media prefs
     public static final String SP_MEDIA_ENABLED = "mediaEnabled";
 

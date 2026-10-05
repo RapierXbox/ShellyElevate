@@ -12,6 +12,7 @@ preference = "1.2.1"
 nanohttpd = "2.3.1"
 okhttp = "5.4.0"
 webkit = "1.16.0"
+recyclerview = "1.4.0"
 tensorflowLite = "2.17.0"
 serialport = "2.1.2"
 
@@ -29,6 +30,7 @@ nanohttpd = { group = "org.nanohttpd", name = "nanohttpd", version.ref = "nanoht
 okhttpbom = { group = "com.squareup.okhttp3", name = "okhttp-bom", version.ref = "okhttp" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp" }
 webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
+recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
 serialport = { group = "io.github.xmaihh", name = "serialport", version.ref = "serialport" }
 

@@ -55,6 +55,7 @@ import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
 import me.rapierxbox.shellyelevatev2.helper.WifiIpConfig
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
+import me.rapierxbox.shellyelevatev2.switcher.AppSwitcherSettings
 import java.io.File
 import java.io.IOException
 import java.net.NetworkInterface
@@ -504,6 +505,7 @@ class SettingsFragment : Fragment() {
         binder = SettingsBinder(mSharedPreferences).apply {
             +displaySettings
             +SwitchPref(binding.liteMode, SP_LITE_MODE, false)
+            +AppSwitcherSettings(requireContext(), binding.appSwitcherGesture, binding.appSwitcherPreviews)
 
             +SwitchPref(binding.adbWifiEnabled, SP_ADB_WIFI_ENABLED, false)
             // both go through the binder so visibleWhen doesnt clobber the toggle action

@@ -16,6 +16,8 @@ public final class ForegroundDetector {
     // first query looks back this far and later ones only read what is new
     private static final long INITIAL_WINDOW_MS = 24L * 60 * 60 * 1000;
     private static final long OVERLAP_MS = 2_000;
+    // the appop is granted in the background at start so a denial is retried after a while
+    private static final long USAGE_STATS_RETRY_MS = 60_000;
 
     private static final Pattern RESUMED = Pattern.compile(
             "(?:mResumedActivity|topResumedActivity|mFocusedActivity)[^{]*\\{[^}]*?\\s([\\w.]+)/([\\w.$]+)");
@@ -38,13 +40,13 @@ public final class ForegroundDetector {
 
     private static Top lastTop;
     private static long lastQueryEnd;
-    private static boolean usageStatsWorks = true;
+    private static long usageStatsRetryAt;
 
     private ForegroundDetector() {}
 
     // null when nothing could tell. may block on a shell call so keep it off the main thread
     public static synchronized Top current(Context context) {
-        if (usageStatsWorks) {
+        if (System.currentTimeMillis() >= usageStatsRetryAt) {
             Top top = fromUsageStats(context);
             if (top != null) return top;
         }
@@ -54,7 +56,7 @@ public final class ForegroundDetector {
     private static Top fromUsageStats(Context context) {
         UsageStatsManager usm = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
         if (usm == null) {
-            usageStatsWorks = false;
+            usageStatsRetryAt = Long.MAX_VALUE;
             return null;
         }
         long now = System.currentTimeMillis();
@@ -64,7 +66,7 @@ public final class ForegroundDetector {
             events = usm.queryEvents(begin, now);
         } catch (SecurityException e) {
             Log.w(TAG, "usage stats not permitted, using dumpsys");
-            usageStatsWorks = false;
+            usageStatsRetryAt = now + USAGE_STATS_RETRY_MS;
             return null;
         }
         boolean any = false;
@@ -80,7 +82,7 @@ public final class ForegroundDetector {
         // a denied appop returns an empty stream instead of throwing
         if (!any && lastTop == null) {
             Log.w(TAG, "usage stats returned nothing, using dumpsys");
-            usageStatsWorks = false;
+            usageStatsRetryAt = now + USAGE_STATS_RETRY_MS;
             lastQueryEnd = 0;
             return null;
         }

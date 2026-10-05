@@ -25,10 +25,12 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.bluetooth.BluetoothProxyManager;
+import me.rapierxbox.shellyelevatev2.display.DisplayController;
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper;
 import me.rapierxbox.shellyelevatev2.helper.ButtonHandler;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.DeviceSensorManager;
+import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.NightModeManager;
 import me.rapierxbox.shellyelevatev2.helper.PowerOptimizer;
@@ -36,6 +38,7 @@ import me.rapierxbox.shellyelevatev2.helper.PrivAppInstaller;
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager;
 import me.rapierxbox.shellyelevatev2.helper.SwInputHandler;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
+import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
@@ -108,6 +111,7 @@ public class ShellyElevateApplication extends Application {
             public void onReceive(Context context, Intent intent) {
                 applyHttpServerSetting();
                 applyMediaSetting();
+                DisplayController.onSettingsChanged(context);
             }
         };
         LocalBroadcastManager.getInstance(this)
@@ -147,11 +151,15 @@ public class ShellyElevateApplication extends Application {
         mScreenManager = new ScreenManager(this);
         mNightModeManager = new NightModeManager(this);
         registerActivityLifecycleCallbacks(mNightModeManager);
+        registerActivityLifecycleCallbacks(ForegroundActivities.INSTANCE);
         mDeviceSensorManager = new DeviceSensorManager(this);
         mSwipeHelper = new SwipeHelper();
         mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
+        DisplayController.init(this);
         // loads launchable apps in the background for pickers and the app switcher
         AppCatalog.init(this);
+        // reads the touchscreen so swipes also work while another app is in front
+        TouchGestureMonitor.start(this);
 
         if (mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false)) {
             mMediaHelper = new MediaHelper();

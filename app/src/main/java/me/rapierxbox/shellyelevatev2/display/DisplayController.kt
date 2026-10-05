@@ -29,6 +29,26 @@ object DisplayController {
     var userAway = false
         private set
 
+    @Volatile
+    private var lastModuleId: String? = null
+
+    @JvmStatic
+    fun init(context: Context) {
+        lastModuleId = activeModule(context).id
+    }
+
+    // a module picked in settings or over http comes to the front right away
+    @JvmStatic
+    fun onSettingsChanged(context: Context) {
+        val app = context.applicationContext
+        val id = activeModule(app).id
+        val previous = lastModuleId
+        lastModuleId = id
+        if (previous == null || previous == id || userAway || isLiteMode(app)) return
+        Log.i(TAG, "display module changed from $previous to $id")
+        worker.execute { bringActiveToFront(app) }
+    }
+
     @JvmStatic
     fun markUserAway(reason: String) {
         if (!userAway) Log.i(TAG, "user left the display module: $reason")

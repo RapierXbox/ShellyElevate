@@ -23,6 +23,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
+import me.rapierxbox.shellyelevatev2.switcher.AppSwitcher;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -438,6 +439,13 @@ public class HttpServer extends NanoHTTPD {
                         } catch (InterruptedException ignored) {}
                         System.exit(0);
                     }, "close-exec").start();
+                }
+                break;
+            case "switcher":
+                jsonResponse.put("success", false);
+                if (method.equals(Method.POST)) {
+                    AppSwitcher.open(mApplicationContext);
+                    jsonResponse.put("success", true);
                 }
                 break;
             case "settings":

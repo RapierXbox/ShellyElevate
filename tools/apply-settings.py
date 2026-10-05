@@ -33,6 +33,8 @@ PER_DEVICE_KEYS = {"mqttDeviceId"}
 SETTINGS = [
     ("display", None, None, None),
     ("displayModule", str, "webview", "what the screen shows: webview or app"),
+    ("appSwitcherGesture", str, "swipe_2_up", "off or swipe_<2..5>_<up|down|left|right> opens the app switcher"),
+    ("appSwitcherPreviews", bool, True, "screenshots on the app switcher cards"),
     ("general", None, None, None),
     ("webviewUrl", str, "", "dashboard url shown in the webview"),
     ("ignoreSslErrors", bool, False, "accept self signed certificates in the webview"),
