@@ -35,6 +35,11 @@
         tools:ignore="ProtectedPermissions" />
     <uses-permission android:name="android.permission.DUMP"
         tools:ignore="ProtectedPermissions" />
+    <!-- closing a switcher card ends the app. force stop needs the /system grant and the
+         background kill works for everyone once the app is behind the switcher -->
+    <uses-permission android:name="android.permission.FORCE_STOP_PACKAGES"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.KILL_BACKGROUND_PROCESSES" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30"/>

@@ -366,7 +366,13 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     private fun closeApp(packageName: String) {
         RecentApps.remove(this, packageName)
         SnapshotStore.remove(packageName)
-        Thread({ PrivilegedShell.runShell("am force-stop $packageName") }, "SwitcherForceStop").start()
+        val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
+        Thread({
+            // force stop also ends services but needs the privileged grant and am does not always
+            // report a denial in its exit code so the background kill always follows
+            PrivilegedShell.runShell("am force-stop $packageName")
+            am.killBackgroundProcesses(packageName)
+        }, "SwitcherForceStop").start()
     }
 
     // animations
