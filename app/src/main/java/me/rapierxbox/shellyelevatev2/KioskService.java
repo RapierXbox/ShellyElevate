@@ -93,7 +93,7 @@ public class KioskService extends Service {
 
 	// an external app module is checked more often than the in process webview
 	private long nextInterval() {
-		return DisplayController.activeModule(this).getWatchdogIntervalMs();
+		return DisplayController.watchdogIntervalMs(this);
 	}
 
 	@Override

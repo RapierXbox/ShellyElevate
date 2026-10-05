@@ -12,6 +12,7 @@ import android.view.View
 import android.view.ViewConfiguration
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
+import android.view.ViewTreeObserver
 import android.view.animation.AccelerateInterpolator
 import android.view.animation.DecelerateInterpolator
 import android.widget.ImageView
@@ -85,13 +86,15 @@ class AppSwitcherActivity : ComponentActivity() {
         setupApps()
         setupCards()
 
-        // hidden until the first layout so nothing flashes at its final spot before animating in
-        content.alpha = 0f
-        content.post {
-            sizeCards()
-            content.alpha = 1f
-            animateIn()
-        }
+        // sized right before the first frame and that frame is skipped so the first thing drawn is the animation
+        content.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                content.viewTreeObserver.removeOnPreDrawListener(this)
+                sizeCards()
+                animateIn()
+                return false
+            }
+        })
     }
 
     override fun onStart() {
@@ -222,7 +225,7 @@ class AppSwitcherActivity : ComponentActivity() {
             override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder) = 0.3f
         }).attachToRecyclerView(cards)
 
-        cards.adapter = cardAdapter
+        // the adapter is attached once the card size is known so every card binds only once
         cardAdapter.submit(buildCards())
         updateEmptyHint()
     }
@@ -245,7 +248,7 @@ class AppSwitcherActivity : ComponentActivity() {
         val side = ((cards.width - cardWidth) / 2 - dp(10)).coerceAtLeast(0)
         val top = ((cards.height - cardHeight - dp(40)) / 2).coerceAtLeast(0)
         cards.setPadding(side, top, side, 0)
-        cardAdapter.notifyItemRangeChanged(0, cardAdapter.itemCount)
+        if (cards.adapter == null) cards.adapter = cardAdapter
 
         val tile = dp(88)
         val columns = ((apps.width - apps.paddingLeft - apps.paddingRight) / tile).coerceAtLeast(2)

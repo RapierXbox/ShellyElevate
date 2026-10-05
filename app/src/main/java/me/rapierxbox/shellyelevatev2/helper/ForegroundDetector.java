@@ -3,6 +3,7 @@ package me.rapierxbox.shellyelevatev2.helper;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.util.regex.Matcher;
@@ -18,6 +19,8 @@ public final class ForegroundDetector {
     private static final long OVERLAP_MS = 2_000;
     // the appop is granted in the background at start so a denial is retried after a while
     private static final long USAGE_STATS_RETRY_MS = 60_000;
+    // one watchdog pass asks several times so answers this fresh are reused
+    private static final long RESULT_TTL_MS = 300;
 
     private static final Pattern RESUMED = Pattern.compile(
             "(?:mResumedActivity|topResumedActivity|mFocusedActivity)[^{]*\\{[^}]*?\\s([\\w.]+)/([\\w.$]+)");
@@ -41,16 +44,28 @@ public final class ForegroundDetector {
     private static Top lastTop;
     private static long lastQueryEnd;
     private static long usageStatsRetryAt;
+    private static Top cachedTop;
+    private static long cachedAt;
+    private static boolean cachedValid;
 
     private ForegroundDetector() {}
 
     // null when nothing could tell. may block on a shell call so keep it off the main thread
     public static synchronized Top current(Context context) {
-        if (System.currentTimeMillis() >= usageStatsRetryAt) {
-            Top top = fromUsageStats(context);
-            if (top != null) return top;
-        }
-        return fromDumpsys();
+        long now = SystemClock.elapsedRealtime();
+        if (cachedValid && now - cachedAt < RESULT_TTL_MS) return cachedTop;
+        Top top = null;
+        if (System.currentTimeMillis() >= usageStatsRetryAt) top = fromUsageStats(context);
+        if (top == null) top = fromDumpsys();
+        cachedTop = top;
+        cachedAt = now;
+        cachedValid = true;
+        return top;
+    }
+
+    // false while the expensive dumpsys fallback answers so callers can poll less often
+    public static synchronized boolean isCheap() {
+        return System.currentTimeMillis() >= usageStatsRetryAt;
     }
 
     private static Top fromUsageStats(Context context) {

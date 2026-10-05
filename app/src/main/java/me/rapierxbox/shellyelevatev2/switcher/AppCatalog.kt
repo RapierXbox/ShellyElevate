@@ -10,6 +10,7 @@ import android.graphics.Canvas
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
+import android.os.Process
 import android.util.Log
 import java.util.concurrent.CopyOnWriteArraySet
 import java.util.concurrent.Executors
@@ -34,7 +35,13 @@ object AppCatalog {
     private var byPackage: Map<String, AppEntry> = emptyMap()
 
     private val listeners = CopyOnWriteArraySet<() -> Unit>()
-    private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "AppCatalog") }
+    // background priority so icon rendering at start never competes with the dashboard
+    private val executor = Executors.newSingleThreadExecutor { r ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            r.run()
+        }, "AppCatalog")
+    }
     private val mainHandler = Handler(Looper.getMainLooper())
     private var appContext: Context? = null
 

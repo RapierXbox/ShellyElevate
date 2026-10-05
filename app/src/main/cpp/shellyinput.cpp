@@ -6,9 +6,11 @@
 #include <pthread.h>
 #include <dirent.h>
 #include <sys/ioctl.h>
+#include <sys/eventfd.h>
 #include <android/log.h>
 #include <atomic>
 #include <cerrno>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -20,7 +22,7 @@
 #define EV_KEY 0x01
 #endif
 
-// poll timeout so the loop notices a stop request
+// only used when no eventfd is available to wake the loop for a stop request
 static const int POLL_TIMEOUT_MS = 500;
 // events drained per read so a burst does not cost one poll round trip each
 static const size_t EVENTS_PER_READ = 64;
@@ -37,6 +39,8 @@ struct Monitor {
     // reused for every touch batch so the hot path does not allocate
     jintArray         batch = nullptr;
     std::vector<int>  fds;
+    // written on stop so poll can block without a timeout and the thread sleeps while idle
+    int               wakeFd = -1;
     std::atomic<bool> stopRequested{false};
     std::atomic<bool> finished{false};
     pthread_t         thread{};
@@ -96,21 +100,26 @@ static void* monitorLoop(void* arg) {
         return nullptr;
     }
 
+    // device fds first and the wake fd last
     std::vector<pollfd> pfds(m->fds.size());
     for (size_t i = 0; i < m->fds.size(); i++) {
         pfds[i].fd     = m->fds[i];
         pfds[i].events = POLLIN;
     }
+    const bool hasWake = m->wakeFd >= 0;
+    if (hasWake) pfds.push_back({m->wakeFd, POLLIN, 0});
+    const size_t extra = hasWake ? 1 : 0;
 
     while (!m->stopRequested.load()) {
-        if (pfds.empty()) {
+        if (pfds.size() == extra) {
             __android_log_print(ANDROID_LOG_WARN, TAG, "No input devices left, monitor exiting");
             break;
         }
-        int ret = poll(pfds.data(), (nfds_t)pfds.size(), POLL_TIMEOUT_MS);
+        int ret = poll(pfds.data(), (nfds_t)pfds.size(), hasWake ? -1 : POLL_TIMEOUT_MS);
         if (ret <= 0) continue;
+        if (hasWake && (pfds.back().revents & POLLIN)) break;
 
-        for (size_t i = 0; i < pfds.size(); ) {
+        for (size_t i = 0; i + extra < pfds.size(); ) {
             // drop dead fds so poll does not return instantly forever
             if (pfds[i].revents & (POLLERR | POLLHUP | POLLNVAL)) {
                 __android_log_print(ANDROID_LOG_WARN, TAG, "Input device fd=%d gone, closing", pfds[i].fd);
@@ -191,6 +200,10 @@ static jlong startMonitor(JNIEnv* env, Mode mode, jobject callback, jobjectArray
     m->callback = env->NewGlobalRef(callback);
     m->method = method;
     m->fds = fds;
+    m->wakeFd = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+    if (m->wakeFd < 0) {
+        __android_log_print(ANDROID_LOG_WARN, TAG, "eventfd failed, polling with a timeout: %s", strerror(errno));
+    }
     if (mode == Mode::TOUCH) {
         jintArray local = env->NewIntArray((jsize)(EVENTS_PER_READ * 3));
         m->batch = (jintArray)env->NewGlobalRef(local);
@@ -203,6 +216,7 @@ static jlong startMonitor(JNIEnv* env, Mode mode, jobject callback, jobjectArray
         closeAll(m->fds);
         env->DeleteGlobalRef(m->callback);
         if (m->batch != nullptr) env->DeleteGlobalRef(m->batch);
+        if (m->wakeFd >= 0) close(m->wakeFd);
         delete m;
         return 0;
     }
@@ -215,13 +229,22 @@ static void stopMonitor(jlong handle) {
     auto* m = reinterpret_cast<Monitor*>(handle);
     if (m == nullptr) return;
     m->stopRequested = true;
+    if (m->wakeFd >= 0) {
+        uint64_t one = 1;
+        // nothing to do on failure since the stop flag is checked after every wake anyway
+        if (write(m->wakeFd, &one, sizeof(one)) < 0) {
+            __android_log_print(ANDROID_LOG_WARN, TAG, "Wake write failed: %s", strerror(errno));
+        }
+    }
     if (pthread_equal(pthread_self(), m->thread)) {
         // called from a callback on the monitor thread itself so joining would deadlock
-        // the struct then leaks once which is cheaper than a use after free
+        // the struct and wake fd then leak once which is cheaper than a use after free
         pthread_detach(m->thread);
         return;
     }
     pthread_join(m->thread, nullptr);
+    // closed only here by the owner so a late stop never writes into a recycled fd number
+    if (m->wakeFd >= 0) close(m->wakeFd);
     delete m;
 }
 

@@ -25,6 +25,13 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
     // keeps the screensaver idle timer fed without a main thread post per frame
     private const val ACTIVITY_PING_INTERVAL_MS = 1000L
 
+    // share of the screen the fingers must travel the switcher way before a snapshot is taken
+    // so pinches and scrolls on the dashboard never pay for a screencap
+    private const val SNAPSHOT_TRIGGER_FRACTION = 0.06f
+
+    // "0003 0035 000001f4"
+    private const val RAW_LINE_LENGTH = 18
+
     private val mainHandler = Handler(Looper.getMainLooper())
     private val tracker = MultiTouchTracker(this)
 
@@ -35,6 +42,20 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
 
     @Volatile
     private var lastPingMs = 0L
+
+    // switcher gesture of the running gesture read once when it starts. only touched on the reader thread
+    private var snapshotFingers = 0
+    private var snapshotDirection: SwipeClassifier.Direction? = null
+    private val meanDelta = FloatArray(2)
+
+    // the panel never rotates so the size is read once
+    private val screenSize by lazy {
+        val metrics = DisplayMetrics()
+        val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+        @Suppress("DEPRECATION")
+        wm.defaultDisplay.getRealMetrics(metrics)
+        floatArrayOf(metrics.widthPixels.toFloat(), metrics.heightPixels.toFloat())
+    }
 
     @Volatile
     @JvmStatic
@@ -85,6 +106,7 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
     }
 
     override fun onTouchActivity() {
+        maybeCaptureSnapshot()
         val now = SystemClock.uptimeMillis()
         if (now - lastPingMs < ACTIVITY_PING_INTERVAL_MS) return
         lastPingMs = now
@@ -95,17 +117,44 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
     }
 
     override fun onGestureStart(pointers: Int) {
-        // grab the screen early so the switcher can show it the moment the swipe ends
         val gesture = SwipeActions.switcherGesture()
+        snapshotFingers = 0
+        snapshotDirection = null
         if (gesture == APP_SWITCHER_GESTURE_OFF) return
-        if (gesture.startsWith("swipe_${pointers}_")) SnapshotStore.capture(appContext)
+        // swipe_<fingers>_<direction>
+        val parts = gesture.split('_')
+        if (parts.size != 3) return
+        snapshotFingers = parts[1].toIntOrNull() ?: 0
+        snapshotDirection = SwipeClassifier.Direction.entries.firstOrNull { it.name.equals(parts[2], ignoreCase = true) }
+    }
+
+    // grabs the screen once the gesture clearly heads the switcher way so the card is ready when it opens
+    private fun maybeCaptureSnapshot() {
+        val direction = snapshotDirection ?: return
+        val screen = touchscreen ?: return
+        if (tracker.liveCount != snapshotFingers) return
+        tracker.liveMeanDelta(meanDelta)
+        val dx = meanDelta[0] / (screen.maxX - screen.minX)
+        val dy = meanDelta[1] / (screen.maxY - screen.minY)
+        val travelled = when (direction) {
+            SwipeClassifier.Direction.UP -> -dy
+            SwipeClassifier.Direction.DOWN -> dy
+            SwipeClassifier.Direction.LEFT -> -dx
+            SwipeClassifier.Direction.RIGHT -> dx
+        }
+        if (travelled < SNAPSHOT_TRIGGER_FRACTION) return
+        // once per gesture
+        snapshotDirection = null
+        SnapshotStore.capture(appContext)
     }
 
     override fun onGestureEnd(gesture: MultiTouchTracker.Gesture) {
+        snapshotDirection = null
         val screen = touchscreen ?: return
-        val metrics = displayMetrics()
-        val w = metrics.widthPixels.toFloat()
-        val h = metrics.heightPixels.toFloat()
+        // our own views already handle this gesture
+        if (ForegroundActivities.anyResumed()) return
+        val w = screenSize[0]
+        val h = screenSize[1]
         val spanX = (screen.maxX - screen.minX).toFloat()
         val spanY = (screen.maxY - screen.minY).toFloat()
         val tracks = gesture.tracks.map {
@@ -126,14 +175,6 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
                 mScreenManager?.onTouchEvent()
             }
         }
-    }
-
-    private fun displayMetrics(): DisplayMetrics {
-        val metrics = DisplayMetrics()
-        val wm = appContext.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        @Suppress("DEPRECATION")
-        wm.defaultDisplay.getRealMetrics(metrics)
-        return metrics
     }
 
     // parses getevent -pl which lists every node with its axes and ranges
@@ -175,6 +216,17 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
         return if (max > min) intArrayOf(min, max) else null
     }
 
+    // parses a hex run without allocating. -1 for a bad digit which only matters for type and code
+    private fun hex(line: String, from: Int, to: Int): Int {
+        var result = 0
+        for (i in from until to) {
+            val digit = Character.digit(line[i], 16)
+            if (digit < 0) return -1
+            result = (result shl 4) or digit
+        }
+        return result
+    }
+
     // raw getevent prints "0003 0035 000001f4" per event when given a single node
     private fun runGetevent(path: String) {
         try {
@@ -185,12 +237,13 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
             BufferedReader(InputStreamReader(process.inputStream)).use { reader ->
                 while (true) {
                     val line = reader.readLine() ?: break
-                    val parts = line.trim().split(Regex("\\s+"))
-                    if (parts.size != 3) continue
-                    val type = parts[0].toIntOrNull(16) ?: continue
-                    val code = parts[1].toIntOrNull(16) ?: continue
+                    // fixed columns so no split or regex runs per event
+                    if (line.length < RAW_LINE_LENGTH || line[4] != ' ' || line[9] != ' ') continue
+                    val type = hex(line, 0, 4)
+                    val code = hex(line, 5, 9)
+                    if (type < 0 || code < 0) continue
                     // values are 32 bit two complement so a released tracking id reads ffffffff
-                    val value = parts[2].toLongOrNull(16)?.toInt() ?: continue
+                    val value = hex(line, 10, 18)
                     tracker.onEvent(type, code, value, SystemClock.uptimeMillis())
                 }
             }

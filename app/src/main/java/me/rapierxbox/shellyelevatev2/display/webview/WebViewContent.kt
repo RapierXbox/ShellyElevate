@@ -26,7 +26,6 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import android.widget.FrameLayout
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
@@ -67,12 +66,11 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private val activity = host.activity
     private val broadcastManager = LocalBroadcastManager.getInstance(activity)
 
-    private val frame = FrameLayout(activity)
-
     // replaced wholesale after a render process crash so never cache it elsewhere
+    // added straight to the module container so the busiest view has no extra layout level
     private var webView: WebView = createWebView()
 
-    override val view: View get() = frame
+    override val view: View get() = webView
     override val gestureTarget: View get() = webView
 
     private var initialLoadDone = false
@@ -199,7 +197,6 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     }
 
     init {
-        frame.addView(webView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         registerBroadcastReceivers()
     }
 

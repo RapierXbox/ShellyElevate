@@ -2,6 +2,9 @@ package me.rapierxbox.shellyelevatev2.switcher
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
@@ -10,6 +13,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_APP_SWITCHER_PREVIEWS
 import me.rapierxbox.shellyelevatev2.MainActivity
 import me.rapierxbox.shellyelevatev2.helper.ForegroundDetector
+import java.io.InputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.util.concurrent.CopyOnWriteArraySet
@@ -28,6 +32,8 @@ object SnapshotStore {
     // raw screencap pixel formats with four bytes per pixel
     private const val FORMAT_RGBA_8888 = 1
     private const val FORMAT_RGBX_8888 = 2
+
+    private val SCALE_PAINT = Paint(Paint.FILTER_BITMAP_FLAG)
 
     private val executor = Executors.newSingleThreadExecutor { r -> Thread(r, "SnapshotStore") }
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -87,13 +93,13 @@ object SnapshotStore {
         val started = SystemClock.elapsedRealtime()
         // without a file argument screencap streams raw pixels to stdout
         val process = Runtime.getRuntime().exec(arrayOf("screencap"))
-        val raw = try {
+        val bitmap = try {
             process.outputStream.close()
-            process.inputStream.use { it.readBytes() }
+            process.inputStream.use { readAndDecode(it) }
         } finally {
             process.destroy()
         }
-        val bitmap = decode(raw) ?: return
+        if (bitmap == null) return
         val top = ForegroundDetector.current(context)
         // our package stands for the dashboard host so settings or the switcher must not land there
         val isOtherOwnUi = top?.packageName == context.packageName &&
@@ -114,9 +120,11 @@ object SnapshotStore {
     }
 
     // header is width height format and on newer releases a dataspace word
-    private fun decode(raw: ByteArray): Bitmap? {
-        if (raw.size < 16) return null
-        val header = ByteBuffer.wrap(raw).order(ByteOrder.LITTLE_ENDIAN)
+    // the pixels are read into one exactly sized buffer and scaled straight into the small 565 card bitmap
+    private fun readAndDecode(input: InputStream): Bitmap? {
+        val head = ByteArray(12)
+        if (!readFully(input, head, 0, head.size)) return null
+        val header = ByteBuffer.wrap(head).order(ByteOrder.LITTLE_ENDIAN)
         val width = header.getInt(0)
         val height = header.getInt(4)
         val format = header.getInt(8)
@@ -125,19 +133,42 @@ object SnapshotStore {
             return null
         }
         val pixelBytes = width * height * 4
-        val offset = raw.size - pixelBytes
-        if (offset !in 12..16) {
-            Log.w(TAG, "unexpected screencap size ${raw.size} for ${width}x$height")
+        // room for the optional dataspace word in front of the pixels
+        val raw = ByteArray(pixelBytes + 4)
+        val read = readAll(input, raw)
+        val offset = read - pixelBytes
+        if (offset != 0 && offset != 4) {
+            Log.w(TAG, "unexpected screencap payload $read for ${width}x$height")
             return null
         }
         val full = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         // rgba bytes match the memory layout of an argb_8888 bitmap
         full.copyPixelsFromBuffer(ByteBuffer.wrap(raw, offset, pixelBytes))
-        val scaled = Bitmap.createScaledBitmap(full, width / DOWNSCALE, height / DOWNSCALE, true)
-        if (scaled !== full) full.recycle()
         // 565 halves the memory and the cards never need alpha
-        val small = scaled.copy(Bitmap.Config.RGB_565, false)
-        scaled.recycle()
+        val small = Bitmap.createBitmap(width / DOWNSCALE, height / DOWNSCALE, Bitmap.Config.RGB_565)
+        Canvas(small).drawBitmap(full, null, Rect(0, 0, small.width, small.height), SCALE_PAINT)
+        full.recycle()
         return small
+    }
+
+    private fun readFully(input: InputStream, buffer: ByteArray, offset: Int, length: Int): Boolean {
+        var done = 0
+        while (done < length) {
+            val n = input.read(buffer, offset + done, length - done)
+            if (n < 0) return false
+            done += n
+        }
+        return true
+    }
+
+    // fills the buffer until the stream ends and returns how much arrived
+    private fun readAll(input: InputStream, buffer: ByteArray): Int {
+        var done = 0
+        while (done < buffer.size) {
+            val n = input.read(buffer, done, buffer.size - done)
+            if (n < 0) break
+            done += n
+        }
+        return done
     }
 }

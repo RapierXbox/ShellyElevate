@@ -77,6 +77,37 @@ class MultiTouchTrackerTest {
     }
 
     @Test
+    fun newTrackingIdInSameSlotIsANewFinger() {
+        slot(0, 1, 100, 100)
+        slot(1, 2, 200, 100)
+        syn()
+        // finger in slot 0 lifts and a new one lands in the same slot within one frame
+        slot(0, 3, 500, 500)
+        syn()
+        slot(0, -1)
+        slot(1, -1)
+        syn()
+        val g = ended.single()
+        assertEquals(3, g.tracks.size)
+        assertEquals(2, g.maxPointers)
+    }
+
+    @Test
+    fun liveMeanDeltaFollowsTheFingersDown() {
+        slot(0, 1, 100, 500)
+        slot(1, 2, 300, 500)
+        syn()
+        slot(0, null, y = 400)
+        slot(1, null, y = 300)
+        syn()
+        val out = FloatArray(2)
+        tracker.liveMeanDelta(out)
+        assertEquals(2, tracker.liveCount)
+        assertEquals(0f, out[0], 0.001f)
+        assertEquals(-150f, out[1], 0.001f)
+    }
+
+    @Test
     fun protocolBSingleTapHasOneTrack() {
         slot(0, 5, 100, 100)
         syn()

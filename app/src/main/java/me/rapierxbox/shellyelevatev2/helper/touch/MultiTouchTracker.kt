@@ -2,10 +2,11 @@ package me.rapierxbox.shellyelevatev2.helper.touch
 
 // turns raw linux multitouch events into gestures. handles protocol b (slots and tracking ids)
 // and the older protocol a (SYN_MT_REPORT separated contacts). no android types so it is unit tested
+// it sees every touch on the panel so a frame allocates nothing and only a new finger creates a Track
 class MultiTouchTracker(private val listener: Listener) {
 
     interface Listener {
-        // any frame with a finger down
+        // every frame with a finger down. keep it cheap
         fun onTouchActivity() {}
 
         // once per gesture as soon as two or more fingers are down together
@@ -28,26 +29,34 @@ class MultiTouchTracker(private val listener: Listener) {
         val endMs: Long
     )
 
-    private class Slot(var id: Int = NO_ID, var x: Int = UNKNOWN, var y: Int = UNKNOWN)
-
-    // protocol b state
+    // protocol b slot state indexed by slot
     private var currentSlot = 0
-    private val slots = HashMap<Int, Slot>()
+    private val slotId = IntArray(MAX_CONTACTS) { NO_ID }
+    private val slotX = IntArray(MAX_CONTACTS) { UNKNOWN }
+    private val slotY = IntArray(MAX_CONTACTS) { UNKNOWN }
 
-    // protocol a state
+    // protocol a contacts of the frame being read in report order
     private var protocolA = false
     private var pendingX = UNKNOWN
     private var pendingY = UNKNOWN
-    private val frameA = ArrayList<IntArray>()
+    private var frameCount = 0
+    private val frameX = IntArray(MAX_CONTACTS)
+    private val frameY = IntArray(MAX_CONTACTS)
 
-    // gesture state
-    private val live = LinkedHashMap<Long, Track>()
-    private val done = ArrayList<Track>()
+    // the finger held by each slot or contact index and the tracking id it had when it went down
+    private val live = arrayOfNulls<Track>(MAX_CONTACTS)
+    private val liveId = IntArray(MAX_CONTACTS) { NO_ID }
+    private val done = ArrayList<Track>(MAX_CONTACTS)
+
     private var gestureActive = false
     private var startNotified = false
     private var maxPointers = 0
     private var startMs = 0L
     private var lastJoinMs = 0L
+
+    // fingers down right now
+    var liveCount = 0
+        private set
 
     fun onEvent(type: Int, code: Int, value: Int, nowMs: Long) {
         when (type) {
@@ -56,7 +65,11 @@ class MultiTouchTracker(private val listener: Listener) {
                 SYN_REPORT -> commitFrame(nowMs)
                 SYN_MT_REPORT -> {
                     protocolA = true
-                    if (pendingX != UNKNOWN && pendingY != UNKNOWN) frameA += intArrayOf(pendingX, pendingY)
+                    if (pendingX != UNKNOWN && pendingY != UNKNOWN && frameCount < MAX_CONTACTS) {
+                        frameX[frameCount] = pendingX
+                        frameY[frameCount] = pendingY
+                        frameCount++
+                    }
                     pendingX = UNKNOWN
                     pendingY = UNKNOWN
                 }
@@ -67,47 +80,80 @@ class MultiTouchTracker(private val listener: Listener) {
     }
 
     fun reset() {
-        slots.clear()
+        slotId.fill(NO_ID)
+        slotX.fill(UNKNOWN)
+        slotY.fill(UNKNOWN)
         currentSlot = 0
-        frameA.clear()
+        frameCount = 0
         pendingX = UNKNOWN
         pendingY = UNKNOWN
         clearGesture()
     }
 
+    // mean movement of the fingers down right now in raw units written to out as dx dy
+    fun liveMeanDelta(out: FloatArray) {
+        var dx = 0f
+        var dy = 0f
+        var n = 0
+        for (track in live) {
+            if (track == null) continue
+            dx += track.endX - track.startX
+            dy += track.endY - track.startY
+            n++
+        }
+        out[0] = if (n > 0) dx / n else 0f
+        out[1] = if (n > 0) dy / n else 0f
+    }
+
     private fun onAbs(code: Int, value: Int) {
         when (code) {
             ABS_MT_SLOT -> currentSlot = value
-            ABS_MT_TRACKING_ID -> {
-                val slot = slots.getOrPut(currentSlot) { Slot() }
-                slot.id = if (value < 0) NO_ID else value
+            ABS_MT_TRACKING_ID -> if (currentSlot in 0 until MAX_CONTACTS) {
+                slotId[currentSlot] = if (value < 0) NO_ID else value
             }
-            ABS_MT_POSITION_X -> if (protocolA) pendingX = value else slots.getOrPut(currentSlot) { Slot() }.x = value
-            ABS_MT_POSITION_Y -> if (protocolA) pendingY = value else slots.getOrPut(currentSlot) { Slot() }.y = value
+            ABS_MT_POSITION_X -> when {
+                protocolA -> pendingX = value
+                currentSlot in 0 until MAX_CONTACTS -> slotX[currentSlot] = value
+            }
+            ABS_MT_POSITION_Y -> when {
+                protocolA -> pendingY = value
+                currentSlot in 0 until MAX_CONTACTS -> slotY[currentSlot] = value
+            }
         }
     }
 
     private fun commitFrame(nowMs: Long) {
-        val active = LinkedHashMap<Long, IntArray>()
-        if (protocolA) {
-            // contacts carry no identity so the order within a frame stands in for it
-            frameA.forEachIndexed { index, xy -> active[index.toLong()] = xy }
-            frameA.clear()
-        } else {
-            for ((index, slot) in slots) {
-                if (slot.id == NO_ID || slot.x == UNKNOWN || slot.y == UNKNOWN) continue
-                active[(index.toLong() shl 32) or (slot.id.toLong() and 0xffffffffL)] = intArrayOf(slot.x, slot.y)
+        var count = 0
+        for (i in 0 until MAX_CONTACTS) {
+            val down: Boolean
+            val x: Int
+            val y: Int
+            val id: Int
+            if (protocolA) {
+                // contacts carry no identity so the order within a frame stands in for it
+                down = i < frameCount
+                x = frameX[i]
+                y = frameY[i]
+                id = 0
+            } else {
+                id = slotId[i]
+                x = slotX[i]
+                y = slotY[i]
+                down = id != NO_ID && x != UNKNOWN && y != UNKNOWN
             }
-        }
 
-        // fingers that lifted keep their last position as the end
-        val lifted = live.keys.filter { it !in active }
-        for (key in lifted) live.remove(key)?.let { done += it }
-
-        for ((key, xy) in active) {
-            val track = live[key]
-            if (track == null) {
-                live[key] = Track(xy[0], xy[1], xy[0], xy[1])
+            val track = live[i]
+            // a new tracking id in the same slot is a new finger
+            if (track != null && (!down || liveId[i] != id)) {
+                done += track
+                live[i] = null
+            }
+            if (!down) continue
+            count++
+            val current = live[i]
+            if (current == null) {
+                live[i] = Track(x, y, x, y)
+                liveId[i] = id
                 if (!gestureActive) {
                     gestureActive = true
                     startMs = nowMs
@@ -115,13 +161,15 @@ class MultiTouchTracker(private val listener: Listener) {
                     lastJoinMs = nowMs
                 }
             } else {
-                track.endX = xy[0]
-                track.endY = xy[1]
+                current.endX = x
+                current.endY = y
             }
         }
+        frameCount = 0
+        liveCount = count
 
-        if (live.isNotEmpty()) {
-            if (live.size > maxPointers) maxPointers = live.size
+        if (count > 0) {
+            if (count > maxPointers) maxPointers = count
             if (maxPointers >= 2 && !startNotified) {
                 startNotified = true
                 listener.onGestureStart(maxPointers)
@@ -132,7 +180,7 @@ class MultiTouchTracker(private val listener: Listener) {
 
         if (gestureActive) {
             val gesture = Gesture(
-                tracks = done.toList(),
+                tracks = ArrayList(done),
                 maxPointers = maxPointers,
                 startMs = startMs,
                 lastJoinMs = if (lastJoinMs > 0) lastJoinMs else startMs,
@@ -144,7 +192,9 @@ class MultiTouchTracker(private val listener: Listener) {
     }
 
     private fun clearGesture() {
-        live.clear()
+        live.fill(null)
+        liveId.fill(NO_ID)
+        liveCount = 0
         done.clear()
         gestureActive = false
         startNotified = false
@@ -164,6 +214,8 @@ class MultiTouchTracker(private val listener: Listener) {
         const val ABS_MT_POSITION_Y = 0x36
         const val ABS_MT_TRACKING_ID = 0x39
 
+        // panels report at most ten fingers and more is never a gesture we care about
+        private const val MAX_CONTACTS = 10
         private const val NO_ID = -1
         private const val UNKNOWN = Int.MIN_VALUE
     }

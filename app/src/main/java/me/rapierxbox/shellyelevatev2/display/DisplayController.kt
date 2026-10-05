@@ -5,10 +5,12 @@ import android.content.Context
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE
 import me.rapierxbox.shellyelevatev2.MainActivity
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.helper.ForegroundDetector
 import java.util.concurrent.Executors
 
@@ -19,6 +21,18 @@ object DisplayController {
 
     // lets a finishing screensaver activity get out of the way before we look at the front
     private const val RETURN_DELAY_MS = 800L
+
+    // the dumpsys fallback spawns a shell so it is polled this many times less often
+    private const val SLOW_DETECTOR_FACTOR = 3
+
+    // launchers rarely change so the package manager is asked at most this often
+    private const val HOME_CACHE_MS = 60_000L
+
+    @Volatile
+    private var homePackages: Set<String> = emptySet()
+
+    @Volatile
+    private var homeLoadedAt = 0L
 
     private val worker = Executors.newSingleThreadExecutor { r -> Thread(r, "DisplayController") }
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -96,12 +110,21 @@ object DisplayController {
         }, RETURN_DELAY_MS)
     }
 
+    // how long the kiosk watchdog waits before the next check
+    @JvmStatic
+    fun watchdogIntervalMs(context: Context): Long {
+        val base = activeModule(context).watchdogIntervalMs
+        return if (ForegroundDetector.isCheap()) base else base * SLOW_DETECTOR_FACTOR
+    }
+
     // run by the kiosk watchdog off the main thread
     @JvmStatic
     fun watchdogCheck(context: Context) {
         val app = context.applicationContext
         if (isLiteMode(app)) return
         if (userAway) return
+        // nothing is visible and the end of the screensaver brings the module back anyway
+        if (mScreenSaverManager?.isScreenSaverRunning == true) return
         val module = activeModule(app)
         val top = ForegroundDetector.current(app)
         if (top == null) {
@@ -169,10 +192,14 @@ object DisplayController {
     }
 
     private fun isHome(context: Context, packageName: String): Boolean {
-        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
-        return context.packageManager.queryIntentActivities(intent, 0)
-            .any { it.activityInfo.packageName == packageName } ||
-            packageName == "com.android.systemui"
+        val now = SystemClock.elapsedRealtime()
+        if (homeLoadedAt == 0L || now - homeLoadedAt > HOME_CACHE_MS) {
+            val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
+            homePackages = context.packageManager.queryIntentActivities(intent, 0)
+                .mapTo(HashSet()) { it.activityInfo.packageName }
+            homeLoadedAt = now
+        }
+        return packageName in homePackages || packageName == "com.android.systemui"
     }
 
     private fun prefs(context: Context) =
