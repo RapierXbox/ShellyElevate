@@ -12,6 +12,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE
 import me.rapierxbox.shellyelevatev2.MainActivity
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.helper.ForegroundDetector
+import me.rapierxbox.shellyelevatev2.switcher.AppSwitcherActivity
 import java.util.concurrent.Executors
 
 // decides when the active display module has to come back to the front
@@ -59,6 +60,8 @@ object DisplayController {
         val previous = lastModuleId
         lastModuleId = id
         if (previous == null || previous == id || userAway || isLiteMode(app)) return
+        // the end of the screensaver brings the new module up
+        if (mScreenSaverManager?.isScreenSaverRunning == true) return
         Log.i(TAG, "display module changed from $previous to $id")
         worker.execute { bringActiveToFront(app) }
     }
@@ -136,12 +139,8 @@ object DisplayController {
             return
         }
         if (module.isInFront(app)) return
-        if (top.packageName == app.packageName) {
-            if (top.className != MainActivity::class.java.name) return
-            // the host is in front but its module is an external app that went away
-            if (module.keepsInFront(app)) module.bringToFront(app)
-            return
-        }
+        // our own screens are fine and a visible host restarts its module itself when it resumes
+        if (top.packageName == app.packageName) return
         if (!isHome(app, top.packageName)) {
             // another app is in front so somebody opened it on purpose
             markUserAway("${top.packageName} in front")
@@ -177,11 +176,13 @@ object DisplayController {
     private fun isOwnTaskTopOurs(context: Context): Boolean = ownTaskTopClass(context) != null
 
     // top activity of our own task or null when we have none
+    // the switcher keeps a hidden task of its own so it never counts
     private fun ownTaskTopClass(context: Context): String? {
         val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return null
         for (task in am.appTasks) {
             try {
                 val top = task.taskInfo.topActivity ?: continue
+                if (top.className == AppSwitcherActivity::class.java.name) continue
                 return top.className
             } catch (e: Exception) {
                 // the task can vanish between listing and querying it

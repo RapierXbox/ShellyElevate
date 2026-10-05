@@ -14,6 +14,7 @@ import androidx.lifecycle.Lifecycle
 import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.display.DisplayContent
 import me.rapierxbox.shellyelevatev2.display.DisplayHost
+import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities
 import me.rapierxbox.shellyelevatev2.switcher.AppCatalog
 
 // black placeholder behind the external app. whenever the host comes back to the front
@@ -46,6 +47,8 @@ class AppContent(private val host: DisplayHost, parent: ViewGroup) : DisplayCont
     }
 
     override fun onResume() {
+        // settings or the switcher covered us so this is no sign of the app dying
+        if (ForegroundActivities.lastPausedClass != activity.javaClass.name) AppDisplayModule.clearLaunchHistory()
         showOpening()
         // a short delay lets a settings or screensaver activity started at the same time win
         handler.removeCallbacks(launchRunnable)

@@ -45,8 +45,15 @@ object AppCatalog {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var appContext: Context? = null
 
+    // installs and component toggles arrive in bursts so they are folded into one reload
+    private const val PACKAGE_CHANGE_DELAY_MS = 2_000L
+    private val refreshRunnable = Runnable { refresh() }
+
     private val packageReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) = refresh()
+        override fun onReceive(context: Context, intent: Intent) {
+            mainHandler.removeCallbacks(refreshRunnable)
+            mainHandler.postDelayed(refreshRunnable, PACKAGE_CHANGE_DELAY_MS)
+        }
     }
 
     @JvmStatic

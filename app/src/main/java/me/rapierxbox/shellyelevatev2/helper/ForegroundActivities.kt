@@ -11,6 +11,13 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
     @Volatile
     private var resumed = 0
 
+    // class of our activity that paused last. when the host resumes and this is not the host itself
+    // one of our own screens covered it and not an external app that went away
+    @Volatile
+    @JvmStatic
+    var lastPausedClass: String? = null
+        private set
+
     @JvmStatic
     fun anyResumed(): Boolean = resumed > 0
 
@@ -20,6 +27,7 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityPaused(activity: Activity) {
         resumed = (resumed - 1).coerceAtLeast(0)
+        lastPausedClass = activity.javaClass.name
     }
 
     override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}

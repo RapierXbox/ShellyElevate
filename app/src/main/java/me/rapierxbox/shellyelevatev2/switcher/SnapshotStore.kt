@@ -54,10 +54,11 @@ object SnapshotStore {
         currentPackage?.takeIf { SystemClock.elapsedRealtime() - currentAtMs < CURRENT_VALID_MS }
 
     // safe from any thread and ignored while a capture is still running
+    // also records which app was in front so the switcher can center it even with previews off
     @JvmStatic
     fun capture(context: Context) {
         val app = context.applicationContext
-        if (!enabled(app) || capturing) return
+        if (capturing) return
         capturing = true
         executor.execute {
             try {
@@ -76,7 +77,7 @@ object SnapshotStore {
         synchronized(cache) { cache.remove(packageName) }
     }
 
-    // listeners run on the main thread with the package that got a new snapshot
+    // listeners run on the main thread with the package that became current or got a new snapshot
     fun addListener(listener: (String) -> Unit) {
         listeners += listener
     }
@@ -91,6 +92,18 @@ object SnapshotStore {
 
     private fun takeSnapshot(context: Context) {
         val started = SystemClock.elapsedRealtime()
+        // asked before the screencap since the switcher is in front by the time it finishes
+        val top = ForegroundDetector.current(context) ?: return
+        // our package stands for the dashboard host so settings or the switcher must not land there
+        val isOtherOwnUi = top.packageName == context.packageName &&
+            top.className != null && top.className != MainActivity::class.java.name
+        if (isOtherOwnUi) return
+        val pkg = top.packageName
+        currentPackage = pkg
+        currentAtMs = SystemClock.elapsedRealtime()
+        mainHandler.post { listeners.forEach { it(pkg) } }
+        if (!enabled(context)) return
+
         // without a file argument screencap streams raw pixels to stdout
         val process = Runtime.getRuntime().exec(arrayOf("screencap"))
         val bitmap = try {
@@ -100,17 +113,6 @@ object SnapshotStore {
             process.destroy()
         }
         if (bitmap == null) return
-        val top = ForegroundDetector.current(context)
-        // our package stands for the dashboard host so settings or the switcher must not land there
-        val isOtherOwnUi = top?.packageName == context.packageName &&
-            top.className != null && top.className != MainActivity::class.java.name
-        val pkg = top?.packageName
-        if (pkg == null || isOtherOwnUi) {
-            bitmap.recycle()
-            return
-        }
-        currentPackage = pkg
-        currentAtMs = SystemClock.elapsedRealtime()
         synchronized(cache) {
             cache[pkg] = bitmap
             while (cache.size > MAX_ENTRIES) cache.remove(cache.keys.first())

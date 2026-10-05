@@ -1,11 +1,14 @@
 package me.rapierxbox.shellyelevatev2.switcher
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.graphics.Outline
+import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
@@ -34,7 +37,7 @@ import kotlin.math.abs
 import kotlin.math.min
 
 // ios style switcher. recent apps as large cards on the left and every app on the right
-// everything it shows is prepared in the background so opening it only binds views
+// the activity is built once and only hidden between uses so opening it again just rebinds the cards
 class AppSwitcherActivity : ComponentActivity() {
 
     private class Card(val packageName: String, val label: String, val icon: Drawable?, val isModule: Boolean)
@@ -52,11 +55,25 @@ class AppSwitcherActivity : ComponentActivity() {
     private var cardWidth = 0
     private var cardHeight = 0
     private var closing = false
+    private var hidden = false
+    private var shownAtMs = 0L
 
-    private val snapshotListener: (String) -> Unit = { pkg -> cardAdapter.onSnapshot(pkg) }
+    // resolved once since the stack effect reads them every scroll frame
+    private val density by lazy { resources.displayMetrics.density }
+    private val cardGap by lazy { dp(10) }
+    private val cardHeader by lazy { dp(40) }
+    private val cardRadius by lazy { dp(20).toFloat() }
+    private val slideDistance by lazy { dp(48).toFloat() }
+    private val exitDistance by lazy { dp(32).toFloat() }
+    private val ownIcon by lazy { applicationInfo.loadIcon(packageManager) }
+    private val decelerate = DecelerateInterpolator(2f)
+    private val accelerate = AccelerateInterpolator()
+
+    private val snapshotListener: (String) -> Unit = { pkg -> onSnapshotOrCurrent(pkg) }
     private val catalogListener: () -> Unit = {
         appAdapter.submit(AppCatalog.apps())
         cardAdapter.submit(buildCards())
+        updateEmptyHint()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -76,8 +93,9 @@ class AppSwitcherActivity : ComponentActivity() {
 
         scrim.setOnClickListener { close() }
         findViewById<View>(R.id.switcherSettings).setOnClickListener {
+            if (closing) return@setOnClickListener
             startActivity(Intent(this, SettingsActivity::class.java))
-            finishNow()
+            hideNow()
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() = close()
@@ -85,32 +103,54 @@ class AppSwitcherActivity : ComponentActivity() {
 
         setupApps()
         setupCards()
+        prepareShow()
+    }
 
-        // sized right before the first frame and that frame is skipped so the first thing drawn is the animation
-        content.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
-            override fun onPreDraw(): Boolean {
-                content.viewTreeObserver.removeOnPreDrawListener(this)
-                sizeCards()
-                animateIn()
-                return false
-            }
-        })
+    // a later open brings the hidden task back here instead of creating the activity again
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        prepareShow()
     }
 
     override fun onStart() {
         super.onStart()
+        hidden = false
         AppSwitcher.isOpen = true
         SnapshotStore.addListener(snapshotListener)
         AppCatalog.addListener(catalogListener)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyImmersive()
     }
 
     override fun onStop() {
         AppSwitcher.isOpen = false
         SnapshotStore.removeListener(snapshotListener)
         AppCatalog.removeListener(catalogListener)
-        // anything covering the switcher ends it so it never waits in the background
-        if (!isFinishing) finish()
+        // anything covering the switcher ends this use so it never pops back up later on its own
+        if (!hidden) hideNow()
         super.onStop()
+    }
+
+    // fresh cards and the entry animation for every open
+    private fun prepareShow() {
+        closing = false
+        shownAtMs = SystemClock.uptimeMillis()
+        resetForEntry()
+        cardAdapter.submit(buildCards())
+        updateEmptyHint()
+        cards.scrollToPosition(0)
+        // sized right before the first frame and that frame is skipped so the first thing drawn is the animation
+        content.viewTreeObserver.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                content.viewTreeObserver.removeOnPreDrawListener(this)
+                if (cardWidth == 0) sizeCards()
+                animateIn()
+                return false
+            }
+        })
     }
 
     @Suppress("DEPRECATION")
@@ -149,10 +189,18 @@ class AppSwitcherActivity : ComponentActivity() {
         inner class Holder(view: View) : RecyclerView.ViewHolder(view) {
             val icon: ImageView = view.findViewById(R.id.appTileIcon)
             val label: TextView = view.findViewById(R.id.appTileLabel)
+
+            init {
+                view.setOnClickListener {
+                    items.getOrNull(bindingAdapterPosition)?.let { open(it.packageName) }
+                }
+            }
         }
 
+        // the catalog hands out a new list on every reload so the same list means nothing changed
         @SuppressLint("NotifyDataSetChanged")
         fun submit(list: List<AppCatalog.AppEntry>) {
+            if (list === items) return
             items = list
             notifyDataSetChanged()
         }
@@ -166,26 +214,33 @@ class AppSwitcherActivity : ComponentActivity() {
             val app = items[position]
             holder.icon.setImageBitmap(app.icon)
             holder.label.text = app.label
-            holder.itemView.setOnClickListener { open(app.packageName) }
         }
     }
 
     // cards
 
+    // runs the stack effect after every layout so new removed or rebound cards never keep a stale scale
+    private inner class CardLayoutManager(context: Context) :
+        LinearLayoutManager(context, HORIZONTAL, false) {
+        override fun onLayoutCompleted(state: RecyclerView.State?) {
+            super.onLayoutCompleted(state)
+            applyStackEffect()
+        }
+    }
+
     @SuppressLint("ClickableViewAccessibility")
     private fun setupCards() {
-        cards.layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        cards.layoutManager = CardLayoutManager(this)
         LinearSnapHelper().attachToRecyclerView(cards)
         cards.addItemDecoration(object : RecyclerView.ItemDecoration() {
-            override fun getItemOffsets(outRect: android.graphics.Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
-                outRect.left = dp(10)
-                outRect.right = dp(10)
+            override fun getItemOffsets(outRect: Rect, view: View, parent: RecyclerView, state: RecyclerView.State) {
+                outRect.left = cardGap
+                outRect.right = cardGap
             }
         })
         cards.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) = applyStackEffect()
         })
-        cards.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> applyStackEffect() }
 
         // a tap on empty space between cards closes like a tap on the scrim
         val slop = ViewConfiguration.get(this).scaledTouchSlop
@@ -224,18 +279,14 @@ class AppSwitcherActivity : ComponentActivity() {
 
             override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder) = 0.3f
         }).attachToRecyclerView(cards)
-
-        // the adapter is attached once the card size is known so every card binds only once
-        cardAdapter.submit(buildCards())
-        updateEmptyHint()
     }
 
     // card size follows the screen aspect so a snapshot fills it without bars
+    // the panel never rotates so this runs once
     private fun sizeCards() {
         val metrics = resources.displayMetrics
         val aspect = metrics.widthPixels.toFloat() / metrics.heightPixels
-        val maxHeight = (cards.height * 0.86f).toInt() - dp(40)
-        var height = maxHeight
+        var height = (cards.height * 0.86f).toInt() - cardHeader
         var width = (height * aspect).toInt()
         val maxWidth = (cards.width * 0.72f).toInt()
         if (width > maxWidth) {
@@ -245,13 +296,13 @@ class AppSwitcherActivity : ComponentActivity() {
         cardWidth = width.coerceAtLeast(dp(80))
         cardHeight = height.coerceAtLeast(dp(80))
         // padding lets the first and last card snap to the middle and centers the row vertically
-        val side = ((cards.width - cardWidth) / 2 - dp(10)).coerceAtLeast(0)
-        val top = ((cards.height - cardHeight - dp(40)) / 2).coerceAtLeast(0)
+        val side = ((cards.width - cardWidth) / 2 - cardGap).coerceAtLeast(0)
+        val top = ((cards.height - cardHeight - cardHeader) / 2).coerceAtLeast(0)
         cards.setPadding(side, top, side, 0)
-        if (cards.adapter == null) cards.adapter = cardAdapter
+        // attached only now so every card binds once at its real size
+        cards.adapter = cardAdapter
 
-        val tile = dp(88)
-        val columns = ((apps.width - apps.paddingLeft - apps.paddingRight) / tile).coerceAtLeast(2)
+        val columns = ((apps.width - apps.paddingLeft - apps.paddingRight) / dp(88)).coerceAtLeast(2)
         (apps.layoutManager as GridLayoutManager).spanCount = columns
     }
 
@@ -259,7 +310,7 @@ class AppSwitcherActivity : ComponentActivity() {
     private fun applyStackEffect() {
         if (cardWidth == 0) return
         val center = cards.width / 2f
-        val step = cardWidth + dp(20).toFloat()
+        val step = (cardWidth + 2 * cardGap).toFloat()
         for (i in 0 until cards.childCount) {
             val child = cards.getChildAt(i)
             val childCenter = (child.left + child.right) / 2f
@@ -281,12 +332,26 @@ class AppSwitcherActivity : ComponentActivity() {
         return order.mapNotNull { pkg ->
             when {
                 pkg == modulePkg && pkg == packageName ->
-                    Card(pkg, getString(module.titleRes), applicationInfo.loadIcon(packageManager), isModule = true)
+                    Card(pkg, getString(module.titleRes), ownIcon, isModule = true)
                 pkg == packageName -> null
                 else -> AppCatalog.find(pkg)?.let {
                     Card(pkg, it.label, it.icon?.let { bmp -> BitmapDrawable(resources, bmp) }, isModule = pkg == modulePkg)
                 }
             }
+        }
+    }
+
+    // the app the user swiped on may only be known a moment after the switcher opened
+    // it moves to the middle while the entry animation still hides the change and later only its picture updates
+    private fun onSnapshotOrCurrent(pkg: String) {
+        val reorder = SystemClock.uptimeMillis() - shownAtMs < REORDER_WINDOW_MS &&
+            pkg == SnapshotStore.currentPackage() && cardAdapter.cardAt(0)?.packageName != pkg
+        if (reorder) {
+            cardAdapter.submit(buildCards())
+            cards.scrollToPosition(0)
+            updateEmptyHint()
+        } else {
+            cardAdapter.onSnapshot(pkg)
         }
     }
 
@@ -307,10 +372,15 @@ class AppSwitcherActivity : ComponentActivity() {
             init {
                 frame.outlineProvider = object : ViewOutlineProvider() {
                     override fun getOutline(view: View, outline: Outline) {
-                        outline.setRoundRect(0, 0, view.width, view.height, dp(20).toFloat())
+                        outline.setRoundRect(0, 0, view.width, view.height, cardRadius)
                     }
                 }
                 frame.clipToOutline = true
+                // the stack effect fades cards every frame and an overlapping alpha would cost an offscreen pass each
+                view.forceHasOverlappingRendering(false)
+                view.setOnClickListener {
+                    cardAt(bindingAdapterPosition)?.let { open(it.packageName) }
+                }
             }
         }
 
@@ -337,8 +407,16 @@ class AppSwitcherActivity : ComponentActivity() {
 
         override fun getItemCount() = items.size
 
-        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
-            Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_switcher_card, parent, false))
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
+            val holder = Holder(LayoutInflater.from(parent.context).inflate(R.layout.item_switcher_card, parent, false))
+            // every card has the same size so it is set once per view and never on bind
+            holder.frame.layoutParams = holder.frame.layoutParams.apply {
+                width = cardWidth
+                height = cardHeight
+            }
+            holder.itemView.layoutParams = holder.itemView.layoutParams.apply { width = cardWidth }
+            return holder
+        }
 
         override fun onBindViewHolder(holder: Holder, position: Int, payloads: MutableList<Any>) {
             if (payloads.contains(PAYLOAD_SNAPSHOT)) {
@@ -350,18 +428,10 @@ class AppSwitcherActivity : ComponentActivity() {
 
         override fun onBindViewHolder(holder: Holder, position: Int) {
             val card = items[position]
-            if (cardWidth > 0) {
-                holder.frame.layoutParams = holder.frame.layoutParams.apply {
-                    width = cardWidth
-                    height = cardHeight
-                }
-                holder.itemView.layoutParams = holder.itemView.layoutParams.apply { width = cardWidth }
-            }
             holder.icon.setImageDrawable(card.icon)
             holder.iconLarge.setImageDrawable(card.icon)
             holder.label.text = card.label
             bindSnapshot(holder, card, fade = false)
-            holder.itemView.setOnClickListener { open(card.packageName) }
         }
 
         private fun bindSnapshot(holder: Holder, card: Card, fade: Boolean) {
@@ -382,7 +452,7 @@ class AppSwitcherActivity : ComponentActivity() {
 
     private fun open(packageName: String) {
         if (closing) return
-        if (AppSwitcher.launch(this, packageName)) finishNow() else close()
+        if (AppSwitcher.launch(this, packageName)) hideNow() else close()
     }
 
     private fun closeApp(packageName: String) {
@@ -393,15 +463,20 @@ class AppSwitcherActivity : ComponentActivity() {
 
     // animations
 
-    private fun animateIn() {
-        val decelerate = DecelerateInterpolator(2f)
-        scrim.animate().alpha(1f).setDuration(180).start()
-        cardsArea.translationY = dp(48).toFloat()
+    private fun resetForEntry() {
+        for (view in arrayOf(scrim, cardsArea, drawer)) view.animate().cancel()
+        scrim.alpha = 0f
+        cardsArea.translationY = slideDistance
         cardsArea.alpha = 0f
-        cardsArea.animate().translationY(0f).alpha(1f).setDuration(240)
-            .setInterpolator(decelerate).withLayer().start()
-        drawer.translationX = dp(48).toFloat()
+        drawer.translationX = slideDistance
         drawer.alpha = 0f
+    }
+
+    // view property animators keep their delay between runs so every run sets it explicitly
+    private fun animateIn() {
+        scrim.animate().alpha(1f).setDuration(180).setStartDelay(0).setInterpolator(decelerate).start()
+        cardsArea.animate().translationY(0f).alpha(1f).setDuration(240).setStartDelay(0)
+            .setInterpolator(decelerate).withLayer().start()
         drawer.animate().translationX(0f).alpha(1f).setDuration(240).setStartDelay(40)
             .setInterpolator(decelerate).withLayer().start()
     }
@@ -409,25 +484,28 @@ class AppSwitcherActivity : ComponentActivity() {
     private fun close() {
         if (closing) return
         closing = true
-        val accelerate = AccelerateInterpolator()
-        scrim.animate().alpha(0f).setDuration(150).start()
-        drawer.animate().translationX(dp(32).toFloat()).alpha(0f).setDuration(150)
+        scrim.animate().alpha(0f).setDuration(150).setStartDelay(0).setInterpolator(accelerate).start()
+        drawer.animate().translationX(exitDistance).alpha(0f).setDuration(150).setStartDelay(0)
             .setInterpolator(accelerate).withLayer().start()
-        cardsArea.animate().translationY(dp(32).toFloat()).alpha(0f).setDuration(150)
-            .setInterpolator(accelerate).withLayer().withEndAction { finishNow() }.start()
+        cardsArea.animate().translationY(exitDistance).alpha(0f).setDuration(150).setStartDelay(0)
+            .setInterpolator(accelerate).withLayer().withEndAction { hideNow() }.start()
     }
 
+    // sends the switcher task behind everything so the next open skips inflating and binding it all again
     // the app being opened animates in by itself so the switcher just disappears under it
-    private fun finishNow() {
+    private fun hideNow() {
         closing = true
-        finish()
+        if (hidden) return
+        hidden = true
+        if (!moveTaskToBack(true)) finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
     }
 
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+    private fun dp(value: Int): Int = (value * density).toInt()
 
     private companion object {
         const val PAYLOAD_SNAPSHOT = "snapshot"
+        const val REORDER_WINDOW_MS = 400L
     }
 }

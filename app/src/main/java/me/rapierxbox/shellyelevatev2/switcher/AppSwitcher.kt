@@ -31,6 +31,8 @@ object AppSwitcher {
     // brings the display module back or opens any other app on purpose
     fun launch(context: Context, packageName: String): Boolean {
         if (packageName == modulePackage(context)) {
+            // a deliberate tap never counts toward the crash loop guard
+            AppDisplayModule.clearLaunchHistory()
             DisplayController.bringActiveToFront(context)
             return true
         }
