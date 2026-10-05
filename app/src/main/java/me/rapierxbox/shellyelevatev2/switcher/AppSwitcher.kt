@@ -28,6 +28,14 @@ object AppSwitcher {
         return if (module === AppDisplayModule) AppDisplayModule.packageName(context).ifEmpty { null } else context.packageName
     }
 
+    // best guess of the external app in front when the system will not tell us
+    // usage stats needs a privileged grant that older installs lack until install-privapp runs again
+    fun guessExternalForeground(context: Context): String? {
+        val module = modulePackage(context)
+        if (!DisplayController.userAway) return module
+        return RecentApps.list(context).firstOrNull { it != module } ?: module
+    }
+
     // brings the display module back or opens any other app on purpose
     fun launch(context: Context, packageName: String): Boolean {
         if (packageName == modulePackage(context)) {

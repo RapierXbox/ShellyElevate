@@ -214,6 +214,10 @@ if ($pmOut -notmatch "package:") {
 
 Write-Host "applying permissions"
 & adb shell "appops set $pkg WRITE_SETTINGS allow"
+# overlay lets the switcher open over other apps and backs the edge swipe strip
+# usage stats tells the app display module which app is in front
+& adb shell "appops set $pkg SYSTEM_ALERT_WINDOW allow"
+& adb shell "appops set $pkg GET_USAGE_STATS allow"
 & adb shell "dumpsys deviceidle whitelist +$pkg" | Out-Null
 # runtime perm so the wifi settings section gets scan results
 & adb shell "pm grant $pkg android.permission.ACCESS_FINE_LOCATION"

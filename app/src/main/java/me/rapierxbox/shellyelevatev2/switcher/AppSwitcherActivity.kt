@@ -161,7 +161,7 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         sized = true
         val metrics = resources.displayMetrics
         val header = (40 * density).toInt()
-        var width = (metrics.widthPixels * 0.74f).toInt()
+        var width = (metrics.widthPixels * 0.70f).toInt()
         var cardHeight = width * metrics.heightPixels / metrics.widthPixels
         val maxCardHeight = (metrics.heightPixels * 0.84f).toInt() - header
         if (cardHeight > maxCardHeight) {

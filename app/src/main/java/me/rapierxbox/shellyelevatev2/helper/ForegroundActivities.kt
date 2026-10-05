@@ -22,6 +22,12 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
     var lastPausedClass: String? = null
         private set
 
+    // class of our activity in front or null while another app is in front
+    @Volatile
+    @JvmStatic
+    var resumedClass: String? = null
+        private set
+
     @JvmStatic
     fun anyResumed(): Boolean = resumed > 0
 
@@ -31,6 +37,7 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
 
     override fun onActivityResumed(activity: Activity) {
         resumed++
+        resumedClass = activity.javaClass.name
         if (resumed == 1) listeners.forEach { it(true) }
     }
 
@@ -38,6 +45,7 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
         val wasResumed = resumed > 0
         resumed = (resumed - 1).coerceAtLeast(0)
         lastPausedClass = activity.javaClass.name
+        if (resumedClass == activity.javaClass.name) resumedClass = null
         if (wasResumed && resumed == 0) listeners.forEach { it(false) }
     }
 

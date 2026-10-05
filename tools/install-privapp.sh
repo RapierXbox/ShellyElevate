@@ -176,6 +176,10 @@ fi
 
 echo "applying permissions"
 adb shell "appops set $PKG WRITE_SETTINGS allow"
+# overlay lets the switcher open over other apps and backs the edge swipe strip
+# usage stats tells the app display module which app is in front
+adb shell "appops set $PKG SYSTEM_ALERT_WINDOW allow"
+adb shell "appops set $PKG GET_USAGE_STATS allow"
 adb shell "dumpsys deviceidle whitelist +$PKG" >/dev/null
 # runtime perm so the wifi settings section gets scan results
 adb shell "pm grant $PKG android.permission.ACCESS_FINE_LOCATION" || true

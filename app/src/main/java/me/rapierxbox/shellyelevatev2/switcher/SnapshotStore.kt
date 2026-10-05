@@ -12,6 +12,7 @@ import android.util.Log
 import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_APP_SWITCHER_PREVIEWS
 import me.rapierxbox.shellyelevatev2.MainActivity
+import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities
 import me.rapierxbox.shellyelevatev2.helper.ForegroundDetector
 import java.io.InputStream
 import java.nio.ByteBuffer
@@ -93,12 +94,7 @@ object SnapshotStore {
     private fun takeSnapshot(context: Context) {
         val started = SystemClock.elapsedRealtime()
         // asked before the screencap since the switcher is in front by the time it finishes
-        val top = ForegroundDetector.current(context) ?: return
-        // our package stands for the dashboard host so settings or the switcher must not land there
-        val isOtherOwnUi = top.packageName == context.packageName &&
-            top.className != null && top.className != MainActivity::class.java.name
-        if (isOtherOwnUi) return
-        val pkg = top.packageName
+        val pkg = frontPackage(context) ?: return
         currentPackage = pkg
         currentAtMs = SystemClock.elapsedRealtime()
         mainHandler.post { listeners.forEach { it(pkg) } }
@@ -119,6 +115,20 @@ object SnapshotStore {
         }
         Log.d(TAG, "snapshot of $pkg in ${SystemClock.elapsedRealtime() - started}ms")
         mainHandler.post { listeners.forEach { it(pkg) } }
+    }
+
+    // the app the snapshot belongs to. our package stands for the dashboard host so settings
+    // or the switcher never land there. null when the screen should not be kept
+    private fun frontPackage(context: Context): String? {
+        val host = MainActivity::class.java.name
+        val own = ForegroundActivities.resumedClass
+        if (own != null) return if (own == host) context.packageName else null
+        val top = ForegroundDetector.current(context)
+        if (top != null) {
+            val otherOwnUi = top.packageName == context.packageName && top.className != null && top.className != host
+            return if (otherOwnUi) null else top.packageName
+        }
+        return AppSwitcher.guessExternalForeground(context)
     }
 
     // header is width height format and on newer releases a dataspace word

@@ -9,7 +9,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:alpha="0"
-        android:background="#D9000000" />
+        android:background="#EE000000" />
 
     <!-- recent apps as pages with the app list as the last page on the right -->
     <me.rapierxbox.shellyelevatev2.switcher.SpringPager

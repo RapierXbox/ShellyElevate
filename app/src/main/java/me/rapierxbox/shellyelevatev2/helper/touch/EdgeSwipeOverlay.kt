@@ -15,6 +15,7 @@ import android.view.View
 import android.view.WindowManager
 import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities
 import me.rapierxbox.shellyelevatev2.helper.PrivilegedShell
+import me.rapierxbox.shellyelevatev2.switcher.SnapshotStore
 import kotlin.math.abs
 
 // last resort when no touchscreen node can be read. a thin invisible strip along the bottom edge
@@ -26,6 +27,8 @@ object EdgeSwipeOverlay {
     private const val STRIP_DP = 18
     // share of the screen height a one finger swipe from the edge has to travel
     private const val EDGE_TRIGGER_FRACTION = 0.08f
+    // share of the screen height after which the preview of the app below is taken
+    private const val SNAPSHOT_FRACTION = 0.03f
     // activity switches report a short gap with nothing resumed so the strip waits this long
     private const val SHOW_DELAY_MS = 400L
 
@@ -82,6 +85,7 @@ object EdgeSwipeOverlay {
         private class Pointer(val startX: Float, val startY: Float, var endX: Float, var endY: Float)
 
         private val pointers = SparseArray<Pointer>()
+        private var snapshotTaken = false
         private var maxPointers = 0
         private var startMs = 0L
         private var lastJoinMs = 0L
@@ -95,6 +99,7 @@ object EdgeSwipeOverlay {
                     pointers.clear()
                     add(event, 0)
                     maxPointers = 1
+                    snapshotTaken = false
                     startMs = event.eventTime
                     lastJoinMs = 0
                 }
@@ -103,10 +108,18 @@ object EdgeSwipeOverlay {
                     maxPointers = maxOf(maxPointers, event.pointerCount)
                     lastJoinMs = event.eventTime
                 }
-                MotionEvent.ACTION_MOVE -> for (i in 0 until event.pointerCount) {
-                    pointers.get(event.getPointerId(i))?.let {
-                        it.endX = event.screenX(i)
-                        it.endY = event.screenY(i)
+                MotionEvent.ACTION_MOVE -> {
+                    for (i in 0 until event.pointerCount) {
+                        pointers.get(event.getPointerId(i))?.let {
+                            it.endX = event.screenX(i)
+                            it.endY = event.screenY(i)
+                        }
+                    }
+                    // the app below is still fully visible here so this is the moment for its preview
+                    val first = pointers.valueAt(0)
+                    if (!snapshotTaken && first != null && first.startY - first.endY > screenH * SNAPSHOT_FRACTION) {
+                        snapshotTaken = true
+                        SnapshotStore.capture(context)
                     }
                 }
                 MotionEvent.ACTION_UP -> {
