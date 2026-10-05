@@ -406,7 +406,8 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         const val REORDER_WINDOW_MS = 400L
         const val ENTRY_SCALE = 1.12f
         const val EXIT_SCALE = 0.92f
-        const val ENTRY_STIFFNESS = 380f
-        const val ENTRY_DAMPING = 0.68f
+        // opens quickly with a slight settle like the ios switcher
+        val ENTRY_STIFFNESS = FluidMotion.stiffness(0.36f)
+        const val ENTRY_DAMPING = 0.82f
     }
 }
