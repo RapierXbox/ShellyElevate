@@ -57,6 +57,11 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     private val cardPool = ArrayList<CardViews>()
     private val shownCards = ArrayList<CardViews>()
     private var closing = false
+    // apps whose card was flung away this time. ended once they are no longer visible
+    private val closedApps = ArrayList<String>()
+    // the app under the switcher when it opened
+    private var belowPackage: String? = null
+    private var launching = false
     private var hidden = false
     private var sized = false
     private var shownAtMs = 0L
@@ -176,8 +181,11 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     // fresh pages and the entry spring for every open
     private fun prepareShow() {
         closing = false
+        launching = false
+        closedApps.clear()
         shownAtMs = SystemClock.uptimeMillis()
         rebuildPages(keepPage = false)
+        belowPackage = cards.firstOrNull()?.packageName
         pager.jumpTo(0)
         updateDots()
         scrim.animate().cancel()
@@ -360,19 +368,39 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
 
     private fun open(packageName: String) {
         if (closing) return
-        if (AppSwitcher.launch(this, packageName)) hideNow() else close()
+        launching = true
+        if (AppSwitcher.launch(this, packageName)) {
+            hideNow()
+        } else {
+            launching = false
+            close()
+        }
     }
 
     private fun closeApp(packageName: String) {
         RecentApps.remove(this, packageName)
         SnapshotStore.remove(packageName)
+        closedApps += packageName
+    }
+
+    // the see through switcher keeps the app below visible and android never kills a visible app
+    // so closed apps end only after the switcher is gone. when the app below was closed the display
+    // module takes its place like closing the current app on a phone goes home
+    private fun endClosedApps() {
+        if (closedApps.isEmpty()) return
+        if (!launching && belowPackage in closedApps) DisplayController.bringActiveToFront(this)
+        val packages = closedApps.toList()
+        closedApps.clear()
         val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
         Thread({
-            // force stop also ends services but needs the privileged grant and am does not always
-            // report a denial in its exit code so the background kill always follows
-            PrivilegedShell.runShell("am force-stop $packageName")
-            am.killBackgroundProcesses(packageName)
-        }, "SwitcherForceStop").start()
+            Thread.sleep(CLOSE_DELAY_MS)
+            for (pkg in packages) {
+                // force stop also ends services but needs the privileged grant and am does not always
+                // report a denial in its exit code so the background kill always follows
+                PrivilegedShell.runShell("am force-stop $pkg")
+                am.killBackgroundProcesses(pkg)
+            }
+        }, "SwitcherCloseApps").start()
     }
 
     // animations
@@ -403,6 +431,7 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         closing = true
         if (hidden) return
         hidden = true
+        endClosedApps()
         if (!moveTaskToBack(true)) finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
@@ -410,6 +439,8 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
 
     private companion object {
         const val REORDER_WINDOW_MS = 400L
+        // long enough for the app below to drop out of the visible state
+        const val CLOSE_DELAY_MS = 1500L
         const val ENTRY_SCALE = 1.12f
         const val EXIT_SCALE = 0.92f
         // opens quickly with a slight settle like the ios switcher
