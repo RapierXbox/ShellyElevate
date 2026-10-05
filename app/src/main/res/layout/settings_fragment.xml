@@ -509,23 +509,15 @@
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="40dp"
+                    android:layout_marginTop="32dp"
                     android:text="@string/app_switcher_title"
-                    android:textSize="20sp"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp"
-                    android:alpha="0.7"
-                    android:text="@string/app_switcher_hint"
-                    android:textSize="14sp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="16dp"
+                    android:layout_marginTop="24dp"
                     android:gravity="center_vertical"
                     android:orientation="horizontal">
 
@@ -533,14 +525,120 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="@string/app_switcher_gesture"
+                        android:text="@string/app_switcher_fingers"
                         android:textSize="18sp" />
 
-                    <Spinner
-                        android:id="@+id/appSwitcherGesture"
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/appSwitcherFingers"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:spinnerMode="dialog" />
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <Button
+                            android:id="@+id/appSwitcherFingersOff"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="56dp"
+                            android:text="@string/app_switcher_gesture_off" />
+
+                        <Button
+                            android:id="@+id/appSwitcherFingers2"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="2"
+                            tools:ignore="HardcodedText" />
+
+                        <Button
+                            android:id="@+id/appSwitcherFingers3"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="3"
+                            tools:ignore="HardcodedText" />
+
+                        <Button
+                            android:id="@+id/appSwitcherFingers4"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="4"
+                            tools:ignore="HardcodedText" />
+
+                        <Button
+                            android:id="@+id/appSwitcherFingers5"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="5"
+                            tools:ignore="HardcodedText" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+                </LinearLayout>
+
+                <LinearLayout
+                    android:id="@+id/appSwitcherDirectionLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="24dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/app_switcher_direction"
+                        android:textSize="18sp" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/appSwitcherDirection"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <Button
+                            android:id="@+id/appSwitcherDirectionUp"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="↑"
+                            tools:ignore="HardcodedText" />
+
+                        <Button
+                            android:id="@+id/appSwitcherDirectionDown"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="↓"
+                            tools:ignore="HardcodedText" />
+
+                        <Button
+                            android:id="@+id/appSwitcherDirectionLeft"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="←"
+                            tools:ignore="HardcodedText" />
+
+                        <Button
+                            android:id="@+id/appSwitcherDirectionRight"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:minWidth="48dp"
+                            android:text="→"
+                            tools:ignore="HardcodedText" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
                 </LinearLayout>
 
                 <com.google.android.material.materialswitch.MaterialSwitch
@@ -716,16 +814,6 @@
 
                 </LinearLayout>
 
-                <TextView
-                    android:id="@+id/aodBrightnessAutoHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="48dp"
-                    android:layout_marginTop="8dp"
-                    android:text="@string/aod_brightness_auto_hint"
-                    android:textSize="14sp"
-                    android:textStyle="italic"
-                    android:visibility="gone" />
 
                 <LinearLayout
                     android:id="@+id/sleepOptimizationLevelLayout"
@@ -749,14 +837,6 @@
                         android:spinnerMode="dialog" />
                 </LinearLayout>
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="48dp"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/sleep_opt_hint"
-                    android:textSize="14sp"
-                    android:textStyle="italic" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/wakeOnProximity"
@@ -992,12 +1072,6 @@
                             </LinearLayout>
                         </LinearLayout>
 
-                        <TextView
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginTop="8dp"
-                            android:text="@string/wifi_ip_hint"
-                            android:textSize="12sp" />
 
                         <Button
                             android:id="@+id/wifiIpApplyButton"
@@ -1214,15 +1288,6 @@
                     android:textSize="18sp"
                     tools:ignore="UseSwitchCompatOrMaterialXml" />
 
-                <TextView
-                    android:id="@+id/swInputModeHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="48dp"
-                    android:layout_marginTop="4dp"
-                    android:text="@string/sw_input_mode_hint"
-                    android:textSize="14sp"
-                    android:textStyle="italic" />
 
                 <!-- Button-to-Relay Mapping -->
                 <com.google.android.material.materialswitch.MaterialSwitch
@@ -1493,14 +1558,6 @@
                     android:textSize="18sp"
                     tools:ignore="UseSwitchCompatOrMaterialXml" />
 
-                <TextView
-                    android:id="@+id/mqttHaDiscoveryHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="48dp"
-                    android:text="@string/mqtt_ha_discovery_hint"
-                    android:textSize="14sp"
-                    android:alpha="0.7" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/mqttRetainState"
@@ -1512,14 +1569,6 @@
                     android:textSize="18sp"
                     tools:ignore="UseSwitchCompatOrMaterialXml" />
 
-                <TextView
-                    android:id="@+id/mqttRetainStateHint"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="48dp"
-                    android:text="@string/mqtt_retain_state_hint"
-                    android:textSize="14sp"
-                    android:alpha="0.7" />
 
             </LinearLayout>
 

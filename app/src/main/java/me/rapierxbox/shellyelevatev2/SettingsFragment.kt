@@ -505,7 +505,8 @@ class SettingsFragment : Fragment() {
         binder = SettingsBinder(mSharedPreferences).apply {
             +displaySettings
             +SwitchPref(binding.liteMode, SP_LITE_MODE, false)
-            +AppSwitcherSettings(requireContext(), binding.appSwitcherGesture, binding.appSwitcherPreviews)
+            +AppSwitcherSettings(binding.appSwitcherFingers, binding.appSwitcherDirection,
+                binding.appSwitcherDirectionLayout, binding.appSwitcherPreviews)
 
             +SwitchPref(binding.adbWifiEnabled, SP_ADB_WIFI_ENABLED, false)
             // both go through the binder so visibleWhen doesnt clobber the toggle action
@@ -517,8 +518,7 @@ class SettingsFragment : Fragment() {
                 binding.mqttBrokerLayout, binding.mqttPortLayout,
                 binding.mqttUsernameLayout, binding.mqttPasswordLayout,
                 binding.mqttClientIdLayout,
-                binding.mqttHaDiscovery, binding.mqttHaDiscoveryHint,
-                binding.mqttRetainState, binding.mqttRetainStateHint)
+                binding.mqttHaDiscovery, binding.mqttRetainState)
             +TextPref(binding.mqttBroker, SP_MQTT_BROKER)
             +IntTextPref(binding.mqttPort, SP_MQTT_PORT, MQTT_DEFAULT_PORT)
             +TextPref(binding.mqttUsername, SP_MQTT_USERNAME)
@@ -596,7 +596,6 @@ class SettingsFragment : Fragment() {
 
         binding.swInputModeLayout.isVisible = hasSwInput
         binding.swInputInvert.isVisible = hasSwInput
-        binding.swInputModeHint.isVisible = hasSwInput
         if (hasSwInput) {
             setupSwInputRelaySpinner(device.relays)
         } else {
@@ -750,7 +749,6 @@ class SettingsFragment : Fragment() {
     private fun applyAodVisibility(saverPosition: Int, screenSaverEnabled: Boolean) {
         val isAod = saverPosition == SCREEN_SAVER_ID_AOD
         binding.minBrightnessScreenSaverLayout.isVisible = screenSaverEnabled && !isAod
-        binding.aodBrightnessAutoHint.isVisible = screenSaverEnabled && isAod
     }
 
     private fun setupModelChooser() {

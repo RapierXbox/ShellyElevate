@@ -36,8 +36,7 @@ object AppDisplayModule : DisplayModule, KeepInFront {
 
     override val options: List<ModuleOption> = listOf(
         ModuleOption.AppPicker(KEY_PACKAGE, KEY_COMPONENT, R.string.display_app_package),
-        ModuleOption.Toggle(KEY_KEEP_IN_FRONT, R.string.display_app_keep_in_front, true,
-            summaryRes = R.string.display_app_keep_in_front_summary),
+        ModuleOption.Toggle(KEY_KEEP_IN_FRONT, R.string.display_app_keep_in_front, true),
     )
 
     private val launchTimes = ArrayDeque<Long>()

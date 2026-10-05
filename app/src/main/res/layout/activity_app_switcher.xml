@@ -9,90 +9,20 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:alpha="0"
-        android:background="#C8000000" />
+        android:background="#D9000000" />
 
-    <!-- horizontal on landscape panels and switched to vertical in code on tall ones -->
-    <LinearLayout
-        android:id="@+id/switcherContent"
+    <!-- recent apps as pages with the app list as the last page on the right -->
+    <me.rapierxbox.shellyelevatev2.switcher.SpringPager
+        android:id="@+id/switcherPager"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:orientation="horizontal"
-        android:padding="16dp">
+        android:layout_height="match_parent" />
 
-        <FrameLayout
-            android:id="@+id/switcherCardsArea"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="0.62">
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/switcherCards"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:clipToPadding="false"
-                android:overScrollMode="never" />
-
-            <TextView
-                android:id="@+id/switcherEmpty"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="bottom|center_horizontal"
-                android:layout_marginBottom="12dp"
-                android:alpha="0.7"
-                android:gravity="center"
-                android:maxWidth="320dp"
-                android:text="@string/app_switcher_empty"
-                android:textColor="#FFFFFFFF"
-                android:textSize="14sp"
-                android:visibility="gone" />
-        </FrameLayout>
-
-        <LinearLayout
-            android:id="@+id/switcherDrawer"
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginStart="16dp"
-            android:layout_weight="0.38"
-            android:background="@drawable/switcher_panel_bg"
-            android:orientation="vertical"
-            android:paddingStart="12dp"
-            android:paddingTop="8dp"
-            android:paddingEnd="12dp">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:gravity="center_vertical"
-                android:orientation="horizontal">
-
-                <TextView
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:text="@string/app_switcher_apps"
-                    android:textColor="#FFFFFFFF"
-                    android:textSize="20sp"
-                    android:textStyle="bold" />
-
-                <ImageButton
-                    android:id="@+id/switcherSettings"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="@string/settings"
-                    android:src="@drawable/ic_settings"
-                    android:tint="#FFFFFFFF" />
-            </LinearLayout>
-
-            <androidx.recyclerview.widget.RecyclerView
-                android:id="@+id/switcherApps"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:clipToPadding="false"
-                android:overScrollMode="never"
-                android:paddingBottom="8dp" />
-        </LinearLayout>
-    </LinearLayout>
+    <LinearLayout
+        android:id="@+id/switcherDots"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="10dp"
+        android:gravity="center"
+        android:orientation="horizontal" />
 </FrameLayout>

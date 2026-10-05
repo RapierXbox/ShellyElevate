@@ -155,6 +155,7 @@ dependencies {
     implementation(libs.org.eclipse.paho.mqttv5.client)
     implementation(libs.webkit)
     implementation(libs.recyclerview)
+    implementation(libs.dynamicanimation)
     implementation(libs.tensorflow.lite)
     implementation(libs.serialport)
 

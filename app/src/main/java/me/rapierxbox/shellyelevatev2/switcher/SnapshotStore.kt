@@ -24,8 +24,8 @@ import java.util.concurrent.Executors
 object SnapshotStore {
     private const val TAG = "SnapshotStore"
     private const val MAX_ENTRIES = 8
-    // a third of the panel is plenty for a card and keeps memory and decode time low
-    private const val DOWNSCALE = 3
+    // half the panel matches the card size so it stays sharp without wasting memory
+    private const val DOWNSCALE = 2
     // the screen the user swiped on counts as current for this long
     private const val CURRENT_VALID_MS = 15_000L
 

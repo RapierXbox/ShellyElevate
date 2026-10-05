@@ -276,7 +276,7 @@ private class AppControl(private val picker: ModuleOption.AppPicker, row: View) 
 
     init {
         row.findViewById<TextView>(R.id.optionTitle).setText(picker.titleRes)
-        row.findViewById<Button>(R.id.optionButton).setOnClickListener {
+        row.findViewById<View>(R.id.optionPicker).setOnClickListener {
             AppPickerDialog.show(row.context) { app ->
                 packageName = app.packageName
                 component = app.component.flattenToString()
