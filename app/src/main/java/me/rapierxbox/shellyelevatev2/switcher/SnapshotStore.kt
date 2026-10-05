@@ -43,6 +43,7 @@ object SnapshotStore {
 
     @Volatile
     private var capturing = false
+    private var warnedNoPicture = false
 
     @Volatile
     private var currentPackage: String? = null
@@ -108,7 +109,11 @@ object SnapshotStore {
         } finally {
             process.destroy()
         }
-        if (bitmap == null) return
+        if (bitmap == null) {
+            if (!warnedNoPicture) Log.w(TAG, "screencap gave no picture, previews need install-privapp to grant the frame buffer")
+            warnedNoPicture = true
+            return
+        }
         synchronized(cache) {
             cache[pkg] = bitmap
             while (cache.size > MAX_ENTRIES) cache.remove(cache.keys.first())

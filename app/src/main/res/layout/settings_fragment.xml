@@ -610,6 +610,7 @@
                             android:layout_height="wrap_content"
                             android:minWidth="48dp"
                             android:text="↑"
+                            android:textSize="20sp"
                             tools:ignore="HardcodedText" />
 
                         <Button
@@ -619,6 +620,7 @@
                             android:layout_height="wrap_content"
                             android:minWidth="48dp"
                             android:text="↓"
+                            android:textSize="20sp"
                             tools:ignore="HardcodedText" />
 
                         <Button
@@ -628,6 +630,7 @@
                             android:layout_height="wrap_content"
                             android:minWidth="48dp"
                             android:text="←"
+                            android:textSize="20sp"
                             tools:ignore="HardcodedText" />
 
                         <Button
@@ -637,6 +640,7 @@
                             android:layout_height="wrap_content"
                             android:minWidth="48dp"
                             android:text="→"
+                            android:textSize="20sp"
                             tools:ignore="HardcodedText" />
                     </com.google.android.material.button.MaterialButtonToggleGroup>
                 </LinearLayout>

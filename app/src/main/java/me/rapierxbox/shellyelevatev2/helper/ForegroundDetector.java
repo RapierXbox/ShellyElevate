@@ -44,6 +44,9 @@ public final class ForegroundDetector {
     private static Top lastTop;
     private static long lastQueryEnd;
     private static long usageStatsRetryAt;
+    // dumpsys refuses apps without the dump permission so a denial is not retried for a while
+    private static final long DUMPSYS_RETRY_MS = 10 * 60_000;
+    private static long dumpsysRetryAt;
     private static Top cachedTop;
     private static long cachedAt;
     private static boolean cachedValid;
@@ -105,8 +108,14 @@ public final class ForegroundDetector {
     }
 
     private static Top fromDumpsys() {
+        if (SystemClock.elapsedRealtime() < dumpsysRetryAt) return null;
         PrivilegedShell.Result r = PrivilegedShell.runShell(
-                "dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|mFocusedActivity'");
+                "dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity|mFocusedActivity|Permission Denial'");
+        if (r.stdout.contains("Permission Denial")) {
+            Log.w(TAG, "dumpsys not permitted either, foreground stays unknown");
+            dumpsysRetryAt = SystemClock.elapsedRealtime() + DUMPSYS_RETRY_MS;
+            return null;
+        }
         if (!r.ok() || r.stdout.isEmpty()) return null;
         Matcher m = RESUMED.matcher(r.stdout);
         if (!m.find()) return null;
