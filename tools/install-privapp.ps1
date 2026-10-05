@@ -1,16 +1,87 @@
 # pushes the apk into /system/priv-app then reboots and grants the manual perms
+# also does what tools/uart-setup.py does: disables cloud.shelly.stargate,
+# enables adb over wifi and optionally joins a wifi network
+# the ssid can also come from SHELLY_WIFI_SSID and the password from
+# SHELLY_WIFI_PASSWORD or a prompt. without an ssid wifi is skipped
 param(
     [Parameter(Mandatory = $true)]
-    [string]$Apk
+    [string]$Apk,
+    [string]$Ssid = $env:SHELLY_WIFI_SSID,
+    [string]$Password = $env:SHELLY_WIFI_PASSWORD,
+    [ValidateSet("wpa2", "open")]
+    [string]$Security = "wpa2"
 )
 
 $pkg = "me.rapierxbox.shellyelevatev2"
 $dir = "/system/priv-app/ShellyElevateV2"
 $target = "$dir/ShellyElevateV2.apk"
+$adbTcpPort = 5555
+$wpaConf = "/data/misc/wifi/wpa_supplicant.conf"
+$wifiTimeout = 45
+
+# older adbd runs shell commands in a pty and ends lines with \r
+function Get-Shell([string]$cmd) {
+    ((& adb shell $cmd 2>$null) -join "`n").Replace("`r", "").Trim()
+}
+
+# drops any existing block for our ssid and appends ours
+function Update-WpaConf([string]$text) {
+    $out = New-Object System.Collections.Generic.List[string]
+    $block = $null
+    foreach ($line in ($text -split "`r?`n")) {
+        $s = $line.Trim()
+        if ($null -eq $block) {
+            if ($s.StartsWith("network={")) { $block = New-Object System.Collections.Generic.List[string]; $block.Add($s) }
+            elseif ($s) { $out.Add($s) }
+            continue
+        }
+        if (-not $s) { continue }
+        $block.Add($(if ($s -eq "}") { $s } else { "    $s" }))
+        if ($s -eq "}") {
+            if (-not ($block | Where-Object { $_.Trim() -eq "ssid=`"$Ssid`"" })) { $out.AddRange($block) }
+            $block = $null
+        }
+    }
+    if ($block) { $out.AddRange($block) }
+    if (-not ($out | Where-Object { $_.StartsWith("ctrl_interface") })) {
+        $out.InsertRange(0, [string[]]@("ctrl_interface=wlan0", "update_config=1"))
+    }
+    $out.Add("network={")
+    $out.Add("    ssid=`"$Ssid`"")
+    if ($Security -eq "open") {
+        $out.Add("    key_mgmt=NONE")
+    } else {
+        $out.Add("    psk=`"$Password`"")
+        $out.Add("    key_mgmt=WPA-PSK")
+    }
+    $out.Add("    priority=100")
+    $out.Add("}")
+    ($out -join "`n") + "`n"
+}
 
 if (-not (Test-Path $Apk)) {
     Write-Error "apk not found: $Apk"
     exit 1
+}
+
+# wpa_supplicant takes 8..63 chars and a quote would end the psk string early
+if ($Ssid) {
+    if ($Security -eq "open") {
+        $Password = ""
+    } else {
+        if (-not $Password) {
+            $secure = Read-Host "password for `"$Ssid`"" -AsSecureString
+            $Password = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))
+        }
+        if ($Password.Length -lt 8 -or $Password.Length -gt 63) {
+            Write-Error "wifi password must be 8 to 63 characters"
+            exit 1
+        }
+    }
+    if ($Ssid.Contains('"') -or $Password.Contains('"')) {
+        Write-Error "ssid and password must not contain double quotes"
+        exit 1
+    }
 }
 
 Write-Host "note: in-app self update needs this apk to share the signing key of future releases"
@@ -24,6 +95,70 @@ if ($rootOut -match "cannot run as root") {
     exit 1
 }
 & adb wait-for-device
+
+Write-Host "disabling cloud.shelly.stargate"
+if ((Get-Shell "pm path cloud.shelly.stargate") -match "package:") {
+    & adb shell "pm disable cloud.shelly.stargate"
+} else {
+    Write-Host "    not installed"
+}
+
+# adbd falls back to the persist port on boot so this survives the reboot below
+Write-Host "enabling adb over wifi on port $adbTcpPort"
+& adb shell "settings put global development_settings_enabled 1"
+& adb shell "settings put global adb_enabled 1"
+& adb shell "setprop persist.adb.tcp.port $adbTcpPort"
+
+$wifiPending = $false
+if ($Ssid) {
+    Write-Host "configuring wifi `"$Ssid`""
+    if ((& adb get-serialno) -match ":\d+$") {
+        Write-Host "    skipped: adb runs over wifi and turning wifi off would cut it. use usb for this"
+    } else {
+        if ((Get-Shell "settings get global airplane_mode_on") -eq "1") {
+            Write-Host "    airplane mode is on - turning it off"
+            & adb shell "settings put global airplane_mode_on 0; am broadcast -a android.intent.action.AIRPLANE_MODE --ez state false" | Out-Null
+        }
+        # scanning always available keeps wpa_supplicant alive while wifi is off
+        # and the config must not be edited under a running supplicant
+        & adb shell "settings put global wifi_scan_always_enabled 0"
+        & adb shell "svc wifi disable"
+        $deadline = (Get-Date).AddSeconds(15)
+        while (Get-Shell "pidof wpa_supplicant") {
+            if ((Get-Date) -gt $deadline) {
+                Write-Error "wpa_supplicant wont stop so the config cannot be edited safely"
+                exit 1
+            }
+            Start-Sleep -Seconds 1
+        }
+
+        $tmp = Join-Path ([IO.Path]::GetTempPath()) ([guid]::NewGuid().ToString())
+        New-Item -ItemType Directory -Path $tmp | Out-Null
+        try {
+            $current = ""
+            if ((Get-Shell "[ -f $wpaConf ] && echo yes") -eq "yes") {
+                & adb pull $wpaConf "$tmp/in.conf" | Out-Null
+                $current = [IO.File]::ReadAllText("$tmp/in.conf")
+            }
+            # lf only and no bom or wpa_supplicant rejects the file
+            [IO.File]::WriteAllText("$tmp/out.conf", (Update-WpaConf $current), (New-Object Text.UTF8Encoding $false))
+            & adb push "$tmp/out.conf" "$wpaConf.new" | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                Write-Error "pushing the wifi config failed"
+                exit 1
+            }
+        } finally {
+            Remove-Item -Recurse -Force $tmp
+        }
+        $confOut = Get-Shell "mv $wpaConf.new $wpaConf && chown wifi:wifi $wpaConf && chmod 660 $wpaConf && restorecon $wpaConf && echo ok"
+        if ($confOut -notmatch "ok") {
+            Write-Error "installing the wifi config failed: $confOut"
+            exit 1
+        }
+        Write-Host "    saved to $wpaConf. it gets loaded on the reboot below"
+        $wifiPending = $true
+    }
+}
 
 # remount system rw with a root fallback and verify it worked
 & adb shell "mount -o rw,remount /system 2>/dev/null || mount -o rw,remount /"
@@ -82,4 +217,29 @@ if ($opsOut -notmatch "allow" -or $idleOut -notmatch [regex]::Escape($pkg) -or $
     exit 1
 }
 
+$wifiFailed = $false
+if ($wifiPending) {
+    Write-Host "turning wifi on and waiting for `"$Ssid`" (up to ${wifiTimeout}s)"
+    & adb shell "svc wifi enable"
+    $deadline = (Get-Date).AddSeconds($wifiTimeout)
+    while ((Get-Shell "ip -4 addr show wlan0") -notmatch "inet ") {
+        if ((Get-Date) -gt $deadline) {
+            Write-Warning "wifi did not connect. check the password and that the network is 2.4 GHz"
+            $wifiFailed = $true
+            break
+        }
+        Start-Sleep -Seconds 1
+    }
+}
+
+$ip = ""
+if ((Get-Shell "ip -4 addr show wlan0") -match "inet (\d+\.\d+\.\d+\.\d+)") { $ip = $Matches[1] }
+$stargate = if ((Get-Shell "pm list packages -d") -match "cloud\.shelly\.stargate") { "disabled" } else { "not disabled" }
 Write-Host "done. installed at $pmOut with WRITE_SETTINGS, location and battery whitelist"
+Write-Host "    stargate: $stargate"
+Write-Host "    adb wifi: persist.adb.tcp.port=$(Get-Shell 'getprop persist.adb.tcp.port')"
+Write-Host "    wifi:     $(if ($ip) { $ip } else { 'no ip' })"
+if ($ip) {
+    Write-Host "    adb connect ${ip}:$adbTcpPort"
+}
+if ($wifiFailed) { exit 1 }

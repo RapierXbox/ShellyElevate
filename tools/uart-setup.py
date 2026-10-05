@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 uart setup for a shelly wall display so tools/install-privapp can take over
+not needed when adb already works since install-privapp does the same steps
 
 connects to the debug uart and on demand
 - gets a root shell
