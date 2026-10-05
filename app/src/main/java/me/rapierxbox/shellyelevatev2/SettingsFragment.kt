@@ -44,6 +44,8 @@ import me.rapierxbox.shellyelevatev2.voice.WakeWordDetector
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModel
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModelManager
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
+import me.rapierxbox.shellyelevatev2.display.DisplayController
+import me.rapierxbox.shellyelevatev2.display.DisplayModuleSettings
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper
@@ -75,6 +77,7 @@ class SettingsFragment : Fragment() {
     private var downloadJob: Job? = null
 
     private lateinit var binder: SettingsBinder
+    private lateinit var displaySettings: DisplayModuleSettings
 
     override fun onDestroyView() {
         super.onDestroyView()
@@ -106,6 +109,8 @@ class SettingsFragment : Fragment() {
             override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
                 return when (menuItem.itemId) {
                     R.id.action_settings -> {
+                        // a deliberate trip to android settings so the watchdog must not pull us back
+                        DisplayController.markUserAway("android settings")
                         startActivity(Intent(Settings.ACTION_SETTINGS))
                         true
                     }
@@ -130,6 +135,10 @@ class SettingsFragment : Fragment() {
         binding.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
         binding.sleepOptimizationLevel.adapter = getSleepOptimizationSpinnerAdapter()
         binding.swInputMode.adapter = getSwInputModeSpinnerAdapter()
+
+        // runs the legacy ha ip migration before the url option loads
+        ServiceHelper.getWebviewUrl()
+        displaySettings = DisplayModuleSettings(this, binding.displayModule, binding.displayModuleOptions)
 
         buildBinder()
         binder.loadAll()
@@ -493,10 +502,8 @@ class SettingsFragment : Fragment() {
         val hasSwInput = device.inputs > 0
 
         binder = SettingsBinder(mSharedPreferences).apply {
+            +displaySettings
             +SwitchPref(binding.liteMode, SP_LITE_MODE, false)
-
-            +SwitchPref(binding.ignoreSslErrors, SP_IGNORE_SSL_ERRORS, false)
-            +SwitchPref(binding.extendedJavascriptInterface, SP_EXTENDED_JAVASCRIPT_INTERFACE, false)
 
             +SwitchPref(binding.adbWifiEnabled, SP_ADB_WIFI_ENABLED, false)
             // both go through the binder so visibleWhen doesnt clobber the toggle action
@@ -626,8 +633,6 @@ class SettingsFragment : Fragment() {
     }
 
     private fun loadInlineValues() {
-        binding.webviewURL.setText(ServiceHelper.getWebviewUrl())
-
         val audioManager = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
@@ -670,12 +675,6 @@ class SettingsFragment : Fragment() {
 
     @SuppressLint("ClickableViewAccessibility")
     private fun setupInlineListeners() {
-        binding.findURLButton.setOnClickListener {
-            ServiceHelper.getHAURL(requireContext().applicationContext) { url ->
-                requireActivity().runOnUiThread { binding.webviewURL.setText(url) }
-            }
-        }
-
         var lastAppliedVol = -1
         binding.volumeSetting.addOnChangeListener { _, value, fromUser ->
             if (fromUser) {
@@ -727,7 +726,7 @@ class SettingsFragment : Fragment() {
 
         binding.voiceAssistantEnabled.setOnCheckedChangeListener { _, isChecked ->
             binding.voiceAssistantLayout.isVisible = isChecked
-            if (isChecked && binding.webviewURL.text.toString().isEmpty()) {
+            if (isChecked && (displaySettings.value(SP_WEBVIEW_URL) as? String).isNullOrEmpty()) {
                 Toast.makeText(requireContext(), R.string.voice_requires_url, Toast.LENGTH_LONG).show()
                 binding.voiceAssistantEnabled.isChecked = false
                 binding.voiceAssistantLayout.isVisible = false
@@ -1013,8 +1012,6 @@ class SettingsFragment : Fragment() {
 
         mSharedPreferences.edit {
             val device = DeviceModel.getReportedDevice()
-
-            putString(SP_WEBVIEW_URL, binding.webviewURL.text.toString())
 
             putBoolean(SP_WAKE_ON_PROXIMITY, binding.wakeOnProximity.isChecked && device.hasProximitySensor)
 

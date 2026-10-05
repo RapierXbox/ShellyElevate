@@ -8,6 +8,8 @@ import android.content.SharedPreferences;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -25,12 +27,17 @@ public class SettingsParser {
     // any component that calls getFloat() on these keys must be listed here so
     // that the http /settings api cannot accidentally corrupt them by writing
     // whole-number json values as Integer
-    private static final Set<String> FLOAT_PREF_KEYS = Collections.unmodifiableSet(
-        new HashSet<>(Arrays.asList(
+    // display module float options join through the registry
+    private static final Set<String> FLOAT_PREF_KEYS = buildFloatKeys();
+
+    private static Set<String> buildFloatKeys() {
+        Set<String> keys = new HashSet<>(Arrays.asList(
             Constants.SP_DYNAMIC_TEMP_OFFSET_BASELINE,
             Constants.SP_DYNAMIC_TEMP_OFFSET_K
-        ))
-    );
+        ));
+        keys.addAll(DisplayModuleRegistry.floatKeys());
+        return Collections.unmodifiableSet(keys);
+    }
 
     public JSONObject getSettings() throws JSONException {
         JSONObject settings = new JSONObject();

@@ -4,22 +4,24 @@ import android.content.Context
 import android.util.AttributeSet
 import android.util.SparseArray
 import android.view.MotionEvent
+import android.view.View
 import android.view.ViewConfiguration
-import android.webkit.WebView
 import androidx.constraintlayout.widget.ConstraintLayout
-import me.rapierxbox.shellyelevatev2.R
 import kotlin.math.abs
 import kotlin.math.hypot
 import kotlin.math.sign
 
 // root of the kiosk layout that feeds every touch to the swipe helper and steals
-// multi finger swipes from the webview while leaving pinch zoom to the page
+// multi finger swipes from the display module while leaving pinch zoom to the page
 class GestureInterceptLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
 ) : ConstraintLayout(context, attrs) {
 
     var swipeHelper: SwipeHelper? = null
+
+    // the view of the active display module that owns the touch stream
+    var gestureTarget: (() -> View?)? = null
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
     private val minMovePx = touchSlop * 0.3f
@@ -43,7 +45,7 @@ class GestureInterceptLayout @JvmOverloads constructor(
             MotionEvent.ACTION_MOVE -> {
                 if (!intercepting && shouldStealGesture(ev)) {
                     intercepting = true
-                    cancelWebViewTouchStream(ev)
+                    cancelTargetTouchStream(ev)
                 }
             }
         }
@@ -67,12 +69,12 @@ class GestureInterceptLayout @JvmOverloads constructor(
     }
 
     // viewgroup would send the cancel on the next event anyway but doing it now
-    // avoids a frame where the webview still thinks it owns the touch
-    private fun cancelWebViewTouchStream(sourceEvent: MotionEvent) {
-        val webView = findViewById<WebView?>(R.id.myWebView) ?: return
+    // avoids a frame where the module still thinks it owns the touch
+    private fun cancelTargetTouchStream(sourceEvent: MotionEvent) {
+        val target = gestureTarget?.invoke() ?: return
         val cancel = MotionEvent.obtain(sourceEvent)
         cancel.action = MotionEvent.ACTION_CANCEL
-        webView.dispatchTouchEvent(cancel)
+        target.dispatchTouchEvent(cancel)
         cancel.recycle()
     }
 

@@ -1,0 +1,604 @@
+package me.rapierxbox.shellyelevatev2.display.webview
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.net.http.SslError
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.ConsoleMessage
+import android.webkit.PermissionRequest
+import android.webkit.RenderProcessGoneDetail
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewFeature
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import me.rapierxbox.shellyelevatev2.BuildConfig
+import me.rapierxbox.shellyelevatev2.Constants.EXTRA_SCREEN_SAVER_ID
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STARTED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STOPPED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STARTED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STOPPED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_TURN_SCREEN_OFF
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_TURN_SCREEN_ON
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH
+import me.rapierxbox.shellyelevatev2.Constants.SCREEN_SAVER_ID_AOD
+import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_NONE
+import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD
+import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
+import me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL
+import me.rapierxbox.shellyelevatev2.R
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
+import me.rapierxbox.shellyelevatev2.display.DisplayContent
+import me.rapierxbox.shellyelevatev2.display.DisplayHost
+import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
+
+// the dashboard webview with offline fallback crash recovery and sleep handling
+class WebViewContent(private val host: DisplayHost) : DisplayContent {
+
+    private val activity = host.activity
+    private val broadcastManager = LocalBroadcastManager.getInstance(activity)
+
+    private val frame = FrameLayout(activity)
+
+    // replaced wholesale after a render process crash so never cache it elsewhere
+    private var webView: WebView = createWebView()
+
+    override val view: View get() = frame
+    override val gestureTarget: View get() = webView
+
+    private var initialLoadDone = false
+    private var retryJob: Job? = null
+
+    // last dashboard url we asked the webview to load so redundant reloads can be skipped
+    private var lastRequestedUrl: String? = null
+
+    // js injected before the first paint would run against a blank document
+    private var firstPaintDone = false
+    private val pendingJs = mutableListOf<String>()
+
+    private var webViewPausedForSleep = false
+    private var inAODMode = false
+
+    // aod wakes the webview briefly once per second so widgets like the clock stay current
+    private val aodTickHandler = Handler(Looper.getMainLooper())
+
+    private val aodTickPauseRunnable = Runnable {
+        if (!inAODMode) return@Runnable
+        try {
+            webView.onPause()
+            webView.pauseTimers()
+        } catch (e: Exception) {
+            Log.w(TAG, "aod tick pause failed: ${e.message}")
+        }
+    }
+
+    private val aodTickRunnable = object : Runnable {
+        override fun run() {
+            if (!inAODMode) return
+            try {
+                webView.resumeTimers()
+                webView.onResume()
+                aodTickHandler.postDelayed(aodTickPauseRunnable, AOD_TICK_WINDOW_MS)
+            } catch (e: Exception) {
+                Log.w(TAG, "aod tick resume failed: ${e.message}")
+            }
+            aodTickHandler.postDelayed(this, AOD_TICK_PERIOD_MS)
+        }
+    }
+
+    private val settingsChangedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            try {
+                // only reload when the url changed or we sit on the offline page
+                // so saving unrelated settings does not restart the dashboard
+                val webviewUrl = ServiceHelper.getWebviewUrl()
+                if (webviewUrl != lastRequestedUrl || isOfflineUrl(webView.url)) {
+                    Log.d(TAG, "Reloading WebView due to settings change: $webviewUrl")
+                    loadDashboard(webviewUrl)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error reloading WebView on settings change", e)
+            }
+        }
+    }
+
+    // explicit refresh request so it always reloads unlike the settings receiver
+    private val webviewRefreshReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            try {
+                loadDashboard(ServiceHelper.getWebviewUrl())
+            } catch (e: Exception) {
+                Log.e(TAG, "Error refreshing WebView", e)
+            }
+        }
+    }
+
+    private val javascriptInjectReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val javascriptCode = intent?.getStringExtra("javascript")?.trim() ?: return
+            try {
+                if (!firstPaintDone) {
+                    // capped so a page stuck loading cannot grow the queue forever
+                    if (pendingJs.size >= MAX_PENDING_JS) pendingJs.removeAt(0)
+                    pendingJs.add(javascriptCode)
+                    Log.d(TAG, "Queueing JS until first paint")
+                    return
+                }
+                Log.d(TAG, "Injecting JS into WebView")
+                webView.evaluateJavascript(javascriptCode, null)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error injecting JS", e)
+            }
+        }
+    }
+
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            val action = intent?.action ?: return
+            try {
+                when (action) {
+                    INTENT_TURN_SCREEN_ON -> mShellyElevateJavascriptInterface.onScreenOn()
+                    INTENT_TURN_SCREEN_OFF -> mShellyElevateJavascriptInterface.onScreenOff()
+                    INTENT_SCREEN_SAVER_STARTED -> {
+                        mShellyElevateJavascriptInterface.onScreensaverOn()
+                        val saverId = intent.getIntExtra(EXTRA_SCREEN_SAVER_ID, -1)
+                        // aod keeps the webview on screen so it must not be paused for sleep
+                        if (saverId != SCREEN_SAVER_ID_AOD && sleepLevel() >= SLEEP_OPT_STANDARD) {
+                            pauseWebViewForSleep()
+                        }
+                    }
+                    INTENT_SCREEN_SAVER_STOPPED -> {
+                        resumeWebViewFromSleep()
+                        mShellyElevateJavascriptInterface.onScreensaverOff()
+                    }
+                    INTENT_PROXIMITY_UPDATED -> mShellyElevateJavascriptInterface.onMotion()
+                }
+                if (BuildConfig.DEBUG) Log.d(TAG, "screenStateReceiver invoked: $action")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error handling screen state: $action", e)
+            }
+        }
+    }
+
+    private val aodReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                INTENT_AOD_STARTED -> enterAODMode()
+                INTENT_AOD_STOPPED -> exitAODMode()
+            }
+        }
+    }
+
+    init {
+        frame.addView(webView, ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        registerBroadcastReceivers()
+    }
+
+    // lifecycle
+
+    override fun onResume() {
+        // covers the case where the screensaver stopped broadcast did not fire first
+        resumeWebViewFromSleep()
+
+        // refire the js hooks so a page suspended in the background can refresh its state
+        mShellyElevateJavascriptInterface.onScreenOn()
+        mShellyElevateJavascriptInterface.onScreensaverOff()
+
+        if (!initialLoadDone) safeInitialLoad()
+    }
+
+    override fun onStop() {
+        cancelRetry()
+    }
+
+    override fun onDestroy() {
+        unregisterBroadcastReceivers()
+        cancelRetry()
+        aodTickHandler.removeCallbacksAndMessages(null)
+        pendingJs.clear()
+        // destroy the webview or every crash relaunch leaks a full renderer
+        try {
+            (webView.parent as? ViewGroup)?.removeView(webView)
+            webView.destroy()
+        } catch (e: Exception) {
+            Log.w(TAG, "webview destroy failed: ${e.message}")
+        }
+    }
+
+    // receivers
+
+    private fun registerBroadcastReceivers() {
+        broadcastManager.apply {
+            registerReceiver(settingsChangedReceiver, IntentFilter(INTENT_SETTINGS_CHANGED))
+            registerReceiver(webviewRefreshReceiver, IntentFilter(INTENT_WEBVIEW_REFRESH))
+            registerReceiver(javascriptInjectReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
+            registerReceiver(screenStateReceiver, IntentFilter().apply {
+                addAction(INTENT_TURN_SCREEN_ON)
+                addAction(INTENT_TURN_SCREEN_OFF)
+                addAction(INTENT_SCREEN_SAVER_STARTED)
+                addAction(INTENT_SCREEN_SAVER_STOPPED)
+                addAction(INTENT_PROXIMITY_UPDATED)
+            })
+            registerReceiver(aodReceiver, IntentFilter().apply {
+                addAction(INTENT_AOD_STARTED)
+                addAction(INTENT_AOD_STOPPED)
+            })
+        }
+    }
+
+    private fun unregisterBroadcastReceivers() {
+        broadcastManager.apply {
+            unregisterReceiver(settingsChangedReceiver)
+            unregisterReceiver(webviewRefreshReceiver)
+            unregisterReceiver(javascriptInjectReceiver)
+            unregisterReceiver(screenStateReceiver)
+            unregisterReceiver(aodReceiver)
+        }
+    }
+
+    // sleep and aod
+
+    private fun sleepLevel(): Int =
+        mSharedPreferences.getInt(SP_SLEEP_OPTIMIZATION_LEVEL, SLEEP_OPT_NONE)
+
+    private fun pauseWebViewForSleep() {
+        if (webViewPausedForSleep) return
+        webViewPausedForSleep = true
+        try {
+            webView.onPause()
+            webView.pauseTimers()
+            webView.setLayerType(View.LAYER_TYPE_NONE, null)
+            webView.visibility = View.INVISIBLE
+            Log.i(TAG, "webview paused for sleep")
+        } catch (e: Exception) {
+            Log.w(TAG, "pauseWebViewForSleep failed: ${e.message}")
+        }
+    }
+
+    private fun resumeWebViewFromSleep() {
+        if (!webViewPausedForSleep) return
+        webViewPausedForSleep = false
+        try {
+            webView.visibility = View.VISIBLE
+            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            webView.resumeTimers()
+            webView.onResume()
+            Log.i(TAG, "webview resumed from sleep")
+        } catch (e: Exception) {
+            Log.w(TAG, "resumeWebViewFromSleep failed: ${e.message}")
+        }
+    }
+
+    private fun enterAODMode() {
+        if (inAODMode) return
+        inAODMode = true
+        try {
+            // the webview stays visible and the ticker resumes its timers briefly each second
+            webView.settings.offscreenPreRaster = false
+            webView.onPause()
+            webView.pauseTimers()
+            webView.setLayerType(View.LAYER_TYPE_NONE, null)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
+            }
+            aodTickHandler.removeCallbacksAndMessages(null)
+            aodTickHandler.postDelayed(aodTickRunnable, AOD_TICK_PERIOD_MS)
+            Log.i(TAG, "aod mode entered")
+        } catch (e: Exception) {
+            Log.w(TAG, "enterAODMode failed: ${e.message}")
+        }
+    }
+
+    private fun exitAODMode() {
+        if (!inAODMode) return
+        inAODMode = false
+        try {
+            aodTickHandler.removeCallbacksAndMessages(null)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
+            }
+            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            webView.resumeTimers()
+            webView.onResume()
+            webView.settings.offscreenPreRaster = true
+            Log.i(TAG, "aod mode exited")
+        } catch (e: Exception) {
+            Log.w(TAG, "exitAODMode failed: ${e.message}")
+        }
+    }
+
+    // loading
+
+    private fun loadDashboard(url: String) {
+        // any explicit load makes a pending offline retry obsolete
+        cancelRetry()
+        lastRequestedUrl = url
+        webView.loadUrl(url)
+    }
+
+    private fun showOfflinePage(view: WebView, failingUrl: String?) {
+        // never reload the offline page itself or a broken asset would loop
+        if (!isOfflineUrl(failingUrl)) view.post { view.loadUrl(OFFLINE_URL) }
+    }
+
+    private fun safeInitialLoad() {
+        initialLoadDone = true
+        activity.lifecycleScope.launch(Dispatchers.Default) {
+            val url = ServiceHelper.getWebviewUrl()
+            val online = ServiceHelper.isNetworkReady(activity.applicationContext)
+            withContext(Dispatchers.Main) {
+                if (online) {
+                    loadDashboard(url)
+                } else {
+                    webView.loadUrl(OFFLINE_URL)
+                    scheduleRetryOnlineAfterOffline(url)
+                }
+            }
+        }
+    }
+
+    private fun scheduleRetryOnlineAfterOffline(targetUrl: String) {
+        cancelRetry()
+        retryJob = activity.lifecycleScope.launch(Dispatchers.Default) {
+            // fast backoff for the window right after boot then a slow poll to ride out long wifi outages
+            val delays = sequence {
+                yieldAll(RETRY_BACKOFF_MS)
+                while (true) yield(RETRY_POLL_MS)
+            }
+            for (delayMs in delays) {
+                delay(delayMs)
+                if (ServiceHelper.isNetworkReady(activity.applicationContext)) {
+                    withContext(Dispatchers.Main) {
+                        // drop the reference first so loadDashboard does not cancel this job mid flight
+                        retryJob = null
+                        loadDashboard(targetUrl)
+                    }
+                    return@launch
+                }
+            }
+        }
+    }
+
+    private fun cancelRetry() {
+        retryJob?.cancel()
+        retryJob = null
+    }
+
+    // webview setup
+
+    // same id so older lookups by R.id.myWebView keep working
+    private fun createWebView(): WebView = WebView(activity).apply {
+        id = R.id.myWebView
+        overScrollMode = View.OVER_SCROLL_NEVER
+        configureWebView(this)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled", "ClickableViewAccessibility")
+    private fun configureWebView(target: WebView) {
+        applyWebSettings(target.settings)
+
+        target.apply {
+            if (layerType != View.LAYER_TYPE_HARDWARE) {
+                setLayerType(View.LAYER_TYPE_HARDWARE, null)
+            }
+
+            // let the renderer drop priority whenever the webview is covered
+            // by settings or a screensaver activity instead of only during aod
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
+            }
+
+            webViewClient = DashboardWebViewClient()
+            webChromeClient = DashboardChromeClient()
+            addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
+
+            // the swipe helper is fed only by GestureInterceptLayout
+            // consuming keeps a wake touch from reaching the page
+            setOnTouchListener { _, event -> host.onContentTouch(event) }
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    @Suppress("DEPRECATION")
+    private fun applyWebSettings(settings: WebSettings) {
+        settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+        settings.javaScriptCanOpenWindowsAutomatically = true
+        settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+        settings.allowFileAccess = true
+        settings.allowFileAccessFromFileURLs = true
+        settings.allowUniversalAccessFromFileURLs = true
+        settings.databaseEnabled = true
+        settings.setRenderPriority(WebSettings.RenderPriority.NORMAL)
+        settings.offscreenPreRaster = true
+
+        // the dashboard does its own theming and chromium auto darken washes out colors on this panel
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
+            WebSettingsCompat.setForceDark(settings, WebSettingsCompat.FORCE_DARK_OFF)
+        }
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
+            WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, false)
+        }
+    }
+
+    // swaps in a fresh webview at the same spot after the renderer died
+    private fun recoverWebView(crashed: WebView) {
+        val parent = crashed.parent as? ViewGroup ?: return
+        val index = parent.indexOfChild(crashed)
+        val layoutParams = crashed.layoutParams
+
+        // detach before destroy so we never touch a destroyed view that is still attached
+        parent.removeViewAt(index)
+        crashed.destroy()
+
+        val fresh = createWebView()
+        webView = fresh
+        firstPaintDone = false
+        parent.addView(fresh, index, layoutParams)
+
+        // land on the offline page instead of the failing url so a crashing page cannot hot loop
+        fresh.loadUrl(OFFLINE_URL)
+        Log.i(TAG, "Recovered WebView after crash, showing offline page")
+    }
+
+    private inner class DashboardWebViewClient : WebViewClient() {
+
+        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            super.onPageStarted(view, url, favicon)
+            firstPaintDone = false
+        }
+
+        override fun onPageCommitVisible(view: WebView?, url: String?) {
+            super.onPageCommitVisible(view, url)
+            firstPaintDone = true
+            if (pendingJs.isNotEmpty()) {
+                pendingJs.forEach { webView.evaluateJavascript(it, null) }
+                pendingJs.clear()
+            }
+        }
+
+        @SuppressLint("WebViewClientOnReceivedSslError")
+        override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+            try {
+                if (mSharedPreferences.getBoolean(SP_IGNORE_SSL_ERRORS, false)) {
+                    handler?.proceed()
+                } else {
+                    handler?.cancel()
+                    if (view != null) showOfflinePage(view, error?.url)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "SSL error handling failed", e)
+            }
+        }
+
+        override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, errorResponse: WebResourceResponse?) {
+            if (!request.isForMainFrame) return
+            try {
+                val failingUrl = request.url.toString()
+                Log.w(TAG, "HTTP error for main frame: $failingUrl -> ${errorResponse?.statusCode}")
+                showOfflinePage(view, failingUrl)
+            } catch (e: Exception) {
+                Log.e(TAG, "onReceivedHttpError failed", e)
+            }
+        }
+
+        // the legacy overload is only reached through the default of this one so it needs no override
+        override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {
+            if (!request.isForMainFrame) return
+            try {
+                val failingUrl = request.url.toString()
+                Log.w(TAG, "onReceivedError main frame: $failingUrl - ${error.description}")
+                showOfflinePage(view, failingUrl)
+            } catch (e: Exception) {
+                Log.e(TAG, "onReceivedError failed", e)
+            }
+        }
+
+        override fun shouldInterceptRequest(view: WebView?, request: WebResourceRequest?): WebResourceResponse? {
+            val url = request?.url?.toString()
+            if (isOfflineUrl(url)) {
+                return WebResourceResponse("text/html", "UTF-8", activity.assets.open(OFFLINE_PAGE))
+            }
+            return super.shouldInterceptRequest(view, request)
+        }
+
+        override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+            val url = request?.url?.toString() ?: return false
+            if (!url.startsWith(APP_URL_SCHEME)) return false
+            when (url.removePrefix(APP_URL_SCHEME)) {
+                "reload" -> view?.post { loadDashboard(ServiceHelper.getWebviewUrl()) }
+                "offline" -> view?.post { view.loadUrl(OFFLINE_URL) }
+                "settings" -> host.openSettings()
+            }
+            return true
+        }
+
+        // the webview only calls this on api 26 and up
+        @SuppressLint("NewApi")
+        override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
+            Log.e(TAG, "WebView render process crashed; didCrash=${detail.didCrash()}")
+            try {
+                recoverWebView(view)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to recover WebView", e)
+            }
+            // true keeps the app alive instead of letting the system kill it
+            return true
+        }
+    }
+
+    private inner class DashboardChromeClient : WebChromeClient() {
+
+        // pages may use the microphone when the app holds the record audio permission
+        // audio only since these panels have no camera
+        override fun onPermissionRequest(request: PermissionRequest) {
+            if (!request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)) {
+                request.deny()
+                return
+            }
+            val granted = ContextCompat.checkSelfPermission(
+                activity, Manifest.permission.RECORD_AUDIO
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                Log.w(TAG, "audio capture requested but RECORD_AUDIO is not granted")
+                request.deny()
+                return
+            }
+            request.grant(arrayOf(PermissionRequest.RESOURCE_AUDIO_CAPTURE))
+        }
+
+        override fun onConsoleMessage(consoleMessage: ConsoleMessage): Boolean {
+            // webview 128 and newer probes android.webkit.PacProcessor which does not exist on api 24
+            // the resulting class not found spam is harmless
+            if (consoleMessage.message().contains("PacProcessor")) return true
+            return super.onConsoleMessage(consoleMessage)
+        }
+    }
+
+    private fun isOfflineUrl(url: String?): Boolean = url?.contains(OFFLINE_PAGE) == true
+
+    private companion object {
+        const val TAG = "WebViewContent"
+
+        const val OFFLINE_PAGE = "offline.html"
+        const val OFFLINE_URL = "file:///android_asset/$OFFLINE_PAGE"
+        const val APP_URL_SCHEME = "shellyelevate:"
+
+        const val MAX_PENDING_JS = 50
+
+        const val AOD_TICK_PERIOD_MS = 1000L
+        const val AOD_TICK_WINDOW_MS = 200L
+
+        val RETRY_BACKOFF_MS = listOf(2000L, 4000L, 8000L, 16000L)
+        const val RETRY_POLL_MS = 30_000L
+    }
+}

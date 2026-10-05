@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2;
 
+import static me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MEDIA_ENABLED;
@@ -20,6 +21,7 @@ import android.widget.Toast;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 
 import org.json.JSONException;
@@ -93,6 +95,11 @@ public class HttpServer extends NanoHTTPD {
                 return handleDeviceRequest(session);
             } else if (uri.startsWith("/webview/")) {
                 return handleWebviewRequest(session);
+            } else if (uri.equals("/display/modules")) {
+                if (!method.equals(Method.GET)) return badRequest("Invalid request method");
+                JSONObject schema = DisplayModuleRegistry.schemaJson(mApplicationContext, mSharedPreferences);
+                schema.put("success", true);
+                return newFixedLengthResponse(Response.Status.OK, "application/json", schema.toString());
             } else if (uri.equals("/settings")) {
                 if (method.equals(Method.GET)) {
                     jsonResponse.put("success", true);
@@ -147,6 +154,12 @@ public class HttpServer extends NanoHTTPD {
         String uri = session.getUri();
         JSONObject jsonResponse = new JSONObject();
         jsonResponse.put("success", false);
+
+        // only the webview module has a page to refresh or inject into
+        if (!DISPLAY_MODULE_WEBVIEW.equals(DisplayModuleRegistry.activeId(mSharedPreferences))) {
+            jsonResponse.put("error", "webview module not active");
+            return newFixedLengthResponse(Response.Status.CONFLICT, "application/json", jsonResponse.toString());
+        }
 
         switch (uri.replace("/webview/", "")) {
             case "refresh":

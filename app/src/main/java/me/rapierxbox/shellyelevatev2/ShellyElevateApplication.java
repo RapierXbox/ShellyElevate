@@ -39,6 +39,7 @@ import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
+import me.rapierxbox.shellyelevatev2.switcher.AppCatalog;
 import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager;
 
 public class ShellyElevateApplication extends Application {
@@ -149,6 +150,8 @@ public class ShellyElevateApplication extends Application {
         mDeviceSensorManager = new DeviceSensorManager(this);
         mSwipeHelper = new SwipeHelper();
         mShellyElevateJavascriptInterface = new ShellyElevateJavascriptInterface();
+        // loads launchable apps in the background for pickers and the app switcher
+        AppCatalog.init(this);
 
         if (mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false)) {
             mMediaHelper = new MediaHelper();

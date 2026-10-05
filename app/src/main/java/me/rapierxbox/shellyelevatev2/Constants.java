@@ -11,6 +11,10 @@ public final class Constants {
     public static final String SP_LITE_MODE = "liteMode";
     public static final String SP_SETTINGS_EVER_SHOWN = "settingEverShown";
 
+    // display module prefs
+    public static final String SP_DISPLAY_MODULE = "displayModule";
+    public static final String DISPLAY_MODULE_WEBVIEW = "webview";
+
     // media prefs
     public static final String SP_MEDIA_ENABLED = "mediaEnabled";
 

@@ -9,9 +9,17 @@ import androidx.core.view.isVisible
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 
-sealed interface PrefBinding {
+// not sealed so module options in other packages can bring their own bindings
+interface PrefBinding {
     fun load(prefs: SharedPreferences)
     fun save(editor: SharedPreferences.Editor)
+}
+
+// a self contained block of settings ui that hands its bindings to the binder
+interface SettingsSection {
+    val bindings: List<PrefBinding>
+    // runs after every binding loaded so visibility rules see the stored values
+    fun onLoaded() {}
 }
 
 class SwitchPref(
@@ -126,11 +134,34 @@ class SpinnerPref(
     }
 }
 
+// stores a stable string id instead of the position so reordering entries never remaps values
+class SpinnerIdPref(
+    private val view: Spinner,
+    private val key: String,
+    private val ids: List<String>,
+    private val default: String
+) : PrefBinding {
+    override fun load(prefs: SharedPreferences) {
+        val index = ids.indexOf(prefs.getString(key, default)).takeIf { it >= 0 } ?: ids.indexOf(default)
+        if (index >= 0) view.setSelection(index)
+    }
+    override fun save(editor: SharedPreferences.Editor) {
+        val id = ids.getOrNull(view.selectedItemPosition) ?: default
+        editor.putString(key, id)
+    }
+}
+
 class SettingsBinder(private val prefs: SharedPreferences) {
     private val bindings = mutableListOf<PrefBinding>()
+    private val sections = mutableListOf<SettingsSection>()
     private val toggleActions = mutableMapOf<MaterialSwitch, MutableList<(Boolean) -> Unit>>()
 
     operator fun PrefBinding.unaryPlus() { bindings += this }
+
+    operator fun SettingsSection.unaryPlus() {
+        sections += this
+        this@SettingsBinder.bindings += bindings
+    }
 
     fun visibleWhen(switch: MaterialSwitch, vararg targets: View) {
         addToggle(switch) { checked -> targets.forEach { it.isVisible = checked } }
@@ -154,6 +185,7 @@ class SettingsBinder(private val prefs: SharedPreferences) {
             actions.forEach { it(switch.isChecked) }
             switch.setOnCheckedChangeListener { _, checked -> actions.forEach { it(checked) } }
         }
+        sections.forEach { it.onLoaded() }
     }
 
     fun saveAll() {

@@ -468,41 +468,34 @@
                 android:orientation="vertical"
                 android:visibility="gone">
 
-                <Button
-                    android:id="@+id/findURLButton"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/findIPButtonText"
-                    android:textSize="18sp" />
-
-                <EditText
-                    android:id="@+id/webviewURL"
+                <LinearLayout
+                    android:id="@+id/displayModuleLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:hint="@string/homeAssistantIpEditTextPreviewIp"
-                    android:imeOptions="actionDone"
-                    android:inputType="textUri"
-                    android:textSize="18sp" />
+                    android:layout_marginTop="8dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/ignoreSslErrors"
+                    <TextView
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/display_module_label"
+                        android:textSize="18sp" />
+
+                    <Spinner
+                        android:id="@+id/displayModule"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:spinnerMode="dialog" />
+                </LinearLayout>
+
+                <!-- options of every display module are rendered here and only the picked one shows -->
+                <LinearLayout
+                    android:id="@+id/displayModuleOptions"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="48dp"
-                    android:layout_marginTop="24dp"
-                    android:text="@string/ignore_ssl_errors"
-                    android:textSize="18sp"
-                    tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-                <com.google.android.material.materialswitch.MaterialSwitch
-                    android:id="@+id/extendedJavascriptInterface"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="24dp"
-                    android:text="@string/extended_js_interface"
-                    android:textSize="18sp"
-                    tools:ignore="UseSwitchCompatOrMaterialXml" />
+                    android:orientation="vertical" />
 
                 <com.google.android.material.materialswitch.MaterialSwitch
                     android:id="@+id/liteMode"
