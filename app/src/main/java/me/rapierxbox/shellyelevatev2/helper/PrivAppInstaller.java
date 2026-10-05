@@ -23,11 +23,13 @@ public final class PrivAppInstaller {
         return ctx.checkSelfPermission(Manifest.permission.INSTALL_PACKAGES) == PackageManager.PERMISSION_GRANTED;
     }
 
-    // grant write settings and add to the doze whitelist so the manual adb steps are gone
+    // grant write settings and usage stats and add to the doze whitelist so the manual adb steps are gone
+    // usage stats lets the app display module see which app is in front
     public static void autoGrantPermissions(Context ctx) {
         String pkg = ctx.getPackageName();
         PrivilegedShell.Result a = PrivilegedShell.runShell("appops set " + pkg + " WRITE_SETTINGS allow");
         PrivilegedShell.Result b = PrivilegedShell.runShell("dumpsys deviceidle whitelist +" + pkg);
-        Log.i(TAG, "autoGrant writeSettings=" + a.exitCode + " deviceidle=" + b.exitCode);
+        PrivilegedShell.Result c = PrivilegedShell.runShell("appops set " + pkg + " GET_USAGE_STATS allow");
+        Log.i(TAG, "autoGrant writeSettings=" + a.exitCode + " deviceidle=" + b.exitCode + " usageStats=" + c.exitCode);
     }
 }

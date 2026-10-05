@@ -30,6 +30,9 @@ interface DisplayModule {
     // must work from a non activity context
     fun bringToFront(context: Context)
 
+    // how often the kiosk watchdog checks that the module is still in front
+    val watchdogIntervalMs: Long get() = 30_000L
+
     // for settings ui that options cannot express
     fun createCustomSettings(fragment: Fragment, parent: ViewGroup): SettingsSection? = null
 }

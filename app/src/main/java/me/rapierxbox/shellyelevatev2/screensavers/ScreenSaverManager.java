@@ -23,6 +23,7 @@ import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication;
+import me.rapierxbox.shellyelevatev2.display.DisplayController;
 
 // idle timer for the screensaver plus proximity-based wake handling
 public class ScreenSaverManager extends BroadcastReceiver {
@@ -268,6 +269,9 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
         lastTouchEventTime = System.currentTimeMillis();
         rescheduleIdleCheck();
+
+        // the display module comes back here even after the user left it on purpose
+        DisplayController.onScreenSaverStopped(appContext);
 
         Log.i(TAG, "Stopping screensaver: " + saver.getClass().getSimpleName());
 

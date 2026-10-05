@@ -11,6 +11,7 @@ usage:
     apply-settings.py settings.json -f ips.txt          (one ip per line, # comments)
     apply-settings.py settings.json -f ips.txt --dry-run
     apply-settings.py --list                            (every setting with type and default)
+    apply-settings.py --list 10.0.30.145                (plus the display module options of that device)
 
 needs only the python standard library
 """
@@ -28,7 +29,10 @@ PER_DEVICE_KEYS = {"mqttDeviceId"}
 
 # key, type, default, meaning. keep in sync with Constants.java
 # N in a key is the 0 based button or input index
+# display module options are not listed here. they come from GET /display/modules
 SETTINGS = [
+    ("display", None, None, None),
+    ("displayModule", str, "webview", "what the screen shows: webview or app"),
     ("general", None, None, None),
     ("webviewUrl", str, "", "dashboard url shown in the webview"),
     ("ignoreSslErrors", bool, False, "accept self signed certificates in the webview"),
@@ -94,7 +98,49 @@ SETTINGS = [
 ]
 
 
+# display module option keys and types read from a device
+MODULE_TYPES: dict = {}
+SCHEMA_TYPES = {"bool": bool, "string": str, "url": str, "choice": str, "app": str, "int": int, "float": float}
+
+
+def load_module_schema(host: str, port: int, timeout: float) -> dict | None:
+    try:
+        schema = request(base_url(host, port) + "/display/modules", timeout)
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    if not schema.get("success"):
+        return None
+    for module in schema.get("modules", []):
+        for option in module.get("options", []):
+            typ = SCHEMA_TYPES.get(option.get("type"))
+            if typ is not None:
+                MODULE_TYPES[option["key"]] = typ
+                # the app picker also stores the launcher activity
+                if option.get("componentKey"):
+                    MODULE_TYPES[option["componentKey"]] = str
+    return schema
+
+
+def print_module_schema(schema: dict) -> None:
+    print(f"\ndisplay modules (active: {schema.get('active')})")
+    for module in schema.get("modules", []):
+        print(f"  {module['id']}: {module['title']}")
+        for option in module.get("options", []):
+            if option.get("type") == "action":
+                continue
+            default = json.dumps(option.get("default", None))
+            extra = ""
+            if option.get("choices"):
+                extra = " one of " + ", ".join(c["id"] for c in option["choices"])
+            print(f"    {option['key']:<30} {option['type']:<6} {default:<20} {option['title']}{extra}")
+            if option.get("componentKey"):
+                empty = json.dumps("")
+                print(f"    {option['componentKey']:<30} {'string':<6} {empty:<20} launcher activity of the app above")
+
+
 def known_type(key: str):
+    if key in MODULE_TYPES:
+        return MODULE_TYPES[key]
     for name, typ, _, _ in SETTINGS:
         if typ is None:
             continue
@@ -213,6 +259,12 @@ def apply(host: str, settings: dict, args) -> tuple[str, bool, str]:
 def main() -> None:
     if "--list" in sys.argv[1:]:
         print_settings()
+        hosts = [a for a in sys.argv[1:] if a != "--list" and not a.startswith("-")]
+        if hosts:
+            schema = load_module_schema(hosts[0], DEFAULT_PORT, 5)
+            if schema is None:
+                sys.exit(f"cannot read display modules from {hosts[0]}")
+            print_module_schema(schema)
         return
 
     p = argparse.ArgumentParser(description="apply a settings json to shellyelevate devices. "
@@ -228,6 +280,8 @@ def main() -> None:
 
     settings = load_settings(args.json)
     hosts = load_hosts(args)
+    # module options vary by app version so learn them from the first device
+    load_module_schema(hosts[0], args.port, args.timeout)
     check_settings(settings)
 
     clashes = PER_DEVICE_KEYS & settings.keys()

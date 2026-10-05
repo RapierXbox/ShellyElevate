@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW
 import me.rapierxbox.shellyelevatev2.Constants.SP_DISPLAY_MODULE
+import me.rapierxbox.shellyelevatev2.display.app.AppDisplayModule
 import me.rapierxbox.shellyelevatev2.display.options.ModuleOption
 import me.rapierxbox.shellyelevatev2.display.webview.WebViewDisplayModule
 import org.json.JSONArray
@@ -15,6 +16,7 @@ object DisplayModuleRegistry {
     @JvmStatic
     val modules: List<DisplayModule> = listOf(
         WebViewDisplayModule,
+        AppDisplayModule,
     )
 
     const val DEFAULT_ID = DISPLAY_MODULE_WEBVIEW

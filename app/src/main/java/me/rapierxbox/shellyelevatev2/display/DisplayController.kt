@@ -66,10 +66,9 @@ object DisplayController {
         mainHandler.postDelayed({
             worker.execute {
                 if (isLiteMode(app)) return@execute
-                val wasAway = userAway
                 userAway = false
                 val module = activeModule(app)
-                if (!module.keepsInFront(app) && !wasAway) return@execute
+                if (!module.keepsInFront(app)) return@execute
                 if (module.isInFront(app) || isOwnUiInFront(app)) return@execute
                 Log.i(TAG, "screensaver ended, bringing ${module.id} back")
                 module.bringToFront(app)
