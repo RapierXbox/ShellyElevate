@@ -26,6 +26,8 @@ import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.SettingsActivity
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenManager
+import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.display.DisplayController
 import me.rapierxbox.shellyelevatev2.helper.PrivilegedShell
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchCalibrator
@@ -42,6 +44,7 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         val label: TextView = root.findViewById(R.id.cardLabel)
         val iconLarge: ImageView = root.findViewById(R.id.cardIconLarge)
         val snapshot: ImageView = root.findViewById(R.id.cardSnapshot)
+        val close: View = root.findViewById(R.id.cardClose)
         var packageName: String? = null
     }
 
@@ -62,6 +65,8 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     // the app under the switcher when it opened
     private var belowPackage: String? = null
     private var launching = false
+    private var launchedPackage: String? = null
+    private var consumingWakeGesture = false
     private var hidden = false
     private var sized = false
     private var shownAtMs = 0L
@@ -105,6 +110,8 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         if (AppCatalog.apps().isEmpty()) AppCatalog.refresh()
         appsPage.findViewById<View>(R.id.switcherSettings).setOnClickListener {
             if (closing) return@setOnClickListener
+            // settings opens on top so the dashboard must not be brought over it
+            launching = true
             startActivity(Intent(this, SettingsActivity::class.java))
             hideNow()
         }
@@ -141,12 +148,26 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         SnapshotStore.removeListener(snapshotListener)
         AppCatalog.removeListener(catalogListener)
         // anything covering the switcher ends this use so it never pops back up later on its own
-        if (!hidden) hideNow()
+        if (!hidden) hideNow(covered = true)
         super.onStop()
     }
 
+    // fed here like the other screens so the screensaver never starts while the switcher is in use
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         TouchCalibrator.onTouch(ev)
+        val screenManager = mScreenManager
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) {
+            consumingWakeGesture = screenManager?.shouldConsumeTouchForWake() == true
+        }
+        mScreenSaverManager?.onTouchEvent(ev)
+        screenManager?.onTouchEvent()
+        // a tap on a dark screen must not also open or close an app
+        if (consumingWakeGesture) {
+            if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
+                consumingWakeGesture = false
+            }
+            return true
+        }
         return super.dispatchTouchEvent(ev)
     }
 
@@ -182,12 +203,13 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     private fun prepareShow() {
         closing = false
         launching = false
+        launchedPackage = null
         closedApps.clear()
         shownAtMs = SystemClock.uptimeMillis()
+        // the catalog listener is off while hidden. the same list costs nothing
+        appAdapter.submit(AppCatalog.apps())
         rebuildPages(keepPage = false)
         belowPackage = cards.firstOrNull()?.packageName
-        pager.jumpTo(0)
-        updateDots()
         scrim.animate().cancel()
         pager.animate().cancel()
         scrim.alpha = 0f
@@ -207,6 +229,8 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     // pages
 
     private fun rebuildPages(keepPage: Boolean) {
+        // cards still flying away are closed first so the new list never brings them back
+        pager.finishDismissals()
         val page = pager.currentPage
         cards.clear()
         cards.addAll(buildCards())
@@ -222,7 +246,7 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
             pager.addPage(views.root, index)
             shownCards += views
         }
-        if (keepPage) pager.jumpTo(page.coerceAtMost(cards.size))
+        pager.jumpTo(if (keepPage) page.coerceAtMost(cards.size) else 0)
         updateDots()
     }
 
@@ -231,6 +255,9 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         val frame = views.root.findViewById<View>(R.id.cardFrame)
         frame.outlineProvider = roundedOutline
         frame.clipToOutline = true
+        views.close.setOnClickListener {
+            if (!closing) pager.dismissPage(shownCards.indexOf(views))
+        }
         return views
     }
 
@@ -239,6 +266,7 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
         views.icon.setImageDrawable(card.icon)
         views.iconLarge.setImageDrawable(card.icon)
         views.label.text = card.label
+        views.close.isVisible = !card.isModule
         bindSnapshot(views, fade = false)
     }
 
@@ -280,7 +308,7 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
             pkg == SnapshotStore.currentPackage() && cards.firstOrNull()?.packageName != pkg
         if (reorder) {
             rebuildPages(keepPage = false)
-            pager.jumpTo(0)
+            if (closedApps.isEmpty()) belowPackage = cards.firstOrNull()?.packageName
         } else {
             shownCards.firstOrNull { it.packageName == pkg }?.let { bindSnapshot(it, fade = true) }
         }
@@ -317,10 +345,14 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
 
     override fun canDismiss(index: Int): Boolean = cards.getOrNull(index)?.isModule == false
 
-    override fun onPageDismissed(index: Int) {
-        val card = cards.removeAt(index)
-        shownCards.removeAt(index).let { cardPool += it }
-        closeApp(card.packageName)
+    // found by its view so the package stays right even if the pages moved while it flew away
+    override fun onPageDismissed(page: View) {
+        val index = shownCards.indexOfFirst { it.root === page }
+        if (index < 0) return
+        val views = shownCards.removeAt(index)
+        cards.removeAt(index)
+        cardPool += views
+        views.packageName?.let { closeApp(it) }
         updateDots()
     }
 
@@ -369,10 +401,12 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     private fun open(packageName: String) {
         if (closing) return
         launching = true
+        launchedPackage = packageName
         if (AppSwitcher.launch(this, packageName)) {
             hideNow()
         } else {
             launching = false
+            launchedPackage = null
             close()
         }
     }
@@ -386,15 +420,21 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
     // the see through switcher keeps the app below visible and android never kills a visible app
     // so closed apps end only after the switcher is gone. when the app below was closed the display
     // module takes its place like closing the current app on a phone goes home
-    private fun endClosedApps() {
+    // nothing is brought up when something else already covered the switcher
+    private fun endClosedApps(covered: Boolean) {
         if (closedApps.isEmpty()) return
-        if (!launching && belowPackage in closedApps) DisplayController.bringActiveToFront(this)
-        val packages = closedApps.toList()
+        if (!launching && !covered && belowPackage in closedApps) DisplayController.bringActiveToFront(this)
+        // an app closed and then opened again in the same visit stays
+        val packages = closedApps.filter { it != launchedPackage }
         closedApps.clear()
+        if (packages.isEmpty()) return
+        val closedAt = SystemClock.uptimeMillis()
         val am = getSystemService(ACTIVITY_SERVICE) as android.app.ActivityManager
         Thread({
             Thread.sleep(CLOSE_DELAY_MS)
             for (pkg in packages) {
+                // opened again while waiting
+                if (AppSwitcher.launchedSince(pkg, closedAt)) continue
                 // force stop also ends services but needs the privileged grant and am does not always
                 // report a denial in its exit code so the background kill always follows
                 PrivilegedShell.runShell("am force-stop $pkg")
@@ -427,11 +467,13 @@ class AppSwitcherActivity : ComponentActivity(), SpringPager.Listener {
 
     // sends the switcher task behind everything so the next open skips building it all again
     // the app being opened animates in by itself so the switcher just disappears under it
-    private fun hideNow() {
+    private fun hideNow(covered: Boolean = false) {
         closing = true
         if (hidden) return
         hidden = true
-        endClosedApps()
+        // a card flung just before leaving still counts as closed
+        pager.finishDismissals()
+        endClosedApps(covered)
         if (!moveTaskToBack(true)) finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
