@@ -15,6 +15,8 @@ So I replaced it. ShellyElevate is an Android app that takes over the display. I
 
 https://github.com/user-attachments/assets/adf46edd-9bf1-45da-b553-bf7781d17fbd
 
+<sub>this video is really old but you get the jist<sub/>
+
 ## Using Home Assistant? Start with the integration
 
 Don't set things up by hand. Install the **[Shelly Elevate integration](https://github.com/RapierXbox/shellyelevateintegration)** and let it do the work. It installs the app on the display over ADB, pairs it over an encrypted connection and adds the display as a single device with everything on it. No MQTT discovery, no ESPHome, no long-lived tokens.
