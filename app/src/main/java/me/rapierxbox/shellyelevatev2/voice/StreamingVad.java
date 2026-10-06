@@ -24,10 +24,6 @@ public class StreamingVad implements AutoCloseable {
     private volatile long lastSpeechAtNs = 0L;
     private volatile boolean everActive = false;
 
-    public static boolean isModelPresent(Context context) {
-        return modelFile(context).exists();
-    }
-
     private static File modelFile(Context context) {
         return new File(StreamingModel.modelDir(context), WakeWordDetector.VAD_MODEL_NAME + ".tflite");
     }
@@ -66,8 +62,6 @@ public class StreamingVad implements AutoCloseable {
     }
 
     public boolean hasModel() { return model != null; }
-
-    public boolean isSpeechActive() { return !hasModel() || speechActive; }
 
     public boolean everActive() { return !hasModel() || everActive; }
 

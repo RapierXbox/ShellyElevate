@@ -7,7 +7,6 @@ public final class Constants {
     public static final String SHARED_PREFERENCES_NAME = "ShellyElevateV2";
 
     // generic prefs
-    public static final String SP_DEVICE = "device";
     public static final String SP_LITE_MODE = "liteMode";
     public static final String SP_SETTINGS_EVER_SHOWN = "settingEverShown";
 
@@ -81,11 +80,6 @@ public final class Constants {
     public static final int SLEEP_OPT_STANDARD = 1;
     public static final int SLEEP_OPT_AGGRESSIVE = 2;
 
-    // sleep optimization intents
-    public static final String INTENT_SLEEP_LEVEL_CHANGED = "me.rapierxbox.shellyelevatev2.SLEEP_LEVEL_CHANGED";
-    public static final String EXTRA_SLEEP_ACTIVE = "sleepActive";
-    public static final String EXTRA_SLEEP_LEVEL  = "sleepLevel";
-
     // bluetooth proxy prefs
     public static final String SP_BLUETOOTH_PROXY_ENABLED = "bluetoothProxyEnabled";
     public static final String SP_BLUETOOTH_PROXY_NAME    = "bluetoothProxyName";
@@ -128,10 +122,7 @@ public final class Constants {
     public static final String EXTRA_SCREEN_SAVER_ID = "screenSaverIdExtra";
 
     // screen saver ids are stored in prefs
-    public static final int SCREEN_SAVER_ID_SCREEN_OFF          = 0;
-    public static final int SCREEN_SAVER_ID_DIGITAL_CLOCK       = 1;
-    public static final int SCREEN_SAVER_ID_DIGITAL_CLOCK_DATE  = 2;
-    public static final int SCREEN_SAVER_ID_AOD                 = 3;
+    public static final int SCREEN_SAVER_ID_AOD = 3;
 
     // io intents
     public static final String INTENT_LIGHT_UPDATED = "me.rapierxbox.shellyelevatev2.LIGHT_UPDATED";

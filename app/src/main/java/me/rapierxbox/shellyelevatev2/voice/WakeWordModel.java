@@ -35,8 +35,6 @@ public abstract class WakeWordModel {
         }
 
         public String getName()       { return name; }
-        public String getStem()       { return stem; }
-        public String getFolderPath() { return folderPath; }
         public String getTfliteUrl()  { return tfliteUrl; }
         public String getJsonUrl()    { return jsonUrl; }
 

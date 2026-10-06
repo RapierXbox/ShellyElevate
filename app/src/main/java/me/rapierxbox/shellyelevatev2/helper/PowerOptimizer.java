@@ -1,11 +1,8 @@
 package me.rapierxbox.shellyelevatev2.helper;
 
-import static me.rapierxbox.shellyelevatev2.Constants.EXTRA_SLEEP_ACTIVE;
-import static me.rapierxbox.shellyelevatev2.Constants.EXTRA_SLEEP_LEVEL;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STARTED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STOPPED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
-import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SLEEP_LEVEL_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_AGGRESSIVE;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_NONE;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD;
@@ -104,7 +101,6 @@ public class PowerOptimizer extends BroadcastReceiver {
         sleepActive = true;
 
         Log.i(TAG, "Entering sleep, level=" + level);
-        broadcastLevel(true, level);
 
         if (level >= SLEEP_OPT_STANDARD) {
             sysfsExecutor.execute(cpuGovernor::applyLowPower);
@@ -123,7 +119,6 @@ public class PowerOptimizer extends BroadcastReceiver {
         activeLevel = SLEEP_OPT_NONE;
 
         Log.i(TAG, "Exiting sleep, level was=" + level);
-        broadcastLevel(false, SLEEP_OPT_NONE);
 
         // undone in reverse order of enterSleep
         if (level >= SLEEP_OPT_AGGRESSIVE) {
@@ -134,12 +129,5 @@ public class PowerOptimizer extends BroadcastReceiver {
         if (level >= SLEEP_OPT_STANDARD) {
             sysfsExecutor.execute(cpuGovernor::restore);
         }
-    }
-
-    private void broadcastLevel(boolean active, int level) {
-        Intent intent = new Intent(INTENT_SLEEP_LEVEL_CHANGED)
-                .putExtra(EXTRA_SLEEP_ACTIVE, active)
-                .putExtra(EXTRA_SLEEP_LEVEL, level);
-        LocalBroadcastManager.getInstance(appContext).sendBroadcast(intent);
     }
 }

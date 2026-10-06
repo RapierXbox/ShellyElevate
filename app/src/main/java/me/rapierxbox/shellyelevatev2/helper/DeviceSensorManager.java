@@ -70,7 +70,6 @@ public class DeviceSensorManager implements SensorEventListener {
     private float lastPublishedProximity = -1f;
     private volatile float maxProximitySensorValue = 1.0f;
 
-    private volatile boolean proximitySensorAvailable;
     private volatile boolean usingGpioKeysProximity = false;
     private volatile boolean gpioProximityConfirmed = false;
     private volatile boolean sensorManagerProximitySuppressed = false;
@@ -118,12 +117,9 @@ public class DeviceSensorManager implements SensorEventListener {
         }
         if (fallbackProximityMaxRange >= 0f) {
             maxProximitySensorValue = fallbackProximityMaxRange;
-            proximitySensorAvailable = true;
         } else if (usingGpioKeysProximity) {
             maxProximitySensorValue = 1f;
-            proximitySensorAvailable = true;
         } else {
-            proximitySensorAvailable = false;
             Log.w(TAG, "Proximity sensor unavailable (no gpio_keys or SensorManager sensor)");
         }
         if (usingGpioKeysProximity) {
@@ -141,14 +137,6 @@ public class DeviceSensorManager implements SensorEventListener {
 
     public float getMaxProximitySensorValue() {
         return maxProximitySensorValue;
-    }
-
-    public boolean isLightSensorAvailable() {
-        return lightSensorAvailable;
-    }
-
-    public boolean isProximitySensorAvailable() {
-        return proximitySensorAvailable;
     }
 
     // makes the next proximity reading broadcast even when unchanged
@@ -299,7 +287,6 @@ public class DeviceSensorManager implements SensorEventListener {
 
     private synchronized void applyProximityFallback() {
         if (fallbackProximityMaxRange < 0f) {
-            proximitySensorAvailable = false;
             Log.w(TAG, "Proximity sensor unavailable (no gpio_keys or SensorManager sensor)");
             return;
         }
@@ -314,7 +301,6 @@ public class DeviceSensorManager implements SensorEventListener {
         gpioProximityConfirmed = false;
         sensorManagerProximitySuppressed = false;
         maxProximitySensorValue = fallbackProximityMaxRange;
-        proximitySensorAvailable = true;
         Log.i(TAG, "Using SensorManager proximity sensor with max range " + maxProximitySensorValue);
     }
 
@@ -382,7 +368,6 @@ public class DeviceSensorManager implements SensorEventListener {
         if (!gpioProximityConfirmed) {
             gpioProximityConfirmed = true;
             maxProximitySensorValue = 1.0f; // binary near and far scale
-            proximitySensorAvailable = true;
             suppressSensorManagerProximity();
             Log.i(TAG, "gpio_keys proximity confirmed, using as primary; SensorManager proximity suppressed");
         }
