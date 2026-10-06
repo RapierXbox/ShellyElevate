@@ -668,7 +668,11 @@ class SettingsFragment : Fragment() {
         b.appUpdateStatus.text = ""
         b.appUpdateButton.setOnClickListener { onAppUpdateButton() }
         // switching the channel checks again so the offer always matches the switch
-        b.appUpdatePrerelease.setOnCheckedChangeListener { _, _ -> startAppUpdateCheck() }
+        // and is stored right away since an update restarts the app before settings get saved
+        b.appUpdatePrerelease.setOnCheckedChangeListener { _, checked ->
+            mSharedPreferences.edit { putBoolean(SP_UPDATE_PRERELEASE, checked) }
+            startAppUpdateCheck()
+        }
         if (AppUpdater.isInProgress()) {
             b.appUpdateStatus.text = getString(R.string.app_update_status_busy)
             b.appUpdateButton.isEnabled = false
