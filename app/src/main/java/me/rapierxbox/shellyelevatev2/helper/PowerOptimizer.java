@@ -7,7 +7,6 @@ import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_AGGRESSIVE;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_NONE;
 import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mBluetoothProxyManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceAssistantManager;
@@ -22,6 +21,8 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+
+import me.rapierxbox.shellyelevatev2.bluetooth.BleScanner;
 
 // applies the user chosen sleep optimization level while a screensaver runs
 // standard lowers the cpu governor and aggressive also throttles mqtt bluetooth and voice
@@ -107,7 +108,7 @@ public class PowerOptimizer extends BroadcastReceiver {
         }
         if (level >= SLEEP_OPT_AGGRESSIVE) {
             if (mMQTTServer != null) mMQTTServer.setLowPowerMode(true);
-            if (mBluetoothProxyManager != null) mBluetoothProxyManager.setLowPowerMode(true);
+            BleScanner.get().setLowPowerMode(true);
             if (mVoiceAssistantManager != null) mVoiceAssistantManager.setLowPowerMode(true);
         }
     }
@@ -123,7 +124,7 @@ public class PowerOptimizer extends BroadcastReceiver {
         // undone in reverse order of enterSleep
         if (level >= SLEEP_OPT_AGGRESSIVE) {
             if (mVoiceAssistantManager != null) mVoiceAssistantManager.setLowPowerMode(false);
-            if (mBluetoothProxyManager != null) mBluetoothProxyManager.setLowPowerMode(false);
+            BleScanner.get().setLowPowerMode(false);
             if (mMQTTServer != null) mMQTTServer.setLowPowerMode(false);
         }
         if (level >= SLEEP_OPT_STANDARD) {
