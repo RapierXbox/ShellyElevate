@@ -99,6 +99,8 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.name }}
           name: ${{ steps.version.outputs.name }}
+          # a manual run from a branch tags the commit it built instead of the default branch
+          target_commitish: ${{ github.sha }}
           generate_release_notes: true
           # a pre-release keeps the same version scheme and is never marked as the latest release
           prerelease: ${{ inputs.prerelease == true }}
