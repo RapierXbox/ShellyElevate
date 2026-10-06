@@ -250,7 +250,7 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
             SwipeClassifier.Track(start[0] * w, start[1] * h, end[0] * w, end[1] * h)
         }
         val duration = gesture.endMs - if (gesture.maxPointers > 1) gesture.lastJoinMs else gesture.startMs
-        val swipe = SwipeClassifier.classify(tracks, gesture.maxPointers, duration, minOf(w, h) / 3f)
+        val swipe = SwipeClassifier.classify(tracks, gesture.maxPointers, duration, minOf(w, h))
 
         mainHandler.post {
             if (ForegroundActivities.anyResumed()) return@post

@@ -39,9 +39,17 @@ class MultiTouchTracker(private val listener: Listener) {
     private var protocolA = false
     private var pendingX = UNKNOWN
     private var pendingY = UNKNOWN
+    private var pendingId = NO_ID
     private var frameCount = 0
     private val frameX = IntArray(MAX_CONTACTS)
     private val frameY = IntArray(MAX_CONTACTS)
+    private val frameId = IntArray(MAX_CONTACTS)
+
+    // protocol a matching scratch. which index each contact continues and which indices are taken
+    private val contactIndex = IntArray(MAX_CONTACTS)
+    private val contactNew = BooleanArray(MAX_CONTACTS)
+    private val indexTaken = BooleanArray(MAX_CONTACTS)
+    private var nextSyntheticId = 0
 
     // the finger held by each slot or contact index and the tracking id it had when it went down
     private val live = arrayOfNulls<Track>(MAX_CONTACTS)
@@ -68,10 +76,12 @@ class MultiTouchTracker(private val listener: Listener) {
                     if (pendingX != UNKNOWN && pendingY != UNKNOWN && frameCount < MAX_CONTACTS) {
                         frameX[frameCount] = pendingX
                         frameY[frameCount] = pendingY
+                        frameId[frameCount] = pendingId
                         frameCount++
                     }
                     pendingX = UNKNOWN
                     pendingY = UNKNOWN
+                    pendingId = NO_ID
                 }
                 // the kernel dropped events so whatever we track is wrong now
                 SYN_DROPPED -> reset()
@@ -87,6 +97,7 @@ class MultiTouchTracker(private val listener: Listener) {
         frameCount = 0
         pendingX = UNKNOWN
         pendingY = UNKNOWN
+        pendingId = NO_ID
         clearGesture()
     }
 
@@ -108,8 +119,10 @@ class MultiTouchTracker(private val listener: Listener) {
     private fun onAbs(code: Int, value: Int) {
         when (code) {
             ABS_MT_SLOT -> currentSlot = value
-            ABS_MT_TRACKING_ID -> if (currentSlot in 0 until MAX_CONTACTS) {
-                slotId[currentSlot] = if (value < 0) NO_ID else value
+            ABS_MT_TRACKING_ID -> {
+                val id = if (value < 0) NO_ID else value
+                pendingId = id
+                if (!protocolA && currentSlot in 0 until MAX_CONTACTS) slotId[currentSlot] = id
             }
             // both views are kept since protocol a only reveals itself at the first SYN_MT_REPORT
             // which comes after the position of the first contact
@@ -125,24 +138,13 @@ class MultiTouchTracker(private val listener: Listener) {
     }
 
     private fun commitFrame(nowMs: Long) {
+        if (protocolA) matchProtocolA()
         var count = 0
         for (i in 0 until MAX_CONTACTS) {
-            val down: Boolean
-            val x: Int
-            val y: Int
-            val id: Int
-            if (protocolA) {
-                // contacts carry no identity so the order within a frame stands in for it
-                down = i < frameCount
-                x = frameX[i]
-                y = frameY[i]
-                id = 0
-            } else {
-                id = slotId[i]
-                x = slotX[i]
-                y = slotY[i]
-                down = id != NO_ID && x != UNKNOWN && y != UNKNOWN
-            }
+            val id = slotId[i]
+            val x = slotX[i]
+            val y = slotY[i]
+            val down = id != NO_ID && x != UNKNOWN && y != UNKNOWN
 
             val track = live[i]
             // a new tracking id in the same slot is a new finger
@@ -191,6 +193,91 @@ class MultiTouchTracker(private val listener: Listener) {
             clearGesture()
             listener.onGestureEnd(gesture)
         }
+    }
+
+    // protocol a contacts come in no fixed order and the order shifts when a finger lifts
+    // so each contact is matched to the finger it continues and written to that slot
+    // by tracking id when the panel sends them and otherwise by the nearest last position
+    private fun matchProtocolA() {
+        indexTaken.fill(false)
+        var withIds = frameCount > 0
+        for (c in 0 until frameCount) {
+            contactIndex[c] = -1
+            contactNew[c] = false
+            if (frameId[c] == NO_ID) withIds = false
+        }
+        if (withIds) {
+            for (c in 0 until frameCount) {
+                for (i in 0 until MAX_CONTACTS) {
+                    if (!indexTaken[i] && live[i] != null && liveId[i] == frameId[c]) {
+                        contactIndex[c] = i
+                        indexTaken[i] = true
+                        break
+                    }
+                }
+            }
+        } else {
+            // greedy closest pairs first which is exact for the usual one or two fingers
+            while (true) {
+                var best = Long.MAX_VALUE
+                var bestContact = -1
+                var bestIndex = -1
+                for (c in 0 until frameCount) {
+                    if (contactIndex[c] >= 0) continue
+                    for (i in 0 until MAX_CONTACTS) {
+                        val track = live[i] ?: continue
+                        if (indexTaken[i]) continue
+                        val dx = (frameX[c] - track.endX).toLong()
+                        val dy = (frameY[c] - track.endY).toLong()
+                        val d = dx * dx + dy * dy
+                        if (d < best) {
+                            best = d
+                            bestContact = c
+                            bestIndex = i
+                        }
+                    }
+                }
+                if (bestContact < 0) break
+                contactIndex[bestContact] = bestIndex
+                indexTaken[bestIndex] = true
+            }
+        }
+        // new fingers take an empty index and only if none is left one whose finger lifted
+        for (c in 0 until frameCount) {
+            if (contactIndex[c] >= 0) continue
+            var free = -1
+            for (i in 0 until MAX_CONTACTS) {
+                if (indexTaken[i]) continue
+                if (live[i] == null) {
+                    free = i
+                    break
+                }
+                if (free < 0) free = i
+            }
+            if (free < 0) continue
+            contactIndex[c] = free
+            contactNew[c] = true
+            indexTaken[free] = true
+        }
+
+        slotId.fill(NO_ID)
+        for (c in 0 until frameCount) {
+            val i = contactIndex[c]
+            if (i < 0) continue
+            slotX[i] = frameX[c]
+            slotY[i] = frameY[c]
+            slotId[i] = when {
+                withIds -> frameId[c]
+                !contactNew[c] -> liveId[i]
+                else -> newSyntheticId()
+            }
+        }
+    }
+
+    // stands in for a tracking id so a new finger in a lifted fingers index starts a new track
+    private fun newSyntheticId(): Int {
+        nextSyntheticId = (nextSyntheticId + 1) and Int.MAX_VALUE
+        return nextSyntheticId
     }
 
     private fun clearGesture() {
