@@ -5,6 +5,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_INTEGRATION_API_ENABLED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MEDIA_ENABLED;
 
 import android.app.Application;
@@ -27,6 +28,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.api.ApiManager;
+import me.rapierxbox.shellyelevatev2.api.ClientTokenStore;
 import me.rapierxbox.shellyelevatev2.api.BleChannel;
 import me.rapierxbox.shellyelevatev2.api.MediaCommands;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
@@ -116,6 +118,7 @@ public class ShellyElevateApplication extends Application {
             @Override
             public void onReceive(Context context, Intent intent) {
                 applyHttpServerSetting();
+                applyApiSetting();
                 applyMediaSetting();
                 DisplayController.onSettingsChanged(context);
             }
@@ -144,6 +147,8 @@ public class ShellyElevateApplication extends Application {
     private void initSingletons() {
         mApplicationContext = getApplicationContext();
         mSharedPreferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
+        // keys of the removed esphome proxy and token satellite. before any manager reads them
+        RemovedSettings.clear(mSharedPreferences, ClientTokenStore.get(this).hasClients());
         // reports settings changes from every writer to the v1 api
         SettingsChangeTracker.start(mSharedPreferences);
         warmUpWebViewProvider();
@@ -181,9 +186,7 @@ public class ShellyElevateApplication extends Application {
         mPowerOptimizer = new PowerOptimizer(this);
 
         // protocol v1 for the home assistant integration. idle until a controller pairs
-        ApiManager.start(this);
-        // keys of the removed esphome proxy and token satellite
-        RemovedSettings.clear(mSharedPreferences);
+        if (mSharedPreferences.getBoolean(SP_INTEGRATION_API_ENABLED, true)) ApiManager.start(this);
 
         mHttpServer = new HttpServer();
         httpWatchdog = Executors.newSingleThreadScheduledExecutor();
@@ -216,6 +219,15 @@ public class ShellyElevateApplication extends Application {
         } else {
             cancelHttpWatchdog();
             stopHttpServer();
+        }
+    }
+
+    // the integration api can be switched off by users who do not use home assistant
+    private void applyApiSetting() {
+        if (mSharedPreferences.getBoolean(SP_INTEGRATION_API_ENABLED, true)) {
+            ApiManager.start(this);
+        } else {
+            ApiManager.stop();
         }
     }
 

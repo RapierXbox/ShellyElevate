@@ -461,6 +461,8 @@ class SettingsFragment : Fragment() {
         homeAssistantPage = b
         val defaultClientId = "shellyelevate-" + UUID.randomUUID().toString().replace("-", "").substring(2, 6)
         bindPage {
+            +SwitchPref(b.integrationApiEnabled, SP_INTEGRATION_API_ENABLED, true)
+            visibleWhen(b.integrationApiEnabled, b.integrationStatus, b.integrationClients, b.integrationFingerprint)
             +SwitchPref(b.mqttEnabled, SP_MQTT_ENABLED, false)
             visibleWhen(b.mqttEnabled,
                 b.mqttBrokerLayout, b.mqttPortLayout,

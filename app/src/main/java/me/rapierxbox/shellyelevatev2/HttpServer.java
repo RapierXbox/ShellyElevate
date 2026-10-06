@@ -30,7 +30,6 @@ import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.switcher.AppSwitcher;
 
-import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 

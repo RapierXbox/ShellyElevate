@@ -53,6 +53,18 @@ final class ScreenCapture {
         Process process = null;
         try {
             process = Runtime.getRuntime().exec(new String[]{"screencap", "-p"});
+            // a hung screencap is killed so it cannot pin a server thread
+            Process running = process;
+            Thread watchdog = new Thread(() -> {
+                try {
+                    Thread.sleep(TIMEOUT_MS);
+                    running.destroy();
+                } catch (InterruptedException ignored) {
+                    // finished in time
+                }
+            }, "ScreencapTimeout");
+            watchdog.setDaemon(true);
+            watchdog.start();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             try (InputStream in = process.getInputStream()) {
                 byte[] buf = new byte[64 * 1024];

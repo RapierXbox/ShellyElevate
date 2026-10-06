@@ -19,11 +19,14 @@ public final class RemovedSettings {
 
     private RemovedSettings() {}
 
-    public static void clear(SharedPreferences prefs) {
+    // paired tells whether a controller can take over voice. without one the microphone would
+    // listen for a wake word that has nowhere to go so voice stays off until the user turns it on
+    public static void clear(SharedPreferences prefs, boolean paired) {
         SharedPreferences.Editor editor = null;
         // users of a removed feature keep the feature through its replacement in the integration
+        // the ble scan only runs while a controller is connected so it is always safe to carry over
         editor = carryOver(prefs, editor, "bluetoothProxyEnabled", "bleScannerEnabled");
-        editor = carryOver(prefs, editor, "voiceAssistantEnabled", "haVoiceEnabled");
+        if (paired) editor = carryOver(prefs, editor, "voiceAssistantEnabled", "haVoiceEnabled");
         for (String key : KEYS) {
             if (!prefs.contains(key)) continue;
             if (editor == null) editor = prefs.edit();

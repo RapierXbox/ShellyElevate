@@ -192,6 +192,8 @@ public final class SettingsRegistry {
         add(m, bool(Constants.SP_MEDIA_ENABLED, false, CATEGORY_MEDIA, "Media playback"));
 
         // advanced
+        add(m, bool(Constants.SP_INTEGRATION_API_ENABLED, true, CATEGORY_ADVANCED, "Home Assistant integration API (port 8443)")
+                .description("Pairing and the encrypted API the Shelly Elevate integration uses. Turning it off disconnects the integration"));
         add(m, bool(Constants.SP_HTTP_SERVER_ENABLED, true, CATEGORY_ADVANCED, "Legacy HTTP API (port 8080)")
                 .description("Unauthenticated HTTP API of older app versions"));
         add(m, bool(Constants.SP_ADB_WIFI_ENABLED, false, CATEGORY_ADVANCED, "ADB over Wi-Fi"));

@@ -553,6 +553,8 @@ public class MediaHelper {
                 break;
             case AudioManager.AUDIOFOCUS_LOSS:
                 hasFocus = false;
+                // the legacy loop never asked for focus before so a dashboard video does not stop it
+                if (legacyRepeat) break;
                 if (state == State.PLAYING) {
                     try {
                         musicPlayer.pause();

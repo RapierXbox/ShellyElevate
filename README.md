@@ -43,7 +43,9 @@ These features were removed because the Home Assistant integration replaces them
 
 What this means after updating:
 
-- If you used the ESPHome proxy or the token voice assistant, the app switches on their replacements automatically, but they only work once the display is **paired with the integration**. Remove the old ESPHome device from Home Assistant.
+- If you used the ESPHome proxy, the integration's Bluetooth proxy is switched on for you; it starts once the display is **paired with the integration**. Remove the old ESPHome device from Home Assistant.
+- If you used the token voice assistant, voice through the integration is switched on for you only if the display was already paired. Otherwise pair it and turn on **Voice assistant via Home Assistant integration**.
+- Not using Home Assistant at all? You can turn the integration API off under **Settings → Home Assistant → Allow pairing with Home Assistant**.
 - The long-lived token and pipeline id you entered are deleted from the display. The integration lets you pick the Assist pipeline in Home Assistant.
 - If you also keep MQTT on with Home Assistant discovery, the display shows up twice. Turn off **MQTT Home Assistant discovery** once the integration is set up (the integration offers a repair for this).
 - After pairing, the plain HTTP API on port 8080 no longer shows passwords and refuses changes to the MQTT broker, MQTT login and dashboard URL. Change those on the display or through the integration.

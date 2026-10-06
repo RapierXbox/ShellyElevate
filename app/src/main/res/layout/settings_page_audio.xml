@@ -59,7 +59,7 @@
         android:text="@string/ha_voice_hint"
         android:textSize="14sp" />
 
-    <!-- wake word and capture settings shared by both voice transports -->
+    <!-- wake word and capture settings -->
     <LinearLayout
         android:id="@+id/voiceEngineLayout"
         android:layout_width="match_parent"

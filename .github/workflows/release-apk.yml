@@ -85,6 +85,10 @@ jobs:
               echo "::error::version must look like 3.26279.2140"
               exit 1
             fi
+            if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null; then
+              echo "::error::v$VERSION already exists"
+              exit 1
+            fi
           else
             # manual runs use the gradle date scheme
             VERSION="3.$(date +%y%j).$(date +%H%M)"
@@ -102,8 +106,9 @@ jobs:
         run: ./gradlew clean :app:assembleRelease --no-daemon --stacktrace
 
       - name: Prepare APK for release
+        env:
+          VERSION: ${{ steps.version.outputs.name }}
         run: |
-          VERSION="${{ steps.version.outputs.name }}"
           VERSION=${VERSION#v}  # strip a leading v if present
           cp app/build/outputs/apk/release/*.apk "ShellyElevateV2-${VERSION}.apk"
 

@@ -52,13 +52,19 @@ public class ProvisionReceiver extends BroadcastReceiver {
             }
         }
         ClientTokenStore.get(context).store(clientId, clientName != null ? clientName : "Controller", token);
-        try {
-            setResultData(TlsIdentity.get().fingerprint());
-            setResultCode(0);
-            Log.i(TAG, "Provisioned " + clientName);
-        } catch (Exception e) {
-            Log.e(TAG, "No TLS identity for the provisioning answer", e);
-            setResultCode(3);
-        }
+        // the keystore key may still be generating on first start so wait for it off the main thread
+        PendingResult result = goAsync();
+        new Thread(() -> {
+            try {
+                result.setResultData(TlsIdentity.get().fingerprint());
+                result.setResultCode(0);
+                Log.i(TAG, "Provisioned " + clientName);
+            } catch (Exception e) {
+                Log.e(TAG, "No TLS identity for the provisioning answer", e);
+                result.setResultCode(3);
+            } finally {
+                result.finish();
+            }
+        }, "Provision").start();
     }
 }

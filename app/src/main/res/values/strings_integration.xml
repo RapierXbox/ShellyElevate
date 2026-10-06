@@ -17,6 +17,7 @@
     <string name="integration_revoke_title">Remove %1$s?</string>
     <string name="integration_revoke_message">It can no longer control this display until it pairs again.</string>
     <string name="integration_fingerprint">Certificate SHA-256 %1$s</string>
+    <string name="integration_api_enabled">Allow pairing with Home Assistant</string>
     <string name="mqtt_header">MQTT</string>
 
     <!-- voice and bluetooth through the integration -->

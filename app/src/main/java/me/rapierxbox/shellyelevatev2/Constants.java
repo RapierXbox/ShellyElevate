@@ -40,6 +40,8 @@ public final class Constants {
 
     // http server prefs. httpServer is the plain legacy api on 8080 and never gates the v1 api
     public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
+    // the v1 api on 8443 with pairing and mdns for the home assistant integration
+    public static final String SP_INTEGRATION_API_ENABLED = "integrationApiEnabled";
     public static final String SP_EXTENDED_JAVASCRIPT_INTERFACE = "extendedJavascriptInterface";
 
     // adb prefs
