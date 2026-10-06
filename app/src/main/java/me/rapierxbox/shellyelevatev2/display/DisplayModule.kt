@@ -48,6 +48,9 @@ interface DisplayContent {
     fun onResume() {}
     fun onStop() {}
     fun onDestroy() {}
+
+    // true when the module used the back press itself
+    fun onBackPressed(): Boolean = false
 }
 
 // the narrow slice of MainActivity a module may use

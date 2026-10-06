@@ -19,6 +19,7 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.enableEdgeToEdge
 import androidx.annotation.RequiresPermission
 import androidx.appcompat.app.AlertDialog
@@ -158,6 +159,13 @@ class MainActivity : ComponentActivity(), DisplayHost {
 
         registerBroadcastReceivers()
         applyScoreBarSetting()
+
+        // back never leaves the kiosk. finishing the host would uncover whatever app is below
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                content?.onBackPressed()
+            }
+        })
 
         // after the content so the dashboard webview starts building first
         requestWriteSettingsPermission()

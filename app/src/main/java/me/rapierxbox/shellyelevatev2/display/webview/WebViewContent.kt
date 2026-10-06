@@ -232,6 +232,13 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         if (!initialLoadDone) safeInitialLoad()
     }
 
+    // back walks the dashboard history instead of leaving the kiosk
+    override fun onBackPressed(): Boolean {
+        if (!webView.canGoBack()) return false
+        webView.goBack()
+        return true
+    }
+
     override fun onStop() {
         stoppedSinceResume = true
         cancelRetry()
