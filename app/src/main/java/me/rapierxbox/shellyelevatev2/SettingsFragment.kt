@@ -998,7 +998,7 @@ class SettingsFragment : Fragment() {
                     .show()
             } else if (result == WakeWordModelManager.VadResult.DOWNLOADED) {
                 // force a reload so the detector picks up the freshly fetched vad
-                mVoiceAssistantManager?.invalidateLoadedModel()
+                mVoiceEngine?.invalidateLoadedModel()
             }
         }
     }
@@ -1279,7 +1279,7 @@ class SettingsFragment : Fragment() {
 
     private fun updateWakeModelStatus() {
         val b = audioPage ?: return
-        val manager = mVoiceAssistantManager ?: return
+        val manager = mVoiceEngine ?: return
         val statusText = when (manager.wakeModelStatus) {
             WakeWordDetector.ModelStatus.LOADED         -> getString(R.string.voice_wake_model_status_loaded)
             WakeWordDetector.ModelStatus.FILE_NOT_FOUND -> getString(R.string.voice_wake_model_status_not_found)

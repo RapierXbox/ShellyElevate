@@ -46,7 +46,7 @@ import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.switcher.AppCatalog;
-import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager;
+import me.rapierxbox.shellyelevatev2.voice.VoiceEngine;
 
 public class ShellyElevateApplication extends Application {
     private static final String TAG = "ShellyElevateApplication";
@@ -72,7 +72,7 @@ public class ShellyElevateApplication extends Application {
     public static ScreenSaverManager mScreenSaverManager;
     public static ScreenManager mScreenManager;
     public static NightModeManager mNightModeManager;
-    public static VoiceAssistantManager mVoiceAssistantManager;
+    public static VoiceEngine mVoiceEngine;
     public static BluetoothProxyManager mBluetoothProxyManager;
     public static PowerOptimizer mPowerOptimizer;
 
@@ -170,7 +170,7 @@ public class ShellyElevateApplication extends Application {
         }
 
         mMQTTServer = new MQTTServer();
-        mVoiceAssistantManager = new VoiceAssistantManager();
+        mVoiceEngine = new VoiceEngine();
         mBluetoothProxyManager = new BluetoothProxyManager();
         mPowerOptimizer = new PowerOptimizer(this);
 
@@ -376,7 +376,7 @@ public class ShellyElevateApplication extends Application {
 
         if (mMQTTServer != null) mMQTTServer.onDestroy();
         StesProtocolHandler.close();
-        if (mVoiceAssistantManager != null) mVoiceAssistantManager.onDestroy();
+        if (mVoiceEngine != null) mVoiceEngine.onDestroy();
         if (mBluetoothProxyManager != null) mBluetoothProxyManager.onDestroy();
         if (mMediaHelper != null) mMediaHelper.onDestroy();
 

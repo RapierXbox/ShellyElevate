@@ -54,7 +54,7 @@ import me.rapierxbox.shellyelevatev2.helper.GestureInterceptLayout
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchCalibrator
-import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager
+import me.rapierxbox.shellyelevatev2.voice.VoiceEngine
 import java.io.File
 
 // hosts the active display module and the overlays every module shares
@@ -94,8 +94,8 @@ class MainActivity : ComponentActivity(), DisplayHost {
     private val voiceStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val stateName = intent?.getStringExtra(INTENT_VOICE_STATE_KEY) ?: return
-            val active = stateName == VoiceAssistantManager.State.LISTENING.name
-                    || stateName == VoiceAssistantManager.State.PROCESSING.name
+            val active = stateName == VoiceEngine.State.LISTENING.name
+                    || stateName == VoiceEngine.State.PROCESSING.name
             binding.voiceIndicatorDot.visibility = if (active) View.VISIBLE else View.GONE
             if (active) resetScoreBar()
         }
