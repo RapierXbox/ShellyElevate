@@ -265,7 +265,7 @@ object DisplayController {
     // it normally ran at start already but it is cheap to try again. may shell out so keep it off the main thread
     private fun allowBackgroundStarts(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q || Settings.canDrawOverlays(context)) return
-        PrivilegedShell.runShell("appops set ${context.packageName} SYSTEM_ALERT_WINDOW allow")
+        PrivilegedShell.allowAppOp(context.packageName, "SYSTEM_ALERT_WINDOW")
         if (!Settings.canDrawOverlays(context)) Log.w(TAG, "overlay permission missing so android may block the return to the front")
     }
 

@@ -45,6 +45,10 @@ public final class PrivilegedShell {
         return run("sh", "-c", script);
     }
 
+    public static Result allowAppOp(String pkg, String op) {
+        return run("appops", "set", pkg, op, "allow");
+    }
+
     private static Result drainAndWait(Process p) {
         // close stdin so commands that read it cannot hang
         try { p.getOutputStream().close(); } catch (IOException ignored) {}

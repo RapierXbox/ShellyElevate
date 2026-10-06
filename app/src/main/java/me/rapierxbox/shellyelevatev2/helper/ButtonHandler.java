@@ -15,7 +15,6 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.view.KeyEvent;
 
-import java.io.IOException;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -166,13 +165,7 @@ public class ButtonHandler {
 
     private void rebootIfEnabled() {
         if (mSharedPreferences == null || !mSharedPreferences.getBoolean(SP_POWER_BUTTON_AUTO_REBOOT, true)) return;
-        ioExecutor.execute(() -> {
-            try {
-                Runtime.getRuntime().exec("reboot");
-            } catch (IOException e) {
-                Log.e(TAG, "Error rebooting:", e);
-            }
-        });
+        RebootHelper.reboot();
     }
 
     // read live so remapping a button takes effect without a restart

@@ -17,12 +17,12 @@ import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.util.Log;
-import android.widget.Toast;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
+import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.switcher.AppSwitcher;
 
@@ -464,23 +464,7 @@ public class HttpServer extends NanoHTTPD {
             case "reboot":
                 jsonResponse.put("success", false);
                 if (method.equals(Method.POST)) {
-                    long deltaTime = System.currentTimeMillis() - ShellyElevateApplication.getApplicationStartTime();
-                    deltaTime /= 1000;
-                    if (deltaTime > 20) {
-                        new Thread(() -> {
-                            try {
-                                Runtime.getRuntime().exec("reboot");
-                            } catch (IOException e) {
-                                Log.e(TAG, "Error rebooting:", e);
-                            }
-                        }, "reboot-exec").start();
-                        jsonResponse.put("success", true);
-                    } else {
-                        // nanohttpd threads have no looper so toast must run on main
-                        final String msg = "Please wait %s seconds before rebooting".replace("%s", String.valueOf(20 - deltaTime));
-                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() ->
-                                Toast.makeText(mApplicationContext, msg, Toast.LENGTH_LONG).show());
-                    }
+                    jsonResponse.put("success", RebootHelper.rebootUnlessJustStarted(mApplicationContext));
                 }
                 break;
             case "dimmer":

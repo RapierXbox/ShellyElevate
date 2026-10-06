@@ -8,29 +8,21 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSave
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceAssistantManager;
 
 import android.content.Intent;
-import android.os.Handler;
-import android.os.Looper;
 import android.util.Log;
-import android.widget.Toast;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.eclipse.paho.mqttv5.common.MqttMessage;
 
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
-import me.rapierxbox.shellyelevatev2.ShellyElevateApplication;
+import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 
 // dispatches inbound command topics to the matching device helper
 public class ShellyElevateMQTTCallback {
     private static final String TAG = "MQTTCallback";
-    // a retained reboot command would otherwise boot loop the device
-    private static final long REBOOT_GRACE_SECONDS = 20;
 
     private final MQTTServer server;
-    // toasts must run on a looper thread not the paho comms thread
-    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     ShellyElevateMQTTCallback(MQTTServer server) {
         this.server = server;
@@ -99,18 +91,7 @@ public class ShellyElevateMQTTCallback {
     }
 
     private void handleReboot() {
-        long uptimeSec = (System.currentTimeMillis() - ShellyElevateApplication.getApplicationStartTime()) / 1000;
-        if (uptimeSec > REBOOT_GRACE_SECONDS) {
-            try {
-                Runtime.getRuntime().exec("reboot");
-            } catch (IOException e) {
-                Log.e(TAG, "Error rebooting", e);
-            }
-        } else {
-            String waitMessage = "Please wait " + (REBOOT_GRACE_SECONDS - uptimeSec) + " seconds before rebooting";
-            mainHandler.post(() ->
-                    Toast.makeText(mApplicationContext, waitMessage, Toast.LENGTH_LONG).show());
-        }
+        RebootHelper.rebootUnlessJustStarted(mApplicationContext);
     }
 
     private void handleScreenBrightness(String payload) {

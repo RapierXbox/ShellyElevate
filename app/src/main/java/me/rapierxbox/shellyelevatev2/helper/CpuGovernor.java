@@ -2,11 +2,7 @@ package me.rapierxbox.shellyelevatev2.helper;
 
 import android.util.Log;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -55,7 +51,7 @@ public final class CpuGovernor {
 
     private static List<String> readAvailable(String governorPath) {
         String availPath = governorPath.replace("scaling_governor", "scaling_available_governors");
-        String raw = readLine(availPath);
+        String raw = SysFs.readLine(availPath);
         // trimmed before the empty check so a blank line cant yield an empty governor name
         if (raw == null || raw.trim().isEmpty()) return Collections.emptyList();
         return Arrays.asList(raw.trim().split("\\s+"));
@@ -79,7 +75,7 @@ public final class CpuGovernor {
 
         int applied = 0;
         for (String path : paths) {
-            String current = readLine(path);
+            String current = SysFs.readLine(path);
             if (current == null) continue;
             current = current.trim();
             // keep the first saved value so a second apply cant record the low power governor as the original
@@ -87,7 +83,7 @@ public final class CpuGovernor {
                 savedGovernors.put(path, current);
             }
             String target = pickLowPower(readAvailable(path));
-            if (target.equals(current) || writeFile(path, target)) {
+            if (target.equals(current) || SysFs.write(path, target)) {
                 applied++;
             } else {
                 denied = true;
@@ -102,26 +98,9 @@ public final class CpuGovernor {
         if (savedGovernors.isEmpty()) return;
         int restored = 0;
         for (Map.Entry<String, String> e : savedGovernors.entrySet()) {
-            if (writeFile(e.getKey(), e.getValue())) restored++;
+            if (SysFs.write(e.getKey(), e.getValue())) restored++;
         }
         Log.i(TAG, "Restored governor for " + restored + "/" + savedGovernors.size() + " CPUs");
         savedGovernors.clear();
-    }
-
-    private static String readLine(String path) {
-        try (BufferedReader br = new BufferedReader(new FileReader(path))) {
-            return br.readLine();
-        } catch (IOException e) {
-            return null;
-        }
-    }
-
-    private static boolean writeFile(String path, String value) {
-        try (FileWriter w = new FileWriter(path)) {
-            w.write(value);
-            return true;
-        } catch (IOException e) {
-            return false;
-        }
     }
 }

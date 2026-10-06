@@ -65,7 +65,7 @@ object EdgeSwipeOverlay {
             // the grant normally ran at start already. one more try off the main thread
             grantTried = true
             Thread({
-                PrivilegedShell.runShell("appops set ${app.packageName} SYSTEM_ALERT_WINDOW allow")
+                PrivilegedShell.allowAppOp(app.packageName, "SYSTEM_ALERT_WINDOW")
                 mainHandler.post { enable(app) }
             }, "EdgeStripGrant").start()
             return

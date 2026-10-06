@@ -63,6 +63,7 @@ import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper
 import me.rapierxbox.shellyelevatev2.helper.AppUpdater
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader
+import me.rapierxbox.shellyelevatev2.helper.RebootHelper
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
 import me.rapierxbox.shellyelevatev2.helper.WifiIpConfig
@@ -162,10 +163,7 @@ class SettingsFragment : Fragment() {
                     }
                     R.id.action_restart -> {
                         saveSettings()
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            try { Runtime.getRuntime().exec("reboot") }
-                            catch (e: IOException) { Log.e("SettingsFragment", "Error rebooting:", e) }
-                        }
+                        RebootHelper.reboot()
                         true
                     }
                     R.id.action_exit -> {

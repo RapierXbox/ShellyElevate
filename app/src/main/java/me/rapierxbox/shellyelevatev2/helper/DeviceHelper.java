@@ -18,11 +18,7 @@ import android.os.SystemClock;
 import android.provider.Settings;
 import android.util.Log;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
-import java.io.FileWriter;
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.ExecutorService;
@@ -141,7 +137,7 @@ public class DeviceHelper {
             }
         }
 
-        writeFileContent(screenBrightnessFile, String.valueOf(brightness));
+        SysFs.write(screenBrightnessFile, String.valueOf(brightness));
     }
 
     // only has to succeed once so later frames skip the settings write
@@ -166,7 +162,7 @@ public class DeviceHelper {
                 return lastScreenBrightness;
             }
         }
-        String raw = digitsOnly(readFileContent(screenBrightnessFile));
+        String raw = digitsOnly(SysFs.readAll(screenBrightnessFile));
         if (raw.isEmpty()) return lastScreenBrightness;
         try {
             return Integer.parseInt(raw);
@@ -316,7 +312,7 @@ public class DeviceHelper {
     }
 
     public boolean getRelay(int num) {
-        return readFileContent(getRelayFile(num)).contains("1") ^ deviceModel.invertRelay;
+        return SysFs.readAll(getRelayFile(num)).contains("1") ^ deviceModel.invertRelay;
     }
 
     public void setRelay(int num, boolean state) {
@@ -329,7 +325,7 @@ public class DeviceHelper {
         if (deviceModel.usesInitScriptRelay()) {
             triggerInitRelay(num, physicalState);
         } else {
-            writeFileContent(getRelayFile(num), physicalState ? "1" : "0");
+            SysFs.write(getRelayFile(num), physicalState ? "1" : "0");
         }
         // publish the logical state so mqtt matches getRelay and the http api
         if (mMQTTServer != null && mMQTTServer.shouldSend()) {
@@ -351,7 +347,7 @@ public class DeviceHelper {
             set.invoke(null, "ctl.start", scriptName);
         } catch (Exception e) {
             Log.w(TAG, "Init relay failed for " + scriptName + ", falling back to sysfs: " + e.getMessage());
-            writeFileContent(getRelayFile(num), value);
+            SysFs.write(getRelayFile(num), value);
         }
     }
 
@@ -420,7 +416,7 @@ public class DeviceHelper {
 
     // the node reads as humidity:temperature in raw ticks. null when it is empty or malformed
     private static String[] readSht3xRaw() {
-        String content = readFileContent(TEMP_AND_HUM_FILE).trim();
+        String content = SysFs.readAll(TEMP_AND_HUM_FILE).trim();
         if (content.isEmpty()) return null;
         String[] parts = content.split(":");
         return parts.length < 2 ? null : parts;
@@ -472,28 +468,5 @@ public class DeviceHelper {
     private static String digitsOnly(String input) {
         if (input == null) return "";
         return input.replaceAll("[^0-9]", "");
-    }
-
-    // never null. an unreadable file comes back empty
-    private static String readFileContent(String filePath) {
-        StringBuilder content = new StringBuilder();
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-            String line;
-            while ((line = br.readLine()) != null) {
-                content.append(line).append("\n");
-            }
-        } catch (IOException e) {
-            // no stack trace since the path is in the message and a missing sysfs node used to dump four traces a minute #104
-            Log.w(TAG, "Error when reading file with path:" + filePath + " " + e);
-        }
-        return content.toString();
-    }
-
-    private static void writeFileContent(String filePath, String content) {
-        try (FileWriter writer = new FileWriter(filePath)) {
-            writer.write(content);
-        } catch (IOException e) {
-            Log.e(TAG, "Error when writing file with path:" + filePath, e);
-        }
     }
 }

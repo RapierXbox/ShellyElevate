@@ -2,10 +2,7 @@ package me.rapierxbox.shellyelevatev2.helper;
 
 import android.util.Log;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -45,7 +42,7 @@ public final class ThermalZoneReader {
             Log.w(TAG, "No thermal zones found at " + THERMAL_BASE);
         } else {
             for (File dir : dirs) {
-                String rawType = readLine(dir.getAbsolutePath() + "/type");
+                String rawType = SysFs.readLine(dir.getAbsolutePath() + "/type");
                 if (rawType == null) continue;
                 String sanitized = rawType.trim().replaceAll("[^a-zA-Z0-9_\\-]", "_");
                 if (!sanitized.isEmpty()) {
@@ -61,7 +58,7 @@ public final class ThermalZoneReader {
 
     // null when the zone cant be read
     public static Float readZoneTempC(Zone zone) {
-        String raw = readLine(zone.path + "/temp");
+        String raw = SysFs.readLine(zone.path + "/temp");
         if (raw == null) return null;
         try {
             return Float.parseFloat(raw.trim()) / 1000f;
@@ -76,14 +73,5 @@ public final class ThermalZoneReader {
             if (z.type.equals(type)) return readZoneTempC(z);
         }
         return null;
-    }
-
-    private static String readLine(String filePath) {
-        try (BufferedReader br = new BufferedReader(new FileReader(filePath))) {
-            return br.readLine();
-        } catch (IOException e) {
-            Log.w(TAG, "Cannot read " + filePath + ": " + e.getMessage());
-            return null;
-        }
     }
 }

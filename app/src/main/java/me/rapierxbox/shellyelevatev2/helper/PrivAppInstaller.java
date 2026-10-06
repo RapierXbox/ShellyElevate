@@ -27,11 +27,11 @@ public final class PrivAppInstaller {
     // usage stats lets the app display module see which app is in front
     public static void autoGrantPermissions(Context ctx) {
         String pkg = ctx.getPackageName();
-        PrivilegedShell.Result a = PrivilegedShell.runShell("appops set " + pkg + " WRITE_SETTINGS allow");
+        PrivilegedShell.Result a = PrivilegedShell.allowAppOp(pkg, "WRITE_SETTINGS");
         PrivilegedShell.Result b = PrivilegedShell.runShell("dumpsys deviceidle whitelist +" + pkg);
-        PrivilegedShell.Result c = PrivilegedShell.runShell("appops set " + pkg + " GET_USAGE_STATS allow");
+        PrivilegedShell.Result c = PrivilegedShell.allowAppOp(pkg, "GET_USAGE_STATS");
         // overlay rights let the switcher open over other apps on android 10 and up and back the edge strip
-        PrivilegedShell.Result d = PrivilegedShell.runShell("appops set " + pkg + " SYSTEM_ALERT_WINDOW allow");
+        PrivilegedShell.Result d = PrivilegedShell.allowAppOp(pkg, "SYSTEM_ALERT_WINDOW");
         Log.i(TAG, "autoGrant writeSettings=" + a.exitCode + " deviceidle=" + b.exitCode
                 + " usageStats=" + c.exitCode + " overlay=" + d.exitCode);
     }
