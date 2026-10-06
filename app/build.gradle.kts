@@ -129,6 +129,7 @@ dependencies {
     // was transitive before the androidx bumps; declare it since we use it directly
     implementation(libs.localbroadcastmanager)
     implementation(libs.nanohttpd)
+    implementation(libs.nanohttpd.websocket)
     implementation(libs.org.eclipse.paho.mqttv5.client)
     implementation(libs.webkit)
     implementation(libs.recyclerview)

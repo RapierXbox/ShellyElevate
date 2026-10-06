@@ -38,7 +38,7 @@ public final class Constants {
     public static final int SW_INPUT_MODE_SWITCH_EDGE = 2;
     public static final int SW_INPUT_MODE_SWITCH_FOLLOW = 3;
 
-    // http server prefs
+    // http server prefs. httpServer is the plain legacy api on 8080 and never gates the v1 api
     public static final String SP_HTTP_SERVER_ENABLED = "httpServer";
     public static final String SP_EXTENDED_JAVASCRIPT_INTERFACE = "extendedJavascriptInterface";
 
@@ -80,14 +80,28 @@ public final class Constants {
     public static final int SLEEP_OPT_STANDARD = 1;
     public static final int SLEEP_OPT_AGGRESSIVE = 2;
 
-    // bluetooth proxy prefs
+    // bluetooth proxy prefs. the esphome proxy keys are deprecated see DeprecatedFeatures
+    /** @deprecated esphome proxy on port 6053. replaced by {@link #SP_BLE_SCANNER_ENABLED} */
+    @Deprecated
     public static final String SP_BLUETOOTH_PROXY_ENABLED = "bluetoothProxyEnabled";
+    /** @deprecated esphome node name. the integration names the display */
+    @Deprecated
     public static final String SP_BLUETOOTH_PROXY_NAME    = "bluetoothProxyName";
+    // ble adverts to the paired controller over websocket channel 0x02
+    public static final String SP_BLE_SCANNER_ENABLED = "bleScannerEnabled";
 
-    // voice assistant prefs
+    // voice assistant prefs. the token satellite keys are deprecated see DeprecatedFeatures
+    /** @deprecated own home assistant websocket satellite. replaced by {@link #SP_HA_VOICE_ENABLED} */
+    @Deprecated
     public static final String SP_VOICE_ASSISTANT_ENABLED = "voiceAssistantEnabled";
+    /** @deprecated long lived token of the own satellite. pairing replaces it */
+    @Deprecated
     public static final String SP_VOICE_ASSISTANT_TOKEN = "voiceAssistantToken";
+    /** @deprecated pipeline of the own satellite. the integration picks the pipeline */
+    @Deprecated
     public static final String SP_VOICE_ASSISTANT_PIPELINE_ID = "voiceAssistantPipelineId";
+    // voice through the paired controller over the v1 websocket
+    public static final String SP_HA_VOICE_ENABLED = "haVoiceEnabled";
     public static final String SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS = "voiceAssistantMaxRecordSeconds";
     public static final String SP_VOICE_WAKE_ENABLED = "voiceWakeEnabled";
     public static final String SP_VOICE_WAKE_MODEL_NAME = "voiceWakeModelName";
