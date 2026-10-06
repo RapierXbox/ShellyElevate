@@ -364,7 +364,11 @@ public class EsphomeProxyServer {
                 if (activeSession.compareAndSet(this, null)) {
                     // keep the scan warm since restarting on every ha reconnect trips the os throttle
                     // the scanner stops it eventually when no ha session comes back
-                    if (scanTarget.compareAndSet(this, null)) {
+                    // also when the target is an older session that ended before this one
+                    // otherwise a session that never subscribed leaves the scan running forever
+                    ClientSession target = scanTarget.get();
+                    if (target == null || target == this || target.closed.get()) {
+                        scanTarget.compareAndSet(target, null);
                         Log.i(TAG, "session ended, scan kept running for next HA reconnect");
                         BleScanner.get().removeListenerKeepWarm(scanListener);
                     }

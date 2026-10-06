@@ -15,6 +15,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import fi.iki.elonen.NanoWSD;
 import me.rapierxbox.shellyelevatev2.SettingsParser;
@@ -261,9 +262,21 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
         });
     }
 
+    private static final int CHANNEL_BLE = 0x02;
+    private static final int MAX_PENDING_BLE = 200;
+    private final AtomicInteger pendingBle = new AtomicInteger();
+
     @Override
     public void sendBinary(byte[] frame) {
+        // ble adverts are dropped while a stalled controller backs up the queue
+        // so they cannot grow it without bound or hold back mic audio
+        boolean ble = frame.length > 0 && frame[0] == CHANNEL_BLE;
+        if (ble && pendingBle.incrementAndGet() > MAX_PENDING_BLE) {
+            pendingBle.decrementAndGet();
+            return;
+        }
         enqueue(() -> {
+            if (ble) pendingBle.decrementAndGet();
             for (ControllerSocket socket : sockets) socket.sendSafely(frame);
         });
     }

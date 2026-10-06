@@ -45,6 +45,8 @@ public class MediaHelper {
     private Runnable announceDone;
     private State state = State.IDLE;
     private boolean musicPrepared;
+    // repeat one came from the legacy loop and not from a controller
+    private boolean legacyRepeat;
     private boolean pausedForAnnounce;
     private boolean pausedForFocus;
     private boolean ducked;
@@ -95,6 +97,17 @@ public class MediaHelper {
 
     // enqueue is replace add next or play
     public void play(MediaQueue.Track track, String enqueue) {
+        post(() -> {
+            // a new v1 play does not inherit the repeat one the legacy loop set
+            if (legacyRepeat && (MediaQueue.ENQUEUE_REPLACE.equals(enqueue) || MediaQueue.ENQUEUE_PLAY.equals(enqueue))) {
+                queue.setRepeat(MediaQueue.Repeat.OFF);
+                legacyRepeat = false;
+            }
+        });
+        playQueued(track, enqueue);
+    }
+
+    private void playQueued(MediaQueue.Track track, String enqueue) {
         post(() -> {
             MediaQueue.Track start = queue.enqueue(track, enqueue, state != State.IDLE);
             if (start != null) {
@@ -186,7 +199,9 @@ public class MediaHelper {
 
     public void setRepeat(MediaQueue.Repeat repeat) {
         post(() -> {
+            legacyRepeat = false;
             queue.setRepeat(repeat);
+            applyLooping();
             pushStatus();
         });
     }
@@ -207,8 +222,11 @@ public class MediaHelper {
 
     // the legacy api loops its music so it plays with repeat one
     public void playMusic(Uri uri) throws IOException {
-        post(() -> queue.setRepeat(MediaQueue.Repeat.ONE));
-        play(MediaQueue.Track.of(uri.toString()), MediaQueue.ENQUEUE_REPLACE);
+        post(() -> {
+            queue.setRepeat(MediaQueue.Repeat.ONE);
+            legacyRepeat = true;
+        });
+        playQueued(MediaQueue.Track.of(uri.toString()), MediaQueue.ENQUEUE_REPLACE);
     }
 
     public void playEffect(Uri uri) throws IOException {
@@ -301,7 +319,8 @@ public class MediaHelper {
         try {
             player.reset();
             player.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            player.setLooping(false);
+            // repeat one loops in the player so a loop needs no new prepare or download
+            player.setLooping(queue.getRepeat() == MediaQueue.Repeat.ONE);
             player.setDataSource(mApplicationContext, Uri.parse(track.url));
             applyGain();
             player.prepareAsync();
@@ -309,6 +328,15 @@ public class MediaHelper {
         } catch (IOException | IllegalArgumentException | IllegalStateException | SecurityException e) {
             Log.e(TAG, "Cannot play " + track.url, e);
             onMusicFailed();
+        }
+    }
+
+    private void applyLooping() {
+        if (musicPlayer == null || !musicPrepared) return;
+        try {
+            musicPlayer.setLooping(queue.getRepeat() == MediaQueue.Repeat.ONE);
+        } catch (IllegalStateException ignored) {
+            // the player is between states and startTrack sets it again
         }
     }
 

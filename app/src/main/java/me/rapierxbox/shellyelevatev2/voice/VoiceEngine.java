@@ -96,6 +96,8 @@ public class VoiceEngine {
     private ScheduledFuture<?> maxDurationFuture;
     // main thread only
     private MediaPlayer ttsPlayer;
+    // set before the player exists on the main thread so other threads see playback right away
+    private volatile boolean playbackPending;
     private boolean audioFocusHeld = false;
     private final AudioManager.OnAudioFocusChangeListener focusListener = change -> {};
     private final BroadcastReceiver settingsReceiver;
@@ -674,6 +676,7 @@ public class VoiceEngine {
 
     // plays the optional chime then the answer and runs onDone after the last one
     private void playTts(String url, String preannounceUrl, Runnable onDone) {
+        playbackPending = true;
         mainHandler.post(() -> {
             releaseTtsPlayer();
             requestAudioFocus();
@@ -708,13 +711,14 @@ public class VoiceEngine {
     }
 
     private void finishPlayback(Runnable onDone) {
+        playbackPending = false;
         releaseTtsPlayer();
         onSessionEnded();
         if (onDone != null) onDone.run();
     }
 
     private boolean isPlaying() {
-        return ttsPlayer != null;
+        return playbackPending || ttsPlayer != null;
     }
 
     private void releasePlayerOnly() {
@@ -749,6 +753,7 @@ public class VoiceEngine {
     private void shutdown() {
         stopAudioCapture();
         state = State.DISABLED;
+        playbackPending = false;
         mainHandler.post(this::releaseTtsPlayer);
         // go through wakeLock so this cant race with a concurrent settings or mute update
         synchronized (wakeLock) {
