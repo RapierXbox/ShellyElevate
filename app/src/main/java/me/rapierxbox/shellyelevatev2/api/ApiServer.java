@@ -11,13 +11,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 
-import fi.iki.elonen.NanoHTTPD;
 import fi.iki.elonen.NanoWSD;
 import me.rapierxbox.shellyelevatev2.SettingsParser;
 import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
@@ -542,10 +540,5 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
         public int getRequestStatus() {
             return code;
         }
-    }
-
-    @SuppressWarnings("unused")
-    private static Map<String, String> unused(NanoHTTPD.IHTTPSession s) {
-        return s.getHeaders();
     }
 }
