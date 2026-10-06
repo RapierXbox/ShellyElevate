@@ -42,6 +42,7 @@ SETTINGS = [
     ("extendedJavascriptInterface", bool, False, "expose extra device calls to page javascript"),
     ("httpServer", bool, True, "http api on port 8080. turning it off cuts this tool off"),
     ("adbWifiEnabled", bool, False, "adb over wifi on port 5555"),
+    ("updatePrerelease", bool, False, "the in app updater also installs github pre-releases"),
     ("mediaEnabled", bool, False, "media playback through the http api"),
     ("screen", None, None, None),
     ("automaticBrightness", bool, True, "follow the light sensor"),

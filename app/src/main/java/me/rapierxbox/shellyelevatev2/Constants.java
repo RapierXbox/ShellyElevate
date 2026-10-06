@@ -53,6 +53,8 @@ public final class Constants {
 
     // webview ota prefs
     public static final String SP_WEBVIEW_UPDATE_PROMPTED = "webviewUpdatePrompted";
+    // the in app updater also offers github pre releases
+    public static final String SP_UPDATE_PRERELEASE = "updatePrerelease";
     // webview version before the reboot into recovery so a set value means an ota is in flight
     public static final String SP_WEBVIEW_UPDATE_PENDING_FROM = "webviewUpdatePendingFrom";
 

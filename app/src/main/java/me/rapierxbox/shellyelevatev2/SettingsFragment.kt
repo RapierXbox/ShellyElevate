@@ -586,6 +586,9 @@ class SettingsFragment : Fragment() {
     private fun createUpdatesPage(parent: ViewGroup): View {
         val b = SettingsPageUpdatesBinding.inflate(layoutInflater, parent, true)
         updatesPage = b
+        bindPage {
+            +SwitchPref(b.appUpdatePrerelease, SP_UPDATE_PRERELEASE, false)
+        }
         setupWebViewUpdater(b)
         setupAppUpdater(b)
         return b.root
@@ -667,10 +670,12 @@ class SettingsFragment : Fragment() {
         if (AppUpdater.isInProgress()) return
         b.appUpdateButton.isEnabled = false
         b.appUpdateStatus.text = getString(R.string.app_update_status_checking)
-        AppUpdater.checkForUpdate(object : AppUpdater.CheckListener {
+        // the switch counts before settings are saved so a fresh toggle applies right away
+        AppUpdater.checkForUpdate(b.appUpdatePrerelease.isChecked, object : AppUpdater.CheckListener {
             override fun onUpdateAvailable(info: AppUpdater.ReleaseInfo) {
                 val page = updatesPage ?: return
-                page.appUpdateStatus.text = getString(R.string.app_update_available, info.versionName)
+                val res = if (info.prerelease) R.string.app_update_available_prerelease else R.string.app_update_available
+                page.appUpdateStatus.text = getString(res, info.versionName)
                 startAppUpdateDownload(info)
             }
             override fun onUpToDate(current: String) {

@@ -41,8 +41,9 @@ import okhttp3.ResponseBody;
 public final class AppUpdater {
     private static final String TAG = "AppUpdater";
 
+    // the newest releases first. pre releases share the version scheme and only carry the github flag
     private static final String RELEASES_API =
-            "https://api.github.com/repos/RapierXbox/ShellyElevate/releases/latest";
+            "https://api.github.com/repos/RapierXbox/ShellyElevate/releases?per_page=20";
 
     private static final String ACTION_INSTALL_STATUS = BuildConfig.APPLICATION_ID + ".APP_UPDATE_STATUS";
 
@@ -52,10 +53,12 @@ public final class AppUpdater {
     public static final class ReleaseInfo {
         public final String versionName; // tag without a leading v
         public final String apkUrl;
+        public final boolean prerelease;
 
-        ReleaseInfo(String versionName, String apkUrl) {
+        ReleaseInfo(String versionName, String apkUrl, boolean prerelease) {
             this.versionName = versionName;
             this.apkUrl = apkUrl;
+            this.prerelease = prerelease;
         }
     }
 
@@ -78,14 +81,14 @@ public final class AppUpdater {
         return IN_PROGRESS.get();
     }
 
-    // callbacks fire on the main thread
-    public static void checkForUpdate(CheckListener listener) {
+    // callbacks fire on the main thread. pre releases are only offered when asked for
+    public static void checkForUpdate(boolean includePrerelease, CheckListener listener) {
         Handler main = new Handler(Looper.getMainLooper());
         POOL.execute(() -> {
             try {
-                ReleaseInfo info = fetchLatest();
+                ReleaseInfo info = fetchLatest(includePrerelease);
                 if (info == null) {
-                    main.post(() -> listener.onFailed("No apk asset in latest release"));
+                    main.post(() -> listener.onFailed("No release with an apk found"));
                 } else if (isNewer(BuildConfig.VERSION_NAME, info.versionName)) {
                     main.post(() -> listener.onUpdateAvailable(info));
                 } else {
@@ -224,7 +227,8 @@ public final class AppUpdater {
         }
     }
 
-    private static ReleaseInfo fetchLatest() throws IOException {
+    // newest release with an apk. stable devices skip pre releases so a test build never reaches them
+    private static ReleaseInfo fetchLatest(boolean includePrerelease) throws IOException {
         OkHttpClient client = HttpDownloader.defaultClient();
         Request req = new Request.Builder()
                 .url(RELEASES_API)
@@ -235,12 +239,23 @@ public final class AppUpdater {
             if (!res.isSuccessful()) throw new IOException("HTTP " + res.code());
             ResponseBody body = res.body();
             if (body == null) throw new IOException("Empty body");
-            JSONObject root = new JSONObject(body.string());
-            String tag = root.optString("tag_name", "");
-            String version = tag.startsWith("v") ? tag.substring(1) : tag;
-            String apkUrl = pickApkUrl(root.optJSONArray("assets"));
-            if (version.isEmpty() || apkUrl == null) return null;
-            return new ReleaseInfo(version, apkUrl);
+            JSONArray releases = new JSONArray(body.string());
+            ReleaseInfo best = null;
+            for (int i = 0; i < releases.length(); i++) {
+                JSONObject release = releases.optJSONObject(i);
+                if (release == null || release.optBoolean("draft", false)) continue;
+                boolean prerelease = release.optBoolean("prerelease", false);
+                if (prerelease && !includePrerelease) continue;
+                String tag = release.optString("tag_name", "");
+                String version = tag.startsWith("v") ? tag.substring(1) : tag;
+                String apkUrl = pickApkUrl(release.optJSONArray("assets"));
+                if (version.isEmpty() || apkUrl == null || parse(version) == null) continue;
+                // github sorts by creation date so compare versions to be safe
+                if (best == null || isNewer(best.versionName, version)) {
+                    best = new ReleaseInfo(version, apkUrl, prerelease);
+                }
+            }
+            return best;
         } catch (JSONException e) {
             throw new IOException("Bad release json");
         }

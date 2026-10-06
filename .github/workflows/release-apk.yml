@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      prerelease:
+        description: "Publish as a pre-release (only devices with pre-releases enabled pick it up)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -95,5 +100,8 @@ jobs:
           tag_name: ${{ steps.version.outputs.name }}
           name: ${{ steps.version.outputs.name }}
           generate_release_notes: true
+          # a pre-release keeps the same version scheme and is never marked as the latest release
+          prerelease: ${{ inputs.prerelease == true }}
+          make_latest: ${{ inputs.prerelease != true }}
           files: |
             ShellyElevateV2-*.apk

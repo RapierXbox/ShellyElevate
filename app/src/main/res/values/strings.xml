@@ -159,10 +159,11 @@
     <string name="webview_update_result_rejected">Recovery rejected the package, see /cache/recovery/last_log.</string>
     <string name="webview_update_result_not_run">Recovery did not apply the package. See /cache/recovery/last_log or use the manual steps in the wiki.</string>
     <string name="app_update_title">App update</string>
-    <string name="app_update_hint">Checks GitHub for a newer release and installs it. The app restarts on its own once done. Requires the app to be a privileged system app signed with the same key as the release.</string>
     <string name="app_update_current">Installed version: %1$s</string>
     <string name="app_update_status_checking">Checking…</string>
     <string name="app_update_available">Update available: %1$s</string>
+    <string name="app_update_available_prerelease">Pre-release available: %1$s</string>
+    <string name="app_update_prerelease">Include pre-releases</string>
     <string name="app_update_uptodate">Up to date</string>
     <string name="app_update_check_now">Check for updates</string>
     <string name="app_update_downloading">Downloading: %1$d%%</string>
