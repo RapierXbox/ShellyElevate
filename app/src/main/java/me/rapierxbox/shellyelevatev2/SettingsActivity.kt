@@ -18,6 +18,8 @@ class SettingsActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // skip the slow window slide so the menu shows right away
+        overridePendingTransition(0, 0)
         binding = SettingsActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -29,6 +31,11 @@ class SettingsActivity : AppCompatActivity() {
                 .replace(R.id.fragment_container, SettingsFragment())
                 .commit()
         }
+    }
+
+    override fun finish() {
+        super.finish()
+        overridePendingTransition(0, 0)
     }
 
     override fun onSupportNavigateUp(): Boolean {

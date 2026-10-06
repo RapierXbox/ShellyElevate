@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- wifi scan and connect section included by settings_fragment and driven by WifiSettingsSection -->
+<!-- wifi scan and connect section included by settings_page_network and driven by WifiSettingsSection -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
