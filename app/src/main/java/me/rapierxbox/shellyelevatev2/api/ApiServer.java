@@ -37,9 +37,10 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
     private final CopyOnWriteArrayList<ControllerSocket> sockets = new CopyOnWriteArrayList<>();
     // ws commands run here so a slow one never stops the socket from reading
     private final ExecutorService commandExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "ApiCommands"));
-    // every outgoing frame goes through this one thread. callers may be on the main thread
-    // and a new socket joins in queue order so it never gets a delta older than its snapshot
-    private final ExecutorService sendExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "ApiSend"));
+    // closing waits for a socket write in progress so it never runs on a reader or the main thread
+    private final ExecutorService closeExecutor = Executors.newCachedThreadPool(r -> new Thread(r, "ApiClose"));
+    // a controller that answered no ping for this long is gone
+    static final long PONG_TIMEOUT_MS = 50_000;
 
     ApiServer(Context context, ClientTokenStore tokens, Pairing pairing, StateHub stateHub) {
         super(ApiInfo.TLS_PORT);
@@ -152,6 +153,9 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
         JSONObject request = parseObject(body);
         String pairingId = request.optString("pairing_id", "");
         String proof = request.optString("proof", "");
+        Pairing.Pending pending = pairing.current();
+        // a made up id must not take the code off the screen
+        boolean ours = pending != null && pending.id.equals(pairingId);
         Pairing.Pending[] matched = new Pairing.Pending[1];
         Pairing.Outcome outcome = pairing.confirm(pairingId, proof, TlsIdentity.get().certificateSha256(), matched);
         switch (outcome) {
@@ -161,10 +165,10 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
                 Log.i(TAG, "Paired " + matched[0].clientName);
                 return json(Status.OK, new JSONObject().put("token", token));
             case INVALID:
-                if (pairing.current() == null) PairingActivity.finish(context, false);
+                if (ours && pairing.current() == null) PairingActivity.finish(context, false);
                 return error(Status.FORBIDDEN, "invalid_code", "the code does not match");
             default:
-                PairingActivity.finish(context, false);
+                if (ours) PairingActivity.finish(context, false);
                 return error(Status.GONE, "expired", "pairing expired");
         }
     }
@@ -255,37 +259,29 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
         return !sockets.isEmpty();
     }
 
+    // queues on every socket without blocking. the state hub calls it under its lock so the
+    // order of snapshots and deltas is the queue order of each socket
     @Override
     public void sendText(String json) {
-        enqueue(() -> {
-            for (ControllerSocket socket : sockets) socket.sendSafely(json);
-        });
+        for (ControllerSocket socket : sockets) socket.queue(json);
     }
-
-    private static final int CHANNEL_BLE = 0x02;
-    private static final int MAX_PENDING_BLE = 200;
-    private final AtomicInteger pendingBle = new AtomicInteger();
 
     @Override
     public void sendBinary(byte[] frame) {
-        // ble adverts are dropped while a stalled controller backs up the queue
-        // so they cannot grow it without bound or hold back mic audio
-        boolean ble = frame.length > 0 && frame[0] == CHANNEL_BLE;
-        if (ble && pendingBle.incrementAndGet() > MAX_PENDING_BLE) {
-            pendingBle.decrementAndGet();
-            return;
-        }
-        enqueue(() -> {
-            if (ble) pendingBle.decrementAndGet();
-            for (ControllerSocket socket : sockets) socket.sendSafely(frame);
-        });
+        for (ControllerSocket socket : sockets) socket.queue(frame);
     }
 
-    private void enqueue(Runnable task) {
-        try {
-            sendExecutor.execute(task);
-        } catch (RejectedExecutionException ignored) {
-            // shutting down
+    // aiohttp only pings when it received nothing for a while so a busy display pings itself
+    // and drops a controller that stopped answering
+    void pingAll() {
+        long now = System.currentTimeMillis();
+        for (ControllerSocket socket : sockets) {
+            if (now - socket.lastHeard > PONG_TIMEOUT_MS) {
+                Log.w(TAG, "Controller " + socket.client.name + " stopped answering");
+                socket.closeQuietly(WebSocketFrame.CloseCode.GoingAway, "timeout");
+            } else {
+                socket.queuePing();
+            }
         }
     }
 
@@ -304,7 +300,7 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
     void closeAllSockets() {
         for (ControllerSocket socket : sockets) socket.closeQuietly(WebSocketFrame.CloseCode.GoingAway, "shutting down");
         commandExecutor.shutdownNow();
-        sendExecutor.shutdownNow();
+        closeExecutor.shutdown();
     }
 
     private void onSocketOpen(ControllerSocket socket) {
@@ -325,20 +321,21 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
             socket.closeQuietly(WebSocketFrame.CloseCode.InternalServerError, "no hello");
             return;
         }
-        // queued under the state lock so the snapshot and later deltas keep their order
-        stateHub.attach(state -> enqueue(() -> {
-            socket.sendSafely(hello);
-            socket.sendSafely(wrap("state", "state", state));
-            boolean first;
+        // queued and registered under the state lock so the snapshot comes before every later delta
+        boolean[] first = new boolean[1];
+        stateHub.attach(state -> {
+            socket.queue(hello);
+            socket.queue(wrap("state", "state", state));
             synchronized (sockets) {
                 if (!socket.isOpen()) return;
                 sockets.add(socket);
-                first = sockets.size() == 1;
+                first[0] = sockets.size() == 1;
             }
-            Log.i(TAG, "Controller " + socket.client.name + " connected");
-            if (first) controllerChanged(true);
-            else ApiHub.notifyControllerChanged(true);
-        }));
+        });
+        if (!sockets.contains(socket)) return;
+        Log.i(TAG, "Controller " + socket.client.name + " connected");
+        if (first[0]) controllerChanged(true);
+        else ApiHub.notifyControllerChanged(true);
     }
 
     private void onSocketClosed(ControllerSocket socket) {
@@ -359,11 +356,56 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
     }
 
     final class ControllerSocket extends WebSocket {
+        // ble adverts are dropped first and audio only when far behind. text is never dropped
+        private static final int MAX_PENDING_BLE = 64;
+        private static final int MAX_PENDING_BINARY = 512;
+        private static final int CHANNEL_BLE = 0x02;
+
         final ClientTokenStore.Client client;
+        // one writer per socket so a stalled peer only stalls itself
+        private final ExecutorService writer = Executors.newSingleThreadExecutor(r -> new Thread(r, "ApiSend"));
+        private final AtomicInteger pendingBinary = new AtomicInteger();
+        volatile long lastHeard = System.currentTimeMillis();
+        private volatile boolean closing;
 
         ControllerSocket(IHTTPSession handshake, ClientTokenStore.Client client) {
             super(handshake);
             this.client = client;
+        }
+
+        void queue(String text) {
+            submit(() -> sendSafely(text));
+        }
+
+        void queue(byte[] frame) {
+            int limit = frame.length > 0 && frame[0] == CHANNEL_BLE ? MAX_PENDING_BLE : MAX_PENDING_BINARY;
+            if (pendingBinary.incrementAndGet() > limit) {
+                pendingBinary.decrementAndGet();
+                return;
+            }
+            submit(() -> {
+                pendingBinary.decrementAndGet();
+                sendSafely(frame);
+            });
+        }
+
+        void queuePing() {
+            submit(() -> {
+                try {
+                    if (isOpen()) ping(new byte[]{1});
+                } catch (IOException e) {
+                    closeQuietly(WebSocketFrame.CloseCode.AbnormalClosure, "ping failed");
+                }
+            });
+        }
+
+        private void submit(Runnable task) {
+            if (closing) return;
+            try {
+                writer.execute(task);
+            } catch (RejectedExecutionException ignored) {
+                // closed
+            }
         }
 
         @Override
@@ -377,11 +419,16 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
 
         @Override
         protected void onClose(WebSocketFrame.CloseCode code, String reason, boolean initiatedByRemote) {
+            closing = true;
             onSocketClosed(this);
+            writer.shutdown();
         }
 
         @Override
         protected void onMessage(WebSocketFrame frame) {
+            lastHeard = System.currentTimeMillis();
+            // a replaced or revoked socket may still deliver a frame it read before closing
+            if (closing || !sockets.contains(this)) return;
             if (frame.getOpCode() != WebSocketFrame.OpCode.Text) return;
             JSONObject message;
             try {
@@ -402,11 +449,11 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
                     }
                     break;
                 case "get_state":
-                    JSONObject snapshot = stateHub.snapshot();
-                    enqueue(() -> sendSafely(wrap("state", "state", snapshot)));
+                    // under the state lock so no older delta can follow the snapshot
+                    stateHub.attach(state -> queue(wrap("state", "state", state)));
                     break;
                 case "ping":
-                    enqueue(() -> sendSafely("{\"type\":\"pong\"}"));
+                    queue("{\"type\":\"pong\"}");
                     break;
                 default:
                     // unknown messages are ignored per the versioning rules
@@ -430,15 +477,16 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
                 } else {
                     result.put("error", error.code).put("message", error.getMessage());
                 }
-                String text = result.toString();
-                enqueue(() -> sendSafely(text));
+                queue(result.toString());
             } catch (JSONException e) {
                 Log.w(TAG, "Could not build result", e);
             }
         }
 
         @Override
-        protected void onPong(WebSocketFrame pong) {}
+        protected void onPong(WebSocketFrame pong) {
+            lastHeard = System.currentTimeMillis();
+        }
 
         @Override
         protected void onException(IOException exception) {
@@ -462,13 +510,22 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
             }
         }
 
+        // returns at once. the close frame waits for a write in progress on another thread
         void closeQuietly(WebSocketFrame.CloseCode code, String reason) {
-            try {
-                close(code, reason, false);
-            } catch (IOException | RuntimeException ignored) {
-                // already gone
-            }
+            closing = true;
             onSocketClosed(this);
+            writer.shutdown();
+            try {
+                closeExecutor.execute(() -> {
+                    try {
+                        close(code, reason, false);
+                    } catch (IOException | RuntimeException ignored) {
+                        // already gone
+                    }
+                });
+            } catch (RejectedExecutionException ignored) {
+                // shutting down
+            }
         }
     }
 

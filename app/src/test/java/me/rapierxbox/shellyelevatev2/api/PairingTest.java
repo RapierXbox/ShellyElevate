@@ -78,6 +78,23 @@ public class PairingTest {
     }
 
     @Test
+    public void repeatedWrongProofsLockPairingOut() throws Exception {
+        Pairing.Pending p = null;
+        for (int i = 0; i < Pairing.MAX_FAILURES; i++) {
+            if (i % Pairing.MAX_ATTEMPTS == 0) p = pairing.start("c", "C");
+            assertEquals(Pairing.Outcome.INVALID, pairing.confirm(p.id, "00", certSha(), null));
+        }
+        try {
+            pairing.start("c", "C");
+            throw new AssertionError("expected the lockout");
+        } catch (Pairing.RateLimited expected) {
+            // locked
+        }
+        now += Pairing.FAILURE_WINDOW_MS + 1;
+        assertNotNull(pairing.start("c", "C"));
+    }
+
+    @Test
     public void codeIsSixDigits() throws Exception {
         for (int i = 0; i < 5; i++) {
             String code = pairing.start("c", "C").code;

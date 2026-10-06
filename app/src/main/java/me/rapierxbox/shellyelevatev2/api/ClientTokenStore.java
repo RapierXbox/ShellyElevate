@@ -75,18 +75,22 @@ public final class ClientTokenStore {
     }
 
     // a new token for the client. replaces the one it had so pairing again never piles up tokens
-    public synchronized String issue(String clientId, String clientName) {
+    public String issue(String clientId, String clientName) {
         String token = newToken();
         long now = System.currentTimeMillis();
-        write(new Client(clientId, clientName, now, now, hash(token)));
+        synchronized (this) {
+            write(new Client(clientId, clientName, now, now, hash(token)));
+        }
         notifyChanged();
         return token;
     }
 
     // stores a token handed over by adb provisioning
-    public synchronized void store(String clientId, String clientName, String token) {
+    public void store(String clientId, String clientName, String token) {
         long now = System.currentTimeMillis();
-        write(new Client(clientId, clientName, now, now, hash(token)));
+        synchronized (this) {
+            write(new Client(clientId, clientName, now, now, hash(token)));
+        }
         notifyChanged();
     }
 
@@ -108,24 +112,30 @@ public final class ClientTokenStore {
     }
 
     // replaces the token of the client and returns the new one
-    public synchronized String rotate(Client client) {
+    public String rotate(Client client) {
         String token = newToken();
-        Client current = find(client.id);
-        long created = current != null ? current.created : System.currentTimeMillis();
-        write(new Client(client.id, client.name, created, System.currentTimeMillis(), hash(token)));
+        synchronized (this) {
+            Client current = find(client.id);
+            long created = current != null ? current.created : System.currentTimeMillis();
+            write(new Client(client.id, client.name, created, System.currentTimeMillis(), hash(token)));
+        }
         notifyChanged();
         return token;
     }
 
-    public synchronized void revoke(String clientId) {
-        if (!prefs.contains(KEY_PREFIX + clientId)) return;
-        prefs.edit().remove(KEY_PREFIX + clientId).apply();
+    public void revoke(String clientId) {
+        synchronized (this) {
+            if (!prefs.contains(KEY_PREFIX + clientId)) return;
+            prefs.edit().remove(KEY_PREFIX + clientId).apply();
+        }
         Log.i(TAG, "Revoked client " + clientId);
         notifyChanged();
     }
 
-    public synchronized void revokeAll() {
-        prefs.edit().clear().apply();
+    public void revokeAll() {
+        synchronized (this) {
+            prefs.edit().clear().apply();
+        }
         notifyChanged();
     }
 
