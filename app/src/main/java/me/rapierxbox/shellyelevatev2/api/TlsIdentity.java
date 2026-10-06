@@ -106,6 +106,19 @@ public final class TlsIdentity {
         Log.i(TAG, "Created the TLS key");
     }
 
+    // tls 1.2 and newer. without a list nanohttpd would enable every protocol the device knows
+    public String[] protocols() {
+        java.util.List<String> wanted = new java.util.ArrayList<>();
+        try {
+            for (String protocol : SSLContext.getDefault().getSupportedSSLParameters().getProtocols()) {
+                if (protocol.equals("TLSv1.2") || protocol.equals("TLSv1.3")) wanted.add(protocol);
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "Could not read the tls protocols", e);
+        }
+        return wanted.isEmpty() ? new String[]{"TLSv1.2"} : wanted.toArray(new String[0]);
+    }
+
     public SSLServerSocketFactory serverSocketFactory() {
         return serverSocketFactory;
     }

@@ -19,6 +19,10 @@ public final class Pairing {
     // pair starts per window before 429 so a lan host cannot keep the code dialog up forever
     static final int MAX_STARTS = 10;
     static final long START_WINDOW_MS = 10 * 60_000;
+    // wrong proofs per window over all pairings. beyond it no new pairing starts until the window passed
+    // so guessing the 6 digits takes years instead of weeks
+    static final int MAX_FAILURES = 10;
+    static final long FAILURE_WINDOW_MS = 60 * 60_000;
     private static final byte[] CONTEXT = "shellyelevate-pair-v1".getBytes(StandardCharsets.US_ASCII);
 
     public enum Outcome { OK, INVALID, EXPIRED }
@@ -54,6 +58,7 @@ public final class Pairing {
     private final SecureRandom random = new SecureRandom();
     private final Clock clock;
     private final Deque<Long> starts = new ArrayDeque<>();
+    private final Deque<Long> failures = new ArrayDeque<>();
     private Pending pending;
 
     public Pairing() {
@@ -68,7 +73,8 @@ public final class Pairing {
     public synchronized Pending start(String clientId, String clientName) throws RateLimited {
         long now = clock.now();
         while (!starts.isEmpty() && now - starts.peekFirst() > START_WINDOW_MS) starts.removeFirst();
-        if (starts.size() >= MAX_STARTS) throw new RateLimited();
+        while (!failures.isEmpty() && now - failures.peekFirst() > FAILURE_WINDOW_MS) failures.removeFirst();
+        if (starts.size() >= MAX_STARTS || failures.size() >= MAX_FAILURES) throw new RateLimited();
         starts.addLast(now);
         String code = String.format(Locale.ROOT, "%06d", random.nextInt(1_000_000));
         pending = new Pending(UUID.randomUUID().toString(), code, clientId, clientName, now + EXPIRY_MS);
@@ -100,7 +106,8 @@ public final class Pairing {
             if (out != null && out.length > 0) out[0] = p;
             return Outcome.OK;
         }
-        if (++p.attempts >= MAX_ATTEMPTS) pending = null;
+        failures.addLast(clock.now());
+        if (++p.attempts >= MAX_ATTEMPTS || failures.size() >= MAX_FAILURES) pending = null;
         return Outcome.INVALID;
     }
 

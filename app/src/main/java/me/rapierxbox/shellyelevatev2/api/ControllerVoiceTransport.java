@@ -2,6 +2,8 @@ package me.rapierxbox.shellyelevatev2.api;
 
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 
+import android.os.Handler;
+import android.os.Looper;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -11,7 +13,9 @@ import org.json.JSONObject;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import me.rapierxbox.shellyelevatev2.Constants;
 import me.rapierxbox.shellyelevatev2.R;
+import me.rapierxbox.shellyelevatev2.SettingsParser;
 import me.rapierxbox.shellyelevatev2.voice.VoiceEngine;
 import me.rapierxbox.shellyelevatev2.voice.VoiceTransport;
 
@@ -21,6 +25,11 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
     private static final String TAG = "ControllerVoice";
 
     public static final int CHANNEL_AUDIO = 0x01;
+    // the assist satellite entity subscribes a moment after the connection so the config goes out again
+    private static final long CONFIG_RESEND_MS = 10_000;
+
+    private static final Handler configHandler = new Handler(Looper.getMainLooper());
+    private static volatile String lastConfig;
 
     private volatile Listener listener;
     // true between a session start and voice.audio_end or voice.stop_audio
@@ -143,7 +152,7 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
             }
             if (any && chosen == null) throw ApiHub.CommandException.invalid("no installed wake word in active");
             engine.setActiveWakeWord(chosen);
-            sendConfig(engine);
+            sendConfig(engine, true);
             return null;
         });
         ApiHub.registerCommand("timer.update", params -> {
@@ -159,7 +168,18 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
 
         ApiHub.addStateProvider(state -> contributeState(engine, state));
         ApiHub.addControllerListener(connected -> {
-            if (connected) sendConfig(engine);
+            configHandler.removeCallbacksAndMessages(null);
+            if (!connected) return;
+            sendConfig(engine, true);
+            configHandler.postDelayed(() -> sendConfig(engine, true), CONFIG_RESEND_MS);
+        });
+        // a wake word change on the display or voice switched on updates the entity right away
+        SettingsParser.addChangeListener(changes -> {
+            if (changes.has(Constants.SP_VOICE_WAKE_ENABLED) || changes.has(Constants.SP_VOICE_WAKE_MODEL_NAME)
+                    || changes.has(Constants.SP_VOICE_WAKE_EXPERIMENTAL_MODELS)
+                    || changes.has(Constants.SP_HA_VOICE_ENABLED)) {
+                sendConfig(engine, false);
+            }
         });
     }
 
@@ -169,7 +189,9 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
     }
 
     // wake words the display can run so the assist satellite entity can offer them
-    public static void sendConfig(VoiceEngine engine) {
+    // without force an unchanged config is not sent again
+    public static void sendConfig(VoiceEngine engine, boolean force) {
+        if (!ApiHub.hasController()) return;
         try {
             JSONObject payload = new JSONObject();
             JSONArray available = new JSONArray();
@@ -185,6 +207,9 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
             if (current != null) active.put(current);
             payload.put("active", active);
             payload.put("max_active", 1);
+            String text = payload.toString();
+            if (!force && text.equals(lastConfig)) return;
+            lastConfig = text;
             ApiHub.send("voice.config", payload);
         } catch (JSONException e) {
             Log.w(TAG, "Could not build voice.config", e);

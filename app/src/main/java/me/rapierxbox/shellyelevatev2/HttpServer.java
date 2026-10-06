@@ -38,7 +38,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashMap;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 
@@ -599,9 +602,17 @@ public class HttpServer extends NanoHTTPD {
         return filtered;
     }
 
+    // secrets and the keys that decide where secrets are sent. a plain http write to the broker or
+    // the dashboard host would otherwise send the mqtt password to whoever is on the lan
+    private static final Set<String> PROTECTED_OVER_HTTP = new HashSet<>(Arrays.asList(
+            Constants.SP_MQTT_BROKER, Constants.SP_MQTT_PORT, Constants.SP_MQTT_USERNAME,
+            Constants.SP_MQTT_CLIENTID, Constants.SP_WEBVIEW_URL));
+
     private static boolean containsSecret(JSONObject settings) {
         for (Iterator<String> it = settings.keys(); it.hasNext(); ) {
-            SettingDef def = SettingsRegistry.get(it.next());
+            String key = it.next();
+            if (PROTECTED_OVER_HTTP.contains(key)) return true;
+            SettingDef def = SettingsRegistry.get(key);
             if (def != null && def.secret) return true;
         }
         return false;

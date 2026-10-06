@@ -10,6 +10,9 @@ import org.json.JSONObject;
 
 import me.rapierxbox.shellyelevatev2.api.ClientTokenStore;
 import me.rapierxbox.shellyelevatev2.api.TlsIdentity;
+import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
+
+import java.util.Iterator;
 
 // hands a controller token and optional settings to the app over adb without the on screen code
 // the manifest guards it with a permission only the shell user and root hold
@@ -32,9 +35,18 @@ public class ProvisionReceiver extends BroadcastReceiver {
         String settings = intent.getStringExtra("settings");
         if (settings != null && !settings.isEmpty()) {
             try {
-                new SettingsParser().setSettings(new JSONObject(settings));
-            } catch (JSONException e) {
-                Log.w(TAG, "Provisioned settings are not a json object", e);
+                // applied like PATCH /settings. keys this version does not know are skipped
+                // so a profile from a newer display still provisions
+                JSONObject patch = new JSONObject();
+                JSONObject given = new JSONObject(settings);
+                for (Iterator<String> it = given.keys(); it.hasNext(); ) {
+                    String key = it.next();
+                    if (SettingsRegistry.get(key) != null) patch.put(key, given.get(key));
+                    else Log.w(TAG, "Skipping unknown setting " + key);
+                }
+                new SettingsParser().applyPatch(patch);
+            } catch (JSONException | IllegalArgumentException e) {
+                Log.w(TAG, "Provisioned settings rejected", e);
                 setResultCode(2);
                 return;
             }

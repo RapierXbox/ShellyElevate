@@ -20,6 +20,7 @@ public final class ApiManager {
     // a connection stays open this long without traffic. controllers ping every 30 s
     private static final int SOCKET_TIMEOUT_MS = 65_000;
     private static final long WATCHDOG_PERIOD_S = 30;
+    private static final long PING_PERIOD_S = 20;
     private static final long RETRY_MAX_S = 60;
 
     private static volatile ApiManager instance;
@@ -84,6 +85,10 @@ public final class ApiManager {
                 startServer();
             }
         }, WATCHDOG_PERIOD_S, WATCHDOG_PERIOD_S, TimeUnit.SECONDS);
+        executor.scheduleWithFixedDelay(() -> {
+            ApiServer s = server;
+            if (s != null) s.pingAll();
+        }, PING_PERIOD_S, PING_PERIOD_S, TimeUnit.SECONDS);
     }
 
     private void stopInternal() {
@@ -111,7 +116,7 @@ public final class ApiManager {
         try {
             TlsIdentity identity = TlsIdentity.get();
             ApiServer fresh = new ApiServer(context, tokens, pairing, stateHub);
-            fresh.makeSecure(identity.serverSocketFactory(), null);
+            fresh.makeSecure(identity.serverSocketFactory(), identity.protocols());
             fresh.start(SOCKET_TIMEOUT_MS, false);
             server = fresh;
             ApiHub.setSink(fresh);
