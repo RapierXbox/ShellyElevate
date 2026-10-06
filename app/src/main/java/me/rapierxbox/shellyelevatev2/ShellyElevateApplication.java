@@ -1,6 +1,7 @@
 package me.rapierxbox.shellyelevatev2;
 
 import static fi.iki.elonen.NanoHTTPD.SOCKET_READ_TIMEOUT;
+import static me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_HTTP_SERVER_ENABLED;
@@ -16,6 +17,7 @@ import android.os.StrictMode;
 import android.util.Log;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.webkit.WebViewFeature;
 
 import java.io.IOException;
 import java.util.concurrent.Executors;
@@ -26,6 +28,7 @@ import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.bluetooth.BluetoothProxyManager;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
+import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper;
 import me.rapierxbox.shellyelevatev2.helper.ButtonHandler;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
@@ -138,6 +141,7 @@ public class ShellyElevateApplication extends Application {
     private void initSingletons() {
         mApplicationContext = getApplicationContext();
         mSharedPreferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
+        warmUpWebViewProvider();
 
         DeviceModel deviceModel = DeviceModel.getReportedDevice();
         Log.i(TAG, "Device: " + deviceModel.sku);
@@ -179,6 +183,19 @@ public class ShellyElevateApplication extends Application {
 
         mScreenManager.setScreenOn(true);
         mScreenSaverManager.stopScreenSaver();
+    }
+
+    // loads the webview package and native library in parallel with the rest of startup
+    // the feature query loads the provider without starting chromium so it is safe off the main thread
+    private void warmUpWebViewProvider() {
+        if (!DISPLAY_MODULE_WEBVIEW.equals(DisplayModuleRegistry.activeId(mSharedPreferences))) return;
+        new Thread(() -> {
+            try {
+                WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT);
+            } catch (Throwable t) {
+                Log.w(TAG, "WebView warmup failed", t);
+            }
+        }, "WebViewWarmup").start();
     }
 
     private void applyHttpServerSetting() {
