@@ -71,6 +71,15 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.ShellyElevateV2"
         android:usesCleartextTraffic="true">
+        <!-- the dashboard is a lan page so safe browsing only adds startup and per load lookups -->
+        <meta-data
+            android:name="android.webkit.WebView.EnableSafeBrowsing"
+            android:value="false" />
+        <!-- no webview usage metrics collection or upload on a kiosk -->
+        <meta-data
+            android:name="android.webkit.WebView.MetricsOptOut"
+            android:value="true" />
+
         <receiver
             android:name=".screensavers.UserInteractionReceiver"
             android:enabled="true"
@@ -81,8 +90,10 @@
             </intent-filter>
         </receiver>
 
+        <!-- handled in place so a keyboard or ui mode change does not tear down and reload the dashboard -->
         <activity
             android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|uiMode|locale|layoutDirection"
             android:exported="true"
             android:hardwareAccelerated="true"
             android:label="ShellyElevateV2"

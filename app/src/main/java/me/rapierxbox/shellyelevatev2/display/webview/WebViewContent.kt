@@ -2,6 +2,7 @@ package me.rapierxbox.shellyelevatev2.display.webview
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.ActivityManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -12,6 +13,7 @@ import android.net.http.SslError
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.util.Log
 import android.view.View
 import android.view.ViewGroup
@@ -66,6 +68,10 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private val activity = host.activity
     private val broadcastManager = LocalBroadcastManager.getInstance(activity)
 
+    // pre raster keeps the whole page rastered which only pays off with memory to spare
+    // declared before the webview since createWebView reads it
+    private val preRaster = !isLowMemoryDevice(activity)
+
     // replaced wholesale after a render process crash so never cache it elsewhere
     // added straight to the module container so the busiest view has no extra layout level
     private var webView: WebView = createWebView()
@@ -74,7 +80,14 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     override val gestureTarget: View get() = webView
 
     private var initialLoadDone = false
+    private var initialLoadJob: Job? = null
     private var retryJob: Job? = null
+
+    // the lifecycle scope outlives this content on a module switch so late coroutines check it
+    private var destroyed = false
+
+    // a renderer killed again this soon after a recovery gets the offline page to avoid a loop
+    private var lastRecoveryAtMs = 0L
 
     // last dashboard url we asked the webview to load so redundant reloads can be skipped
     private var lastRequestedUrl: String? = null
@@ -85,6 +98,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
     private var webViewPausedForSleep = false
     private var inAODMode = false
+
+    // a translucent activity like the switcher only pauses us so the page never stopped
+    private var stoppedSinceResume = false
 
     // aod wakes the webview briefly once per second so widgets like the clock stay current
     private val aodTickHandler = Handler(Looper.getMainLooper())
@@ -207,18 +223,25 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         resumeWebViewFromSleep()
 
         // refire the js hooks so a page suspended in the background can refresh its state
-        mShellyElevateJavascriptInterface.onScreenOn()
-        mShellyElevateJavascriptInterface.onScreensaverOff()
+        if (stoppedSinceResume) {
+            stoppedSinceResume = false
+            mShellyElevateJavascriptInterface.onScreenOn()
+            mShellyElevateJavascriptInterface.onScreensaverOff()
+        }
 
         if (!initialLoadDone) safeInitialLoad()
     }
 
     override fun onStop() {
+        stoppedSinceResume = true
         cancelRetry()
     }
 
     override fun onDestroy() {
+        destroyed = true
         unregisterBroadcastReceivers()
+        initialLoadJob?.cancel()
+        initialLoadJob = null
         cancelRetry()
         aodTickHandler.removeCallbacksAndMessages(null)
         pendingJs.clear()
@@ -273,7 +296,6 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         try {
             webView.onPause()
             webView.pauseTimers()
-            webView.setLayerType(View.LAYER_TYPE_NONE, null)
             webView.visibility = View.INVISIBLE
             Log.i(TAG, "webview paused for sleep")
         } catch (e: Exception) {
@@ -286,7 +308,6 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         webViewPausedForSleep = false
         try {
             webView.visibility = View.VISIBLE
-            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
             webView.resumeTimers()
             webView.onResume()
             Log.i(TAG, "webview resumed from sleep")
@@ -303,7 +324,6 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             webView.settings.offscreenPreRaster = false
             webView.onPause()
             webView.pauseTimers()
-            webView.setLayerType(View.LAYER_TYPE_NONE, null)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
             }
@@ -323,10 +343,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
             }
-            webView.setLayerType(View.LAYER_TYPE_HARDWARE, null)
             webView.resumeTimers()
             webView.onResume()
-            webView.settings.offscreenPreRaster = true
+            webView.settings.offscreenPreRaster = preRaster
             Log.i(TAG, "aod mode exited")
         } catch (e: Exception) {
             Log.w(TAG, "exitAODMode failed: ${e.message}")
@@ -336,6 +355,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     // loading
 
     private fun loadDashboard(url: String) {
+        if (destroyed) return
         // any explicit load makes a pending offline retry obsolete
         cancelRetry()
         lastRequestedUrl = url
@@ -349,10 +369,12 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
     private fun safeInitialLoad() {
         initialLoadDone = true
-        activity.lifecycleScope.launch(Dispatchers.Default) {
+        initialLoadJob = activity.lifecycleScope.launch(Dispatchers.Default) {
             val url = ServiceHelper.getWebviewUrl()
             val online = ServiceHelper.isNetworkReady(activity.applicationContext)
             withContext(Dispatchers.Main) {
+                initialLoadJob = null
+                if (destroyed) return@withContext
                 if (online) {
                     loadDashboard(url)
                 } else {
@@ -365,6 +387,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
     private fun scheduleRetryOnlineAfterOffline(targetUrl: String) {
         cancelRetry()
+        if (destroyed) return
         retryJob = activity.lifecycleScope.launch(Dispatchers.Default) {
             // fast backoff for the window right after boot then a slow poll to ride out long wifi outages
             val delays = sequence {
@@ -377,7 +400,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
                     withContext(Dispatchers.Main) {
                         // drop the reference first so loadDashboard does not cancel this job mid flight
                         retryJob = null
-                        loadDashboard(targetUrl)
+                        if (!destroyed) loadDashboard(targetUrl)
                     }
                     return@launch
                 }
@@ -396,6 +419,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private fun createWebView(): WebView = WebView(activity).apply {
         id = R.id.myWebView
         overScrollMode = View.OVER_SCROLL_NEVER
+        // the fading view scrollbars redraw the whole webview for every frame of the fade
+        isVerticalScrollBarEnabled = false
+        isHorizontalScrollBarEnabled = false
         configureWebView(this)
     }
 
@@ -404,9 +430,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         applyWebSettings(target.settings)
 
         target.apply {
-            if (layerType != View.LAYER_TYPE_HARDWARE) {
-                setLayerType(View.LAYER_TYPE_HARDWARE, null)
-            }
+            // no hardware layer since the webview draws through its own gl functor
+            // and a layer would add a full screen offscreen copy to every frame
 
             // let the renderer drop priority whenever the webview is covered
             // by settings or a screensaver activity instead of only during aod
@@ -435,8 +460,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         settings.allowFileAccessFromFileURLs = true
         settings.allowUniversalAccessFromFileURLs = true
         settings.databaseEnabled = true
-        settings.setRenderPriority(WebSettings.RenderPriority.NORMAL)
-        settings.offscreenPreRaster = true
+        settings.offscreenPreRaster = preRaster
+        // no prompt handler grants location so fail requests at once instead of leaving them pending
+        settings.setGeolocationEnabled(false)
 
         // the dashboard does its own theming and chromium auto darken washes out colors on this panel
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
@@ -448,7 +474,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     }
 
     // swaps in a fresh webview at the same spot after the renderer died
-    private fun recoverWebView(crashed: WebView) {
+    private fun recoverWebView(crashed: WebView, didCrash: Boolean) {
         val parent = crashed.parent as? ViewGroup ?: return
         val index = parent.indexOfChild(crashed)
         val layoutParams = crashed.layoutParams
@@ -461,10 +487,36 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         webView = fresh
         firstPaintDone = false
         parent.addView(fresh, index, layoutParams)
+        carrySleepStateTo(fresh)
 
-        // land on the offline page instead of the failing url so a crashing page cannot hot loop
-        fresh.loadUrl(OFFLINE_URL)
-        Log.i(TAG, "Recovered WebView after crash, showing offline page")
+        // a renderer the system killed for memory did nothing wrong so go straight back to the dashboard
+        // a real crash lands on the offline page so a crashing page cannot hot loop
+        val now = SystemClock.elapsedRealtime()
+        val recentlyRecovered = lastRecoveryAtMs != 0L && now - lastRecoveryAtMs < RECOVERY_LOOP_WINDOW_MS
+        lastRecoveryAtMs = now
+        val url = lastRequestedUrl
+        // a pending offline retry keeps the offline page and brings the dashboard back itself
+        if (!didCrash && !recentlyRecovered && retryJob == null && !url.isNullOrEmpty()) {
+            loadDashboard(url)
+            Log.i(TAG, "Recovered WebView after renderer kill, reloading dashboard")
+        } else {
+            fresh.loadUrl(OFFLINE_URL)
+            Log.i(TAG, "Recovered WebView after crash, showing offline page")
+        }
+    }
+
+    // a fresh webview starts awake so give it the sleep or aod state the old one had
+    private fun carrySleepStateTo(target: WebView) {
+        if (!webViewPausedForSleep && !inAODMode) return
+        target.onPause()
+        target.pauseTimers()
+        if (webViewPausedForSleep) target.visibility = View.INVISIBLE
+        if (inAODMode) {
+            target.settings.offscreenPreRaster = false
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                target.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
+            }
+        }
     }
 
     private inner class DashboardWebViewClient : WebViewClient() {
@@ -544,7 +596,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {
             Log.e(TAG, "WebView render process crashed; didCrash=${detail.didCrash()}")
             try {
-                recoverWebView(view)
+                recoverWebView(view, detail.didCrash())
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to recover WebView", e)
             }
@@ -597,5 +649,18 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
         val RETRY_BACKOFF_MS = listOf(2000L, 4000L, 8000L, 16000L)
         const val RETRY_POLL_MS = 30_000L
+
+        const val RECOVERY_LOOP_WINDOW_MS = 60_000L
+
+        // a 1 gb device reports a little under 1 gb and a 2 gb device well above this
+        const val LOW_MEMORY_BYTES = 1536L * 1024 * 1024
+
+        fun isLowMemoryDevice(context: Context): Boolean {
+            val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return true
+            if (am.isLowRamDevice) return true
+            val info = ActivityManager.MemoryInfo()
+            am.getMemoryInfo(info)
+            return info.totalMem < LOW_MEMORY_BYTES
+        }
     }
 }

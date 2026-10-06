@@ -142,8 +142,7 @@ class MainActivity : ComponentActivity(), DisplayHost {
         super.onCreate(savedInstanceState)
 
         ServiceHelper.ensureKioskService(applicationContext)
-        requestWriteSettingsPermission()
-        setScreenOptions()
+        setupWindow()
 
         binding = MainActivityBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -160,6 +159,9 @@ class MainActivity : ComponentActivity(), DisplayHost {
         registerBroadcastReceivers()
         applyScoreBarSetting()
 
+        // after the content so the dashboard webview starts building first
+        requestWriteSettingsPermission()
+
         // first run opens settings so the user can enter the url
         // but never stack a second settings instance on top of a running one
         if (!mSharedPreferences.getBoolean(SP_SETTINGS_EVER_SHOWN, false)
@@ -171,7 +173,7 @@ class MainActivity : ComponentActivity(), DisplayHost {
 
     override fun onResume() {
         super.onResume()
-        setScreenOptions()
+        applyImmersiveMode()
 
         content?.onResume()
 
@@ -495,10 +497,15 @@ class MainActivity : ComponentActivity(), DisplayHost {
         }
     }
 
-    @Suppress("DEPRECATION")
-    private fun setScreenOptions() {
+    // window flags stick for the life of the window so this runs once
+    private fun setupWindow() {
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    // the system clears these flags when bars are revealed so every resume reapplies them
+    @Suppress("DEPRECATION")
+    private fun applyImmersiveMode() {
         window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
                 or View.SYSTEM_UI_FLAG_FULLSCREEN
                 or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
