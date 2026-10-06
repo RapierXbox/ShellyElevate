@@ -7,10 +7,12 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -82,6 +84,12 @@ public final class HttpDownloader {
     }
 
     public static void download(OkHttpClient client, String url, File dest, ProgressCallback progress) throws IOException {
+        download(client, url, dest, progress, null);
+    }
+
+    // a set cancel flag stops the transfer between chunks with an InterruptedIOException
+    public static void download(OkHttpClient client, String url, File dest, ProgressCallback progress,
+                                AtomicBoolean cancel) throws IOException {
         Request req = new Request.Builder().url(url).header("User-Agent", "ShellyElevateV2").build();
         try (Response res = client.newCall(req).execute()) {
             if (!res.isSuccessful()) throw new IOException("HTTP " + res.code() + " for " + url);
@@ -93,14 +101,21 @@ public final class HttpDownloader {
             if (parent != null) parent.mkdirs();
 
             long read = 0;
+            int lastPercent = -1;
             try (OutputStream out = new BufferedOutputStream(new FileOutputStream(dest));
                  InputStream in = body.byteStream()) {
                 byte[] buf = new byte[16 * 1024];
                 int n;
                 while ((n = in.read(buf)) != -1) {
+                    if (cancel != null && cancel.get()) throw new InterruptedIOException("Cancelled");
                     out.write(buf, 0, n);
                     read += n;
-                    if (total > 0 && progress != null) progress.onProgress((int) (read * 100 / total));
+                    // only whole percent steps so the ui thread is not flooded with posts
+                    int percent = total > 0 ? (int) (read * 100 / total) : -1;
+                    if (percent != lastPercent && percent >= 0 && progress != null) {
+                        lastPercent = percent;
+                        progress.onProgress(percent);
+                    }
                 }
             }
         }

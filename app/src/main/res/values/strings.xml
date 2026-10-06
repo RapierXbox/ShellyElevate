@@ -164,6 +164,12 @@
     <string name="app_update_available">Update available: %1$s</string>
     <string name="app_update_available_prerelease">Pre-release available: %1$s</string>
     <string name="app_update_prerelease">Include pre-releases</string>
+    <string name="app_update_install">Update</string>
+    <string name="app_update_cancel">Cancel</string>
+    <string name="app_update_check_again">Check again</string>
+    <string name="app_update_retry">Try again</string>
+    <string name="app_update_cancelled">Update cancelled</string>
+    <string name="app_update_status_busy">An update is already running</string>
     <string name="app_update_uptodate">Up to date</string>
     <string name="app_update_check_now">Check for updates</string>
     <string name="app_update_downloading">Downloading: %1$d%%</string>

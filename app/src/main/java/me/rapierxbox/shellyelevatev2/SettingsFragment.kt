@@ -659,24 +659,50 @@ class SettingsFragment : Fragment() {
             .show()
     }
 
+    // the release found by the last check and offered behind the update button
+    private var pendingRelease: AppUpdater.ReleaseInfo? = null
+
+    // checks right away when the page opens so the button already says what it will do
     private fun setupAppUpdater(b: SettingsPageUpdatesBinding) {
         b.appUpdateCurrentVersion.text = getString(R.string.app_update_current, BuildConfig.VERSION_NAME)
         b.appUpdateStatus.text = ""
-        b.appUpdateButton.setOnClickListener { startAppUpdateCheck() }
+        b.appUpdateButton.setOnClickListener { onAppUpdateButton() }
+        // switching the channel checks again so the offer always matches the switch
+        b.appUpdatePrerelease.setOnCheckedChangeListener { _, _ -> startAppUpdateCheck() }
+        if (AppUpdater.isInProgress()) {
+            b.appUpdateStatus.text = getString(R.string.app_update_status_busy)
+            b.appUpdateButton.isEnabled = false
+        } else {
+            startAppUpdateCheck()
+        }
+    }
+
+    // the one button checks updates or cancels depending on the state
+    private fun onAppUpdateButton() {
+        val release = pendingRelease
+        when {
+            AppUpdater.isInProgress() -> AppUpdater.cancelDownload()
+            release != null -> startAppUpdateDownload(release)
+            else -> startAppUpdateCheck()
+        }
     }
 
     private fun startAppUpdateCheck() {
         val b = updatesPage ?: return
         if (AppUpdater.isInProgress()) return
+        pendingRelease = null
         b.appUpdateButton.isEnabled = false
+        b.appUpdateButton.setText(R.string.app_update_check_again)
         b.appUpdateStatus.text = getString(R.string.app_update_status_checking)
         // the switch counts before settings are saved so a fresh toggle applies right away
         AppUpdater.checkForUpdate(b.appUpdatePrerelease.isChecked, object : AppUpdater.CheckListener {
             override fun onUpdateAvailable(info: AppUpdater.ReleaseInfo) {
                 val page = updatesPage ?: return
+                pendingRelease = info
                 val res = if (info.prerelease) R.string.app_update_available_prerelease else R.string.app_update_available
                 page.appUpdateStatus.text = getString(res, info.versionName)
-                startAppUpdateDownload(info)
+                page.appUpdateButton.setText(R.string.app_update_install)
+                page.appUpdateButton.isEnabled = true
             }
             override fun onUpToDate(current: String) {
                 val page = updatesPage ?: return
@@ -693,7 +719,8 @@ class SettingsFragment : Fragment() {
 
     private fun startAppUpdateDownload(info: AppUpdater.ReleaseInfo) {
         val b = updatesPage ?: return
-        b.appUpdateButton.isEnabled = false
+        b.appUpdateButton.setText(R.string.app_update_cancel)
+        b.appUpdatePrerelease.isEnabled = false
         b.appUpdateProgressLayout.visibility = View.VISIBLE
         b.appUpdateProgressBar.progress = 0
         b.appUpdateProgressText.text = "0%"
@@ -708,14 +735,28 @@ class SettingsFragment : Fragment() {
                 val page = updatesPage ?: return
                 page.appUpdateProgressLayout.visibility = View.GONE
                 page.appUpdateStatus.text = getString(R.string.app_update_installing)
+                // the installer owns the apk now so there is nothing left to cancel
+                page.appUpdateButton.isEnabled = false
             }
             override fun onFailed(reason: String) {
                 val page = updatesPage ?: return
-                page.appUpdateProgressLayout.visibility = View.GONE
-                page.appUpdateButton.isEnabled = true
-                Toast.makeText(requireContext(), getString(R.string.app_update_failed, reason), Toast.LENGTH_LONG).show()
+                resetAfterDownload(page)
+                page.appUpdateStatus.text = getString(R.string.app_update_failed, reason)
+                page.appUpdateButton.setText(R.string.app_update_retry)
+            }
+            override fun onCancelled() {
+                val page = updatesPage ?: return
+                resetAfterDownload(page)
+                page.appUpdateStatus.text = getString(R.string.app_update_cancelled)
+                page.appUpdateButton.setText(R.string.app_update_install)
             }
         })
+    }
+
+    private fun resetAfterDownload(page: SettingsPageUpdatesBinding) {
+        page.appUpdateProgressLayout.visibility = View.GONE
+        page.appUpdateButton.isEnabled = true
+        page.appUpdatePrerelease.isEnabled = true
     }
 
     // ---- wifi ip configuration ----

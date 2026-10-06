@@ -49,6 +49,8 @@ public final class AppUpdater {
 
     private static final ExecutorService POOL = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean IN_PROGRESS = new AtomicBoolean(false);
+    // set by cancelDownload and checked between download chunks
+    private static final AtomicBoolean CANCEL = new AtomicBoolean(false);
 
     public static final class ReleaseInfo {
         public final String versionName; // tag without a leading v
@@ -73,12 +75,18 @@ public final class AppUpdater {
         // the package manager kills and restarts the app once the install succeeds
         void onInstalling();
         void onFailed(String reason);
+        void onCancelled();
     }
 
     private AppUpdater() {}
 
     public static boolean isInProgress() {
         return IN_PROGRESS.get();
+    }
+
+    // stops a running download. once the apk is handed to the installer it cannot be taken back
+    public static void cancelDownload() {
+        CANCEL.set(true);
     }
 
     // callbacks fire on the main thread. pre releases are only offered when asked for
@@ -118,11 +126,13 @@ public final class AppUpdater {
             return;
         }
         File staging = new File(app.getCacheDir(), "app-update.apk");
+        CANCEL.set(false);
         POOL.execute(() -> {
             boolean committed = false;
             try {
                 HttpDownloader.download(HttpDownloader.defaultClient(), info.apkUrl, staging,
-                        pct -> main.post(() -> listener.onProgress(pct)));
+                        pct -> main.post(() -> listener.onProgress(pct)), CANCEL);
+                if (CANCEL.get()) throw new java.io.InterruptedIOException("Cancelled");
                 if (staging.length() <= 0) throw new IOException("Downloaded file is empty");
                 if (!signaturesMatch(app, staging)) {
                     Log.e(TAG, "apk signature mismatch, refusing to install");
@@ -133,6 +143,12 @@ public final class AppUpdater {
                 committed = true;
                 main.post(listener::onInstalling);
             } catch (Exception e) {
+                // timeouts are interrupted io too so only the flag tells a real cancel apart
+                if (CANCEL.get()) {
+                    Log.i(TAG, "update download cancelled");
+                    main.post(listener::onCancelled);
+                    return;
+                }
                 Log.e(TAG, "install failed", e);
                 main.post(() -> listener.onFailed(msg(e)));
             } finally {
