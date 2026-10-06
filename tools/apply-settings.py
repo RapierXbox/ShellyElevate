@@ -83,12 +83,14 @@ SETTINGS = [
     ("dynamicTempOffsetBaseline", float, 40.0, "zone temperature with no correction"),
     ("dynamicTempOffsetK", float, 0.3, "degrees removed per degree above baseline"),
     ("bluetooth", None, None, None),
-    ("bluetoothProxyEnabled", bool, False, "esphome style bluetooth proxy for home assistant"),
-    ("bluetoothProxyName", str, "ShellyElevate", "advertised proxy name"),
+    ("bleScannerEnabled", bool, False, "bluetooth proxy through the home assistant integration"),
+    ("bluetoothProxyEnabled", bool, False, "esphome style bluetooth proxy for home assistant"),  # deprecated
+    ("bluetoothProxyName", str, "ShellyElevate", "advertised proxy name"),  # deprecated
     ("voice", None, None, None),
-    ("voiceAssistantEnabled", bool, False, "home assistant assist pipeline"),
-    ("voiceAssistantToken", str, "", "home assistant long lived access token"),
-    ("voiceAssistantPipelineId", str, "", "pipeline id, empty for the default"),
+    ("haVoiceEnabled", bool, False, "voice through the home assistant integration"),
+    ("voiceAssistantEnabled", bool, False, "home assistant assist pipeline"),  # deprecated
+    ("voiceAssistantToken", str, "", "home assistant long lived access token"),  # deprecated
+    ("voiceAssistantPipelineId", str, "", "pipeline id, empty for the default"),  # deprecated
     ("voiceAssistantMaxRecordSeconds", int, 10, "max seconds per request"),
     ("voiceAssistantMuted", bool, False, "mute the microphone"),
     ("voiceWakeEnabled", bool, True, "wake word detection"),
