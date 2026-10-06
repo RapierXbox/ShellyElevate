@@ -15,6 +15,12 @@ interface PrefBinding {
     fun save(editor: SharedPreferences.Editor)
 }
 
+// a binding whose current ui value can be read and replaced without going through prefs
+interface ValueBinding : PrefBinding {
+    fun value(): Any?
+    fun setValue(value: Any?)
+}
+
 // a self contained block of settings ui that hands its bindings to the binder
 interface SettingsSection {
     val bindings: List<PrefBinding>
@@ -22,16 +28,34 @@ interface SettingsSection {
     fun onLoaded() {}
 }
 
+// http writes keep the stored type so a number pref may hold an int a long or a float
+private fun SharedPreferences.intOr(key: String, default: Int): Int = try {
+    getInt(key, default)
+} catch (_: ClassCastException) {
+    (all[key] as? Number)?.toInt() ?: default
+}
+
+private fun SharedPreferences.floatOr(key: String, default: Float): Float = try {
+    getFloat(key, default)
+} catch (_: ClassCastException) {
+    // rewrite as float right away so other getFloat callers stop failing before settings are saved
+    (all[key] as? Number)?.toFloat()?.also { edit { putFloat(key, it) } } ?: default
+}
+
 class SwitchPref(
     private val view: MaterialSwitch,
     private val key: String,
     private val default: Boolean,
     live: ((Boolean) -> Unit)? = null
-) : PrefBinding {
+) : ValueBinding {
     init {
         if (live != null) {
             view.setOnCheckedChangeListener { _, checked -> live(checked) }
         }
+    }
+    override fun value(): Boolean = view.isChecked
+    override fun setValue(value: Any?) {
+        view.isChecked = value == true
     }
     override fun load(prefs: SharedPreferences) {
         view.isChecked = prefs.getBoolean(key, default)
@@ -46,13 +70,16 @@ class TextPref(
     private val key: String,
     private val default: String = "",
     private val trim: Boolean = false
-) : PrefBinding {
+) : ValueBinding {
+    override fun value(): String = view.text.toString().let { if (trim) it.trim() else it }
+    override fun setValue(value: Any?) {
+        view.setText(value?.toString() ?: "")
+    }
     override fun load(prefs: SharedPreferences) {
         view.setText(prefs.getString(key, default))
     }
     override fun save(editor: SharedPreferences.Editor) {
-        val value = view.text.toString().let { if (trim) it.trim() else it }
-        editor.putString(key, value)
+        editor.putString(key, value())
     }
 }
 
@@ -60,43 +87,37 @@ class IntTextPref(
     private val view: EditText,
     private val key: String,
     private val default: Int,
-    private val min: Int = Int.MIN_VALUE
-) : PrefBinding {
+    private val min: Int = Int.MIN_VALUE,
+    private val max: Int = Int.MAX_VALUE
+) : ValueBinding {
+    override fun value(): Int = (view.text.toString().trim().toIntOrNull() ?: default).coerceIn(min, max)
+    override fun setValue(value: Any?) {
+        view.setText(value?.toString() ?: "")
+    }
     override fun load(prefs: SharedPreferences) {
-        view.setText(prefs.getInt(key, default).toString())
+        view.setText(prefs.intOr(key, default).toString())
     }
     override fun save(editor: SharedPreferences.Editor) {
-        val parsed = view.text.toString().toIntOrNull() ?: default
-        editor.putInt(key, parsed.coerceAtLeast(min))
+        editor.putInt(key, value())
     }
 }
 
 class FloatTextPref(
     private val view: EditText,
     private val key: String,
-    private val default: Float
-) : PrefBinding {
+    private val default: Float,
+    private val min: Float = -Float.MAX_VALUE,
+    private val max: Float = Float.MAX_VALUE
+) : ValueBinding {
+    override fun value(): Float = (view.text.toString().trim().toFloatOrNull() ?: default).coerceIn(min, max)
+    override fun setValue(value: Any?) {
+        view.setText(value?.toString() ?: "")
+    }
     override fun load(prefs: SharedPreferences) {
-        // guard against ClassCastException: a whole-number float value may have been
-        // stored as Integer (eg via the http settings api) fall back to reading the
-        // raw value via getAll() and coercing it to float in that case when this
-        // succeeds immediately rewrite the pref as a float so other callers using
-        // getFloat() stop failing before settings are saved
-        val value = try {
-            prefs.getFloat(key, default)
-        } catch (_: ClassCastException) {
-            val repairedValue = (prefs.all[key] as? Number)?.toFloat()
-            if (repairedValue != null) {
-                prefs.edit { putFloat(key, repairedValue) }
-                repairedValue
-            } else {
-                default
-            }
-        }
-        view.setText(value.toString())
+        view.setText(prefs.floatOr(key, default).toString())
     }
     override fun save(editor: SharedPreferences.Editor) {
-        editor.putFloat(key, view.text.toString().toFloatOrNull() ?: default)
+        editor.putFloat(key, value())
     }
 }
 
@@ -105,7 +126,7 @@ class SliderPref(
     private val key: String,
     private val default: Int,
     live: ((Int) -> Unit)? = null
-) : PrefBinding {
+) : ValueBinding {
     init {
         if (live != null) {
             // fromUser guard so load() setting the value doesnt fire the live preview
@@ -113,8 +134,21 @@ class SliderPref(
             view.addOnChangeListener { _, value, fromUser -> if (fromUser) live(value.toInt()) }
         }
     }
+
+    // the slider throws on values off its range or step so pull stored values onto it
+    private fun snap(value: Int): Float {
+        val from = view.valueFrom
+        val clamped = value.toFloat().coerceIn(from, view.valueTo)
+        val step = view.stepSize
+        return if (step > 0f) from + ((clamped - from) / step).toInt() * step else clamped
+    }
+
+    override fun value(): Int = view.value.toInt()
+    override fun setValue(value: Any?) {
+        view.value = snap((value as? Number)?.toInt() ?: default)
+    }
     override fun load(prefs: SharedPreferences) {
-        view.value = prefs.getInt(key, default).toFloat()
+        view.value = snap(prefs.intOr(key, default))
     }
     override fun save(editor: SharedPreferences.Editor) {
         editor.putInt(key, view.value.toInt())
@@ -140,14 +174,15 @@ class SpinnerIdPref(
     private val key: String,
     private val ids: List<String>,
     private val default: String
-) : PrefBinding {
-    override fun load(prefs: SharedPreferences) {
-        val index = ids.indexOf(prefs.getString(key, default)).takeIf { it >= 0 } ?: ids.indexOf(default)
+) : ValueBinding {
+    override fun value(): String = ids.getOrNull(view.selectedItemPosition) ?: default
+    override fun setValue(value: Any?) {
+        val index = ids.indexOf(value).takeIf { it >= 0 } ?: ids.indexOf(default)
         if (index >= 0) view.setSelection(index)
     }
+    override fun load(prefs: SharedPreferences) = setValue(prefs.getString(key, default))
     override fun save(editor: SharedPreferences.Editor) {
-        val id = ids.getOrNull(view.selectedItemPosition) ?: default
-        editor.putString(key, id)
+        editor.putString(key, value())
     }
 }
 
@@ -186,10 +221,6 @@ class SettingsBinder(private val prefs: SharedPreferences) {
             switch.setOnCheckedChangeListener { _, checked -> actions.forEach { it(checked) } }
         }
         sections.forEach { it.onLoaded() }
-    }
-
-    fun saveAll() {
-        prefs.edit { saveTo(this) }
     }
 
     // lets several binders share one editor and one disk write
