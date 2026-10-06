@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.api.ApiManager;
+import me.rapierxbox.shellyelevatev2.api.MediaCommands;
 import me.rapierxbox.shellyelevatev2.bluetooth.BluetoothProxyManager;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
@@ -172,6 +173,7 @@ public class ShellyElevateApplication extends Application {
         if (mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false)) {
             mMediaHelper = new MediaHelper();
         }
+        MediaCommands.register();
 
         mMQTTServer = new MQTTServer();
         mVoiceAssistantManager = new VoiceAssistantManager();
