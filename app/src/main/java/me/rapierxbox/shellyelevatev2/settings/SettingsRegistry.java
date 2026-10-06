@@ -477,6 +477,8 @@ public final class SettingsRegistry {
             for (Map.Entry<String, ?> entry : stored.entrySet()) {
                 String key = entry.getKey();
                 if (DEFS.containsKey(key) || isInternal(key) || entry.getValue() == null) continue;
+                // a removed feature written back over the legacy api is not a setting anymore
+                if (Arrays.asList(RemovedSettings.KEYS).contains(key)) continue;
                 Object value = entry.getValue();
                 if (value instanceof Set) {
                     value = new ArrayList<>(new TreeSet<>(stringSet((Set<?>) value)));
