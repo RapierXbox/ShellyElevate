@@ -45,6 +45,7 @@ import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
+import me.rapierxbox.shellyelevatev2.settings.SettingsChangeTracker;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.switcher.AppCatalog;
 import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager;
@@ -142,6 +143,8 @@ public class ShellyElevateApplication extends Application {
     private void initSingletons() {
         mApplicationContext = getApplicationContext();
         mSharedPreferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
+        // reports settings changes from every writer to the v1 api
+        SettingsChangeTracker.start(mSharedPreferences);
         warmUpWebViewProvider();
 
         DeviceModel deviceModel = DeviceModel.getReportedDevice();
@@ -350,6 +353,7 @@ public class ShellyElevateApplication extends Application {
             LocalBroadcastManager.getInstance(this).unregisterReceiver(settingsReceiver);
             settingsReceiver = null;
         }
+        SettingsChangeTracker.stop();
 
         synchronized (this) {
             cancelHttpWatchdog();

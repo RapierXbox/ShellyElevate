@@ -9,6 +9,8 @@ import android.content.SharedPreferences;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
+import me.rapierxbox.shellyelevatev2.settings.SettingDef;
+import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -18,9 +20,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.LinkedHashSet;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 public class SettingsParser {
     // keys whose values must always be stored as Float in SharedPreferences
@@ -127,5 +133,114 @@ public class SettingsParser {
 
         LocalBroadcastManager.getInstance(mApplicationContext)
                 .sendBroadcast(new Intent(Constants.INTENT_SETTINGS_CHANGED));
+    }
+
+    // ---- v1 api ----
+
+    // gets resolved values of every registry key whose value changed no matter who wrote it
+    public interface ChangeListener {
+        void onSettingsChanged(JSONObject resolvedChanges);
+    }
+
+    private static final CopyOnWriteArrayList<ChangeListener> changeListeners = new CopyOnWriteArrayList<>();
+
+    public static void addChangeListener(ChangeListener listener) {
+        changeListeners.addIfAbsent(listener);
+    }
+
+    public static void removeChangeListener(ChangeListener listener) {
+        changeListeners.remove(listener);
+    }
+
+    // called by SettingsChangeTracker only so every write produces exactly one event
+    public static void dispatchChanges(JSONObject resolvedChanges) {
+        for (ChangeListener listener : changeListeners) {
+            try {
+                listener.onSettingsChanged(resolvedChanges);
+            } catch (RuntimeException e) {
+                android.util.Log.w("SettingsParser", "Settings listener failed", e);
+            }
+        }
+    }
+
+    public static final class PatchResult {
+        // key to resolved value for keys whose value actually changed
+        public final JSONObject changes;
+        public final boolean restartRequired;
+
+        PatchResult(JSONObject changes, boolean restartRequired) {
+            this.changes = changes;
+            this.restartRequired = restartRequired;
+        }
+    }
+
+    // validates every key first so a bad value leaves all settings untouched
+    // null resets a key to its default
+    public PatchResult applyPatch(JSONObject patch) throws IllegalArgumentException {
+        Map<String, Object> writes = new LinkedHashMap<>();
+        for (Iterator<String> it = patch.keys(); it.hasNext(); ) {
+            String key = it.next();
+            SettingDef def = SettingsRegistry.get(key);
+            if (def == null) throw new IllegalArgumentException("unknown setting " + key);
+            Object value = patch.opt(key);
+            writes.put(key, value == null || value == JSONObject.NULL ? null : SettingsRegistry.coerce(def, value));
+        }
+
+        Map<String, Object> before = SettingsRegistry.resolvedValues(mSharedPreferences.getAll());
+        SharedPreferences.Editor editor = mSharedPreferences.edit();
+        for (Map.Entry<String, Object> entry : writes.entrySet()) {
+            write(editor, SettingsRegistry.get(entry.getKey()), entry.getValue());
+        }
+        editor.apply();
+        Map<String, Object> after = SettingsRegistry.resolvedValues(mSharedPreferences.getAll());
+
+        JSONObject changes = new JSONObject();
+        boolean restart = false;
+        try {
+            for (String key : writes.keySet()) {
+                Object now = after.get(key);
+                if (Objects.equals(before.get(key), now)) continue;
+                changes.put(key, SettingsRegistry.toJson(now));
+                restart |= SettingsRegistry.get(key).requiresRestart;
+            }
+        } catch (JSONException e) {
+            throw new IllegalStateException(e);
+        }
+
+        if (!writes.isEmpty()) {
+            LocalBroadcastManager.getInstance(mApplicationContext)
+                    .sendBroadcast(new Intent(Constants.INTENT_SETTINGS_CHANGED));
+        }
+        return new PatchResult(changes, restart);
+    }
+
+    // stores with the shared preferences type every reader of the key expects
+    private static void write(SharedPreferences.Editor editor, SettingDef def, Object value) {
+        if (value == null) {
+            editor.remove(def.key);
+            return;
+        }
+        switch (def.type) {
+            case SettingDef.TYPE_BOOL:
+                editor.putBoolean(def.key, (Boolean) value);
+                break;
+            case SettingDef.TYPE_INT:
+                editor.putInt(def.key, (Integer) value);
+                break;
+            case SettingDef.TYPE_FLOAT:
+                editor.putFloat(def.key, ((Double) value).floatValue());
+                break;
+            case SettingDef.TYPE_ENUM:
+                if (value instanceof Integer) editor.putInt(def.key, (Integer) value);
+                else editor.putString(def.key, (String) value);
+                break;
+            case SettingDef.TYPE_STRING_LIST:
+                @SuppressWarnings("unchecked") List<String> list = (List<String>) value;
+                editor.putStringSet(def.key, new LinkedHashSet<>(list));
+                break;
+            default:
+                editor.putString(def.key, (String) value);
+                break;
+        }
     }
 }
