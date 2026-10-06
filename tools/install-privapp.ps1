@@ -1,5 +1,5 @@
 # pushes the apk into /system/priv-app then reboots and grants the manual perms
-# also does what tools/uart-setup.py does: disables cloud.shelly.stargate,
+# also disables cloud.shelly.stargate,
 # enables adb over wifi and optionally joins a wifi network
 # the ssid can also come from SHELLY_WIFI_SSID and the password from
 # SHELLY_WIFI_PASSWORD or a prompt. without an ssid wifi is skipped

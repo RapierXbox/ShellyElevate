@@ -183,6 +183,11 @@ public class SettingsParser {
             SettingDef def = SettingsRegistry.get(key);
             if (def == null) throw new IllegalArgumentException("unknown setting " + key);
             Object value = patch.opt(key);
+            // ApiInfo replaces short ids with a random one which would change the display identity
+            if (Constants.SP_MQTT_CLIENTID.equals(key) && (value == null || value == JSONObject.NULL
+                    || String.valueOf(value).trim().length() <= 2)) {
+                throw new IllegalArgumentException(key + " must be longer than 2 characters");
+            }
             writes.put(key, value == null || value == JSONObject.NULL ? null : SettingsRegistry.coerce(def, value));
         }
 

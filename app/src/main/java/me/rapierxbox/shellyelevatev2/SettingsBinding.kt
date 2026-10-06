@@ -214,6 +214,10 @@ class SettingsBinder(private val prefs: SharedPreferences) {
         toggleActions.getOrPut(switch) { mutableListOf() } += action
     }
 
+    // what the page would write right after loading. only keys that differ from it are saved
+    // so a value the api mqtt or another screen wrote meanwhile is not overwritten with the old one
+    private var loaded: Map<String, Any?> = emptyMap()
+
     fun loadAll() {
         bindings.forEach { it.load(prefs) }
         toggleActions.forEach { (switch, actions) ->
@@ -221,10 +225,44 @@ class SettingsBinder(private val prefs: SharedPreferences) {
             switch.setOnCheckedChangeListener { _, checked -> actions.forEach { it(checked) } }
         }
         sections.forEach { it.onLoaded() }
+        loaded = record()
     }
 
     // lets several binders share one editor and one disk write
     fun saveTo(editor: SharedPreferences.Editor) {
-        bindings.forEach { it.save(editor) }
+        for ((key, value) in record()) {
+            if (loaded.containsKey(key) && loaded[key] == value) continue
+            when (value) {
+                RecordingEditor.REMOVED -> editor.remove(key)
+                is Boolean -> editor.putBoolean(key, value)
+                is Int -> editor.putInt(key, value)
+                is Long -> editor.putLong(key, value)
+                is Float -> editor.putFloat(key, value)
+                is String -> editor.putString(key, value)
+                is Set<*> -> editor.putStringSet(key, value.filterIsInstance<String>().toSet())
+            }
+        }
+    }
+
+    private fun record(): Map<String, Any?> = RecordingEditor().also { r -> bindings.forEach { it.save(r) } }.values
+}
+
+// collects the writes of the bindings without touching the prefs
+private class RecordingEditor : SharedPreferences.Editor {
+    val values = linkedMapOf<String, Any?>()
+
+    override fun putString(key: String, value: String?) = apply { values[key] = value ?: REMOVED }
+    override fun putStringSet(key: String, value: MutableSet<String>?) = apply { values[key] = value?.toSet() ?: REMOVED }
+    override fun putInt(key: String, value: Int) = apply { values[key] = value }
+    override fun putLong(key: String, value: Long) = apply { values[key] = value }
+    override fun putFloat(key: String, value: Float) = apply { values[key] = value }
+    override fun putBoolean(key: String, value: Boolean) = apply { values[key] = value }
+    override fun remove(key: String) = apply { values[key] = REMOVED }
+    override fun clear() = this
+    override fun commit() = true
+    override fun apply() {}
+
+    companion object {
+        val REMOVED = Any()
     }
 }

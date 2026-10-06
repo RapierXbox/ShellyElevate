@@ -230,8 +230,6 @@ public class ShellyElevateApplication extends Application {
         }
     }
 
-    @SuppressWarnings("deprecation")
-
     // grants the manual adb perms off the main thread
     // promotion to a priv app is left to tools/install-privapp since the app user cannot write /system
     private void runFirstRunPrivilegeSetup() {

@@ -21,6 +21,9 @@ public final class RemovedSettings {
 
     public static void clear(SharedPreferences prefs) {
         SharedPreferences.Editor editor = null;
+        // users of a removed feature keep the feature through its replacement in the integration
+        editor = carryOver(prefs, editor, "bluetoothProxyEnabled", "bleScannerEnabled");
+        editor = carryOver(prefs, editor, "voiceAssistantEnabled", "haVoiceEnabled");
         for (String key : KEYS) {
             if (!prefs.contains(key)) continue;
             if (editor == null) editor = prefs.edit();
@@ -28,5 +31,14 @@ public final class RemovedSettings {
             Log.i(TAG, "Removed the setting " + key + " of a removed feature");
         }
         if (editor != null) editor.apply();
+    }
+
+    private static SharedPreferences.Editor carryOver(SharedPreferences prefs, SharedPreferences.Editor editor,
+                                                      String removedKey, String replacementKey) {
+        if (!prefs.getBoolean(removedKey, false) || prefs.contains(replacementKey)) return editor;
+        if (editor == null) editor = prefs.edit();
+        editor.putBoolean(replacementKey, true);
+        Log.i(TAG, removedKey + " was on so " + replacementKey + " is switched on");
+        return editor;
     }
 }

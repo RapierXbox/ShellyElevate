@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pushes the apk into /system/priv-app then reboots and grants the manual perms
-# also does what tools/uart-setup.py does: disables cloud.shelly.stargate,
+# also disables cloud.shelly.stargate,
 # enables adb over wifi and optionally joins a wifi network
 #
 # usage: install-privapp.sh [options] <apk>

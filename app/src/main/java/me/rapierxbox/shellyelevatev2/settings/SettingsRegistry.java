@@ -440,6 +440,18 @@ public final class SettingsRegistry {
             }
             return coerce(def, value);
         } catch (IllegalArgumentException e) {
+            // the device uses an out of range number as stored so report it clamped not as the default
+            Double number = raw instanceof Number ? Double.valueOf(((Number) raw).doubleValue()) : null;
+            if (number != null && (def.type.equals(TYPE_INT) || def.type.equals(TYPE_FLOAT))) {
+                double clamped = number;
+                if (def.min != null) clamped = Math.max(def.min, clamped);
+                if (def.max != null) clamped = Math.min(def.max, clamped);
+                try {
+                    return coerce(def, clamped);
+                } catch (IllegalArgumentException ignored) {
+                    // fall through to the default
+                }
+            }
             return def.defaultValue;
         }
     }
