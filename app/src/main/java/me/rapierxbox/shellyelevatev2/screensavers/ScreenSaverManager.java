@@ -56,8 +56,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
     public static ScreenSaver[] getAvailableScreenSavers() {
         return new ScreenSaver[]{
                 new ScreenOffScreenSaver(),
-                new DigitalClockScreenSaver(),
-                new DigitalClockAndDateScreenSaver(),
+                new DigitalClockScreenSaver(false),
+                new DigitalClockScreenSaver(true),
                 new AODScreenSaver()
         };
     }
