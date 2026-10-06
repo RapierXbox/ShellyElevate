@@ -60,8 +60,7 @@ public final class SettingsRegistry {
             Constants.SP_DIMMER_LAST_BRIGHTNESS,
             Constants.SP_DIMMER_LAST_STATE,
             "crashHandlerCount",
-            "crashHandlerLastMs",
-            Constants.SP_DEPRECATED_MIGRATION_PROMPTED
+            "crashHandlerLastMs"
     )));
 
     private static final Map<String, SettingDef> DEFS = build();
@@ -206,19 +205,6 @@ public final class SettingsRegistry {
         add(m, floating(Constants.SP_DYNAMIC_TEMP_OFFSET_K, 0.3, CATEGORY_ADVANCED, "Offset factor")
                 .description("Degrees subtracted per degree the zone is above the baseline"));
 
-        // deprecated features replaced by the integration
-        add(m, bool(Constants.SP_BLUETOOTH_PROXY_ENABLED, false, CATEGORY_DEPRECATED, "ESPHome Bluetooth proxy")
-                .description("Deprecated: ESPHome proxy on port 6053. Use the Home Assistant integration instead")
-                .deprecated(Constants.SP_BLE_SCANNER_ENABLED));
-        add(m, string(Constants.SP_BLUETOOTH_PROXY_NAME, "ShellyElevate", CATEGORY_DEPRECATED, "ESPHome proxy name")
-                .perDevice().deprecated(null));
-        add(m, bool(Constants.SP_VOICE_ASSISTANT_ENABLED, false, CATEGORY_DEPRECATED, "Standalone voice assistant")
-                .description("Deprecated: own Home Assistant connection with a long-lived token. Use the integration instead")
-                .deprecated(Constants.SP_HA_VOICE_ENABLED));
-        add(m, string(Constants.SP_VOICE_ASSISTANT_TOKEN, "", CATEGORY_DEPRECATED, "Home Assistant token")
-                .secret().deprecated(null));
-        add(m, string(Constants.SP_VOICE_ASSISTANT_PIPELINE_ID, "", CATEGORY_DEPRECATED, "Assist pipeline id")
-                .deprecated(null));
 
         return Collections.unmodifiableMap(m);
     }

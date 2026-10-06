@@ -50,10 +50,6 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
 
-      # the deprecated package must stay easy to cut out
-      - name: Check deprecated package use
-        run: sh tools/check-deprecated-imports.sh
-
       # unlike the release workflow this does not fail on missing secrets:
       # fork prs get no secrets and gradle then signs with the debug key
       - name: Build release APK

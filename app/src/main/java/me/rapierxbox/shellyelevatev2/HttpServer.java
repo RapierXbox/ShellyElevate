@@ -22,7 +22,6 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.api.ApiInfo;
 import me.rapierxbox.shellyelevatev2.api.ClientTokenStore;
-import me.rapierxbox.shellyelevatev2.deprecated.DeprecatedFeatures;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.settings.SettingDef;
 import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
@@ -161,7 +160,6 @@ public class HttpServer extends NanoHTTPD {
                     // which touchscreen reader drives swipes over other apps
                     json.put("touchReader", TouchGestureMonitor.getStatus());
                     json.put("apiTlsPort", ApiInfo.TLS_PORT);
-                    json.put("deprecatedFeaturesActive", new JSONArray(DeprecatedFeatures.activeIds()));
                 } catch (JSONException e) {
                     Log.e(TAG, "Error responding with device details!", e);
                 }

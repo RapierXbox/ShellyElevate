@@ -38,7 +38,6 @@ import java.util.concurrent.atomic.AtomicLong;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.api.ControllerVoiceTransport;
-import me.rapierxbox.shellyelevatev2.deprecated.satellite.HaWebsocketVoiceTransport;
 
 // mic wake word vad and playback for voice sessions. the transport decides where a session goes
 // state machine: DISABLED -> IDLE -> LISTENING -> PROCESSING -> SPEAKING -> IDLE
@@ -69,7 +68,7 @@ public class VoiceEngine {
     public enum State { DISABLED, IDLE, LISTENING, PROCESSING, SPEAKING }
 
     // which transport the settings select
-    private enum Mode { OFF, CONTROLLER, SATELLITE }
+    private enum Mode { OFF, CONTROLLER }
 
     private volatile State state = State.DISABLED;
     private volatile Mode mode = Mode.OFF;
@@ -112,10 +111,9 @@ public class VoiceEngine {
         checkAndApplySettings();
     }
 
-    // true when a transport is switched on in the settings even if it is not running yet
+    // true when voice is switched on in the settings even if it is not running yet
     public static boolean isConfigured() {
-        return mSharedPreferences.getBoolean(SP_HA_VOICE_ENABLED, false)
-                || mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false);
+        return mSharedPreferences.getBoolean(SP_HA_VOICE_ENABLED, false);
     }
 
     public void checkAndApplySettings() {
@@ -125,10 +123,7 @@ public class VoiceEngine {
     }
 
     private static Mode desiredMode() {
-        if (mSharedPreferences.getBoolean(SP_HA_VOICE_ENABLED, false)) return Mode.CONTROLLER;
-        if (mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)
-                && HaWebsocketVoiceTransport.isConfigured()) return Mode.SATELLITE;
-        return Mode.OFF;
+        return mSharedPreferences.getBoolean(SP_HA_VOICE_ENABLED, false) ? Mode.CONTROLLER : Mode.OFF;
     }
 
     private void applySettingsNow() {
@@ -147,8 +142,7 @@ public class VoiceEngine {
             return;
         }
         Log.i(TAG, "enabling " + want);
-        VoiceTransport t = want == Mode.CONTROLLER
-                ? new ControllerVoiceTransport() : new HaWebsocketVoiceTransport();
+        VoiceTransport t = new ControllerVoiceTransport();
         transport = t;
         t.open(new TransportCallbacks(t));
         applyWakeDetectorSettings();

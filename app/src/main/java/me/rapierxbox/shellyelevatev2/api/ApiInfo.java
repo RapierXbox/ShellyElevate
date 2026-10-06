@@ -22,7 +22,6 @@ import java.util.UUID;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
-import me.rapierxbox.shellyelevatev2.deprecated.DeprecatedFeatures;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.PrivAppInstaller;
 
@@ -95,7 +94,6 @@ public final class ApiInfo {
         json.put("android", Build.VERSION.RELEASE);
         json.put("privileged", PrivAppInstaller.isPrivApp(context));
         json.put("capabilities", capabilities(context));
-        json.put("deprecated_features_active", new JSONArray(DeprecatedFeatures.activeIds()));
         return json;
     }
 

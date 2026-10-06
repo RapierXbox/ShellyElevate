@@ -182,15 +182,6 @@
     <string name="sw_input_mode_switch_follow">Switch: relay follows position</string>
     <string name="sw_input_relay_title">Controlled relay</string>
     <string name="sw_input_invert">Invert input</string>
-    <string name="bt_proxy_enabled">Bluetooth Proxy (ESPHome API)</string>
-    <string name="bt_proxy_name">Device Name</string>
-    <string name="bt_proxy_name_hint">ShellyElevate</string>
-    <string name="bt_proxy_address">Add to HA -> ESPHome -> %1$s:6053</string>
-    <string name="voice_assistant">Voice Assistant (HA Assist)</string>
-    <string name="voice_assistant_token">Long-Lived Access Token</string>
-    <string name="voice_assistant_token_hint">HA Profile → Security → Create Token</string>
-    <string name="voice_assistant_pipeline_id">Pipeline ID (optional)</string>
-    <string name="voice_assistant_pipeline_id_hint">Leave empty for default pipeline</string>
     <string name="voice_assistant_max_seconds">Max listen (seconds)</string>
     <string name="voice_assistant_max_seconds_hint">10</string>
     <string name="voice_wake_enabled">Wake word detection</string>
@@ -224,7 +215,6 @@
     <string name="voice_wake_model_custom_hint">/sdcard/Download/my_model.tflite</string>
     <string name="voice_listening">Listening…</string>
     <string name="voice_error">Voice error: %1$s</string>
-    <string name="voice_requires_url">Set the HA URL above before enabling voice</string>
     <string name="publish_thermal_sensors">Publish device thermal sensors to HA</string>
     <string name="dynamic_temp_offset">Dynamic temperature offset (deviceheat correction)</string>
     <string name="thermal_offset_zone">Reference thermal zone</string>

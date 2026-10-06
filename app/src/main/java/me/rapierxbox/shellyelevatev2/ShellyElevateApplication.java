@@ -29,8 +29,6 @@ import java.util.concurrent.TimeUnit;
 import me.rapierxbox.shellyelevatev2.api.ApiManager;
 import me.rapierxbox.shellyelevatev2.api.BleChannel;
 import me.rapierxbox.shellyelevatev2.api.MediaCommands;
-import me.rapierxbox.shellyelevatev2.deprecated.MigrationPrompt;
-import me.rapierxbox.shellyelevatev2.deprecated.esphome.EsphomeProxyServer;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper;
@@ -47,6 +45,7 @@ import me.rapierxbox.shellyelevatev2.helper.SwInputHandler;
 import me.rapierxbox.shellyelevatev2.helper.SwipeHelper;
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.mqtt.MQTTServer;
+import me.rapierxbox.shellyelevatev2.settings.RemovedSettings;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 import me.rapierxbox.shellyelevatev2.settings.SettingsChangeTracker;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
@@ -91,8 +90,6 @@ public class ShellyElevateApplication extends Application {
     private ScheduledFuture<?> httpRetryFuture;
     private int retryDelaySeconds = HTTP_RETRY_INITIAL_SECONDS;
     private BroadcastReceiver settingsReceiver;
-    // deprecated esphome proxy. only built while bluetoothProxyEnabled is on
-    private EsphomeProxyServer esphomeProxyServer;
 
     @Override
     public void onCreate() {
@@ -120,7 +117,6 @@ public class ShellyElevateApplication extends Application {
             public void onReceive(Context context, Intent intent) {
                 applyHttpServerSetting();
                 applyMediaSetting();
-                applyEsphomeProxySetting();
                 DisplayController.onSettingsChanged(context);
             }
         };
@@ -181,13 +177,13 @@ public class ShellyElevateApplication extends Application {
 
         mMQTTServer = new MQTTServer();
         mVoiceEngine = new VoiceEngine();
-        applyEsphomeProxySetting();
         BleChannel.start(this);
         mPowerOptimizer = new PowerOptimizer(this);
 
         // protocol v1 for the home assistant integration. idle until a controller pairs
         ApiManager.start(this);
-        MigrationPrompt.install(this);
+        // keys of the removed esphome proxy and token satellite
+        RemovedSettings.clear(mSharedPreferences);
 
         mHttpServer = new HttpServer();
         httpWatchdog = Executors.newSingleThreadScheduledExecutor();
@@ -235,16 +231,6 @@ public class ShellyElevateApplication extends Application {
     }
 
     @SuppressWarnings("deprecation")
-    private synchronized void applyEsphomeProxySetting() {
-        boolean want = mSharedPreferences.getBoolean(Constants.SP_BLUETOOTH_PROXY_ENABLED, false);
-        if (want && esphomeProxyServer == null) {
-            esphomeProxyServer = new EsphomeProxyServer();
-            esphomeProxyServer.start();
-        } else if (!want && esphomeProxyServer != null) {
-            esphomeProxyServer.onDestroy();
-            esphomeProxyServer = null;
-        }
-    }
 
     // grants the manual adb perms off the main thread
     // promotion to a priv app is left to tools/install-privapp since the app user cannot write /system
@@ -406,12 +392,6 @@ public class ShellyElevateApplication extends Application {
         if (mMQTTServer != null) mMQTTServer.onDestroy();
         StesProtocolHandler.close();
         if (mVoiceEngine != null) mVoiceEngine.onDestroy();
-        synchronized (this) {
-            if (esphomeProxyServer != null) {
-                esphomeProxyServer.onDestroy();
-                esphomeProxyServer = null;
-            }
-        }
         BleChannel.stop();
         if (mMediaHelper != null) mMediaHelper.onDestroy();
 

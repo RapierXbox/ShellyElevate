@@ -222,9 +222,7 @@ class MqttDiscoveryConfigBuilder {
 
     // voice entities only exist while a voice transport is enabled in settings
     private void addVoiceComponents(JSONObject components) throws JSONException {
-        // either the controller transport or the deprecated own satellite
-        boolean enabled = prefs.getBoolean(SP_HA_VOICE_ENABLED, false)
-                || prefs.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false);
+        boolean enabled = prefs.getBoolean(SP_HA_VOICE_ENABLED, false);
         Log.d(TAG, "addVoiceComponents: enabled=" + enabled);
         if (!enabled) return;
 

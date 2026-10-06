@@ -81,9 +81,8 @@ public class SettingsRegistryTest {
             assertEquals(def.key, def.deprecated, "deprecated".equals(def.category));
             if (def.replacedBy != null) assertNotNull(def.key + " replacement", SettingsRegistry.get(def.replacedBy));
         }
-        assertEquals("bleScannerEnabled", SettingsRegistry.get("bluetoothProxyEnabled").replacedBy);
-        assertEquals("haVoiceEnabled", SettingsRegistry.get("voiceAssistantEnabled").replacedBy);
-        assertTrue(SettingsRegistry.get("voiceAssistantToken").secret);
+        // the esphome proxy and the token satellite are gone for good
+        for (String removed : RemovedSettings.KEYS) assertNull(removed, SettingsRegistry.get(removed));
         assertTrue(SettingsRegistry.get("mqttPassword").secret);
         assertTrue(SettingsRegistry.get("mqttDeviceId").perDevice);
     }

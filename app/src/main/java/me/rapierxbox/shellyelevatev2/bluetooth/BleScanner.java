@@ -29,7 +29,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 // shared ble scan for every consumer of advertisements
-// the esphome proxy and the v1 api channel are listeners and the scan only runs while one exists
+// the v1 api channel is a listener and the scan only runs while one exists
 // one process wide instance from get() which is cheap since nothing starts before the first listener
 // listeners get batches of at most RAW_AD_BATCH_MAX ads on the scan callback or scanner thread
 // and must not block

@@ -28,7 +28,7 @@ https://github.com/user-attachments/assets/adf46edd-9bf1-45da-b553-bf7781d17fbd
 - A "lite" mode if you'd rather use Fully Kiosk or a Companion app but still want the hardware exposed
 
 > [!NOTE]
-> **Deprecated:** the app's own ESPHome Bluetooth proxy (port 6053) and its own Home Assistant voice satellite (long-lived token) are replaced by the Shelly Elevate integration. Both keep working for now and are under Settings → Deprecated, but they will be removed in a future release. MQTT and the HTTP API stay.
+> The app's own ESPHome Bluetooth proxy and its own Home Assistant voice satellite (long-lived token) were removed. Voice and the Bluetooth proxy go through the [Shelly Elevate integration](https://github.com/RapierXbox/shellyelevateintegration) now. MQTT and the HTTP API stay.
 
 ## Supported devices
 
