@@ -135,7 +135,7 @@ class MultiTouchTrackerTest {
         assertEquals(260, g.tracks[0].startX)
         assertEquals(620, g.tracks[0].startY)
         val tracks = g.tracks.map { SwipeClassifier.Track(it.startX.toFloat(), it.startY.toFloat(), it.endX.toFloat(), it.endY.toFloat()) }
-        val swipe = SwipeClassifier.classify(tracks, g.maxPointers, g.endMs - g.lastJoinMs, 720f / 3f)
+        val swipe = SwipeClassifier.classify(tracks, g.maxPointers, g.endMs - g.lastJoinMs, 720f)
         assertEquals("swipe_2_up", swipe?.id)
     }
 
@@ -151,13 +151,96 @@ class MultiTouchTrackerTest {
         assertTrue(started.isEmpty())
     }
 
+    // protocol a contact with an optional tracking id
+    private fun contact(x: Int, y: Int, id: Int? = null) {
+        if (id != null) abs(ABS_MT_TRACKING_ID, id)
+        abs(ABS_MT_POSITION_X, x)
+        abs(ABS_MT_POSITION_Y, y)
+        tracker.onEvent(EV_SYN, SYN_MT_REPORT, 0, now)
+    }
+
+    private fun liftAll() {
+        tracker.onEvent(EV_SYN, SYN_MT_REPORT, 0, now)
+        syn()
+    }
+
+    // the left finger lifts first so the right one becomes the first contact of the frame
+    // with ids the right finger must keep its own track instead of taking over the left one
     @Test
-    fun protocolAContactsByOrder() {
-        fun contact(x: Int, y: Int) {
-            abs(ABS_MT_POSITION_X, x)
-            abs(ABS_MT_POSITION_Y, y)
-            tracker.onEvent(EV_SYN, SYN_MT_REPORT, 0, now)
-        }
+    fun protocolATrackingIdsSurviveAFingerLifting() {
+        contact(260, 620, id = 0)
+        contact(460, 610, id = 1)
+        syn()
+        now = 40
+        contact(262, 500, id = 0)
+        contact(458, 490, id = 1)
+        syn()
+        now = 80
+        contact(455, 380, id = 1)
+        syn()
+        now = 120
+        contact(452, 260, id = 1)
+        syn()
+        now = 140
+        liftAll()
+
+        val g = ended.single()
+        assertEquals(2, g.maxPointers)
+        assertEquals(2, g.tracks.size)
+        val left = g.tracks.single { it.startX == 260 }
+        val right = g.tracks.single { it.startX == 460 }
+        assertEquals(262, left.endX)
+        assertEquals(500, left.endY)
+        assertEquals(452, right.endX)
+        assertEquals(260, right.endY)
+    }
+
+    @Test
+    fun protocolAWithoutIdsMatchesTheNearestFinger() {
+        contact(260, 620)
+        contact(460, 610)
+        syn()
+        now = 40
+        // reported in the other order this time
+        contact(458, 500)
+        contact(262, 510)
+        syn()
+        now = 80
+        contact(455, 380)
+        syn()
+        now = 120
+        liftAll()
+
+        val g = ended.single()
+        assertEquals(2, g.tracks.size)
+        val left = g.tracks.single { it.startX == 260 }
+        val right = g.tracks.single { it.startX == 460 }
+        assertEquals(262, left.endX)
+        assertEquals(510, left.endY)
+        assertEquals(455, right.endX)
+        assertEquals(380, right.endY)
+    }
+
+    @Test
+    fun protocolANewTrackingIdIsANewFinger() {
+        contact(100, 100, id = 0)
+        syn()
+        now = 30
+        // the finger lifts and another one lands elsewhere in the same frame
+        contact(500, 500, id = 1)
+        syn()
+        now = 60
+        liftAll()
+
+        val g = ended.single()
+        assertEquals(2, g.tracks.size)
+        assertEquals(1, g.maxPointers)
+        assertEquals(100, g.tracks[0].endX)
+        assertEquals(500, g.tracks[1].startX)
+    }
+
+    @Test
+    fun protocolAEmptyFrameLiftsEveryFinger() {
         contact(300, 600)
         contact(400, 600)
         syn()

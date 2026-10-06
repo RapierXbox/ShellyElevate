@@ -2,17 +2,17 @@ package me.rapierxbox.shellyelevatev2.helper
 
 import android.content.Context
 import android.util.AttributeSet
-import android.util.SparseArray
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import androidx.constraintlayout.widget.ConstraintLayout
-import kotlin.math.abs
-import kotlin.math.hypot
-import kotlin.math.sign
+import me.rapierxbox.shellyelevatev2.helper.touch.SwipeClassifier
 
 // root of the kiosk layout that feeds every touch to the swipe helper and steals
 // multi finger swipes from the display module while leaving pinch zoom to the page
+// it works in dispatchTouchEvent and not onInterceptTouchEvent because a child that calls
+// requestDisallowInterceptTouchEvent like the webview while it scrolls would otherwise hide
+// the rest of the gesture from the swipe helper and from the steal check
 class GestureInterceptLayout @JvmOverloads constructor(
     context: Context,
     attrs: AttributeSet? = null
@@ -21,115 +21,93 @@ class GestureInterceptLayout @JvmOverloads constructor(
     var swipeHelper: SwipeHelper? = null
 
     // the view of the active display module that owns the touch stream
+    // the cancel on a steal now walks the whole view tree so it reaches this view anyway
     var gestureTarget: (() -> View?)? = null
 
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop.toFloat()
-    private val minMovePx = touchSlop * 0.3f
+    private val deadZonePx = touchSlop * 0.5f
     private val stealMovePx = touchSlop * 1.5f
 
-    private var intercepting = false
-    private val downX = SparseArray<Float>()
-    private val downY = SparseArray<Float>()
+    private var stolen = false
 
-    override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
-        when (ev.actionMasked) {
+    // where each finger went down by pointer id and scratch arrays so a move allocates nothing
+    private val downX = FloatArray(MAX_POINTERS)
+    private val downY = FloatArray(MAX_POINTERS)
+    private val isDown = BooleanArray(MAX_POINTERS)
+    private val startX = FloatArray(MAX_POINTERS)
+    private val startY = FloatArray(MAX_POINTERS)
+    private val nowX = FloatArray(MAX_POINTERS)
+    private val nowY = FloatArray(MAX_POINTERS)
+    private val motion = SwipeClassifier.Motion()
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        val action = ev.actionMasked
+        when (action) {
             MotionEvent.ACTION_DOWN -> {
-                intercepting = false
-                downX.clear()
-                downY.clear()
+                stolen = false
+                isDown.fill(false)
                 rememberDown(ev, 0)
             }
-
             MotionEvent.ACTION_POINTER_DOWN -> rememberDown(ev, ev.actionIndex)
-
-            MotionEvent.ACTION_MOVE -> {
-                if (!intercepting && shouldStealGesture(ev)) {
-                    intercepting = true
-                    cancelTargetTouchStream(ev)
-                }
-            }
         }
 
-        if (!intercepting) swipeHelper?.onTouchEvent(ev)
-        return intercepting
-    }
-
-    override fun onTouchEvent(ev: MotionEvent): Boolean {
         swipeHelper?.onTouchEvent(ev)
-        if (ev.actionMasked == MotionEvent.ACTION_UP || ev.actionMasked == MotionEvent.ACTION_CANCEL) {
-            intercepting = false
+
+        if (stolen) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL) stolen = false
+            return true
         }
+        if (action == MotionEvent.ACTION_MOVE && shouldStealGesture(ev)) {
+            stolen = true
+            cancelChildren(ev)
+            return true
+        }
+        super.dispatchTouchEvent(ev)
+        // claims every gesture so the rest of it keeps coming even when no child wanted the down
         return true
     }
 
+    // the swipe helper is fed in dispatchTouchEvent already
+    override fun onTouchEvent(ev: MotionEvent): Boolean = true
+
     private fun rememberDown(ev: MotionEvent, index: Int) {
         val id = ev.getPointerId(index)
-        downX.put(id, ev.getX(index))
-        downY.put(id, ev.getY(index))
+        // pointer ids are small and reused so the id indexes the arrays directly
+        if (id !in 0 until MAX_POINTERS) return
+        isDown[id] = true
+        downX[id] = ev.getX(index)
+        downY[id] = ev.getY(index)
     }
 
-    // viewgroup would send the cancel on the next event anyway but doing it now
-    // avoids a frame where the module still thinks it owns the touch
-    private fun cancelTargetTouchStream(sourceEvent: MotionEvent) {
-        val target = gestureTarget?.invoke() ?: return
+    // a cancel through the view group sends it to every child holding the touch and clears
+    // its touch targets so the module stops scrolling or zooming right away
+    private fun cancelChildren(sourceEvent: MotionEvent) {
         val cancel = MotionEvent.obtain(sourceEvent)
         cancel.action = MotionEvent.ACTION_CANCEL
-        target.dispatchTouchEvent(cancel)
+        super.dispatchTouchEvent(cancel)
         cancel.recycle()
     }
 
-    // true for a multi finger swipe where every moving finger travels the same axis and direction
+    // true for a multi finger swipe where the moving fingers head the same way and do not pinch
+    // same judgement as the final classification just on the way so far
     private fun shouldStealGesture(ev: MotionEvent): Boolean {
         val pointerCount = ev.pointerCount
         if (pointerCount < 2) return false
-
-        var maxMove = 0f
-        var refSign = 0f
-        var refIsVertical = false
-        var activeCount = 0
-
+        var n = 0
         for (i in 0 until pointerCount) {
             val id = ev.getPointerId(i)
-            val startX = downX.get(id) ?: return false
-            val startY = downY.get(id) ?: return false
-            val dx = ev.getX(i) - startX
-            val dy = ev.getY(i) - startY
-            val move = maxOf(abs(dx), abs(dy))
-            if (move > maxMove) maxMove = move
-
-            if (move < minMovePx) continue
-
-            val isVertical = abs(dy) >= abs(dx)
-            val sign = (if (isVertical) dy else dx).sign
-            activeCount++
-            if (refSign == 0f) {
-                refSign = sign
-                refIsVertical = isVertical
-            } else if (sign != refSign || isVertical != refIsVertical) {
-                return false
-            }
+            if (id !in 0 until MAX_POINTERS || !isDown[id]) return false
+            startX[n] = downX[id]
+            startY[n] = downY[id]
+            nowX[n] = ev.getX(i)
+            nowY[n] = ev.getY(i)
+            n++
         }
-
-        if (maxMove < stealMovePx || activeCount < 2) return false
-        return pointerCount != 2 || !isPinch(ev)
-    }
-
-    // two fingers whose distance changed a lot are zooming and not swiping
-    private fun isPinch(ev: MotionEvent): Boolean {
-        val id0 = ev.getPointerId(0)
-        val id1 = ev.getPointerId(1)
-        val startX0 = downX.get(id0) ?: return false
-        val startY0 = downY.get(id0) ?: return false
-        val startX1 = downX.get(id1) ?: return false
-        val startY1 = downY.get(id1) ?: return false
-
-        val startDist = hypot(startX1 - startX0, startY1 - startY0)
-        if (startDist <= 0f) return false
-        val curDist = hypot(ev.getX(1) - ev.getX(0), ev.getY(1) - ev.getY(0))
-        return abs(curDist - startDist) / startDist > PINCH_DELTA_RATIO
+        if (!SwipeClassifier.analyze(n, startX, startY, nowX, nowY, deadZonePx, motion)) return false
+        return motion.meanTravel >= stealMovePx
     }
 
     private companion object {
-        const val PINCH_DELTA_RATIO = 0.35f
+        const val MAX_POINTERS = 10
     }
 }
