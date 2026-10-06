@@ -189,6 +189,11 @@ class SettingsBinder(private val prefs: SharedPreferences) {
     }
 
     fun saveAll() {
-        prefs.edit { bindings.forEach { it.save(this) } }
+        prefs.edit { saveTo(this) }
+    }
+
+    // lets several binders share one editor and one disk write
+    fun saveTo(editor: SharedPreferences.Editor) {
+        bindings.forEach { it.save(editor) }
     }
 }

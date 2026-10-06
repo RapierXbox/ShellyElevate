@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/mqttEnabled"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="@string/mqtt"
+        android:textSize="18sp"
+        tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+    <LinearLayout
+        android:id="@+id/mqttClientIdLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/client_id"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/mqttClientId"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/mqtt_client_id_hint"
+            android:imeOptions="actionDone"
+            android:inputType="textUri"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/mqttBrokerLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/broker_address"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/mqttBroker"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/mqttbroker_hint"
+            android:imeOptions="actionDone"
+            android:inputType="textUri"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/mqttPortLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/broker_port"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/mqttPort"
+            android:layout_width="60dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/mqtt_port_hint"
+            android:imeOptions="actionDone"
+            android:inputType="number"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/mqttUsernameLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/username"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/mqttUsername"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/mqtt_username_hint"
+            android:imeOptions="actionDone"
+            android:inputType="text"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/mqttPasswordLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/password"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/mqttPassword"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/mqtt_password_hint"
+            android:imeOptions="actionDone"
+            android:inputType="textVisiblePassword"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/mqttHaDiscovery"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/mqtt_ha_discovery"
+        android:textSize="18sp"
+        tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+
+    <com.google.android.material.materialswitch.MaterialSwitch
+        android:id="@+id/mqttRetainState"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="16dp"
+        android:text="@string/mqtt_retain_state"
+        android:textSize="18sp"
+        tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+
+</LinearLayout>
