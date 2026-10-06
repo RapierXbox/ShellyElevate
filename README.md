@@ -17,7 +17,7 @@ https://github.com/user-attachments/assets/adf46edd-9bf1-45da-b553-bf7781d17fbd
 
 - A WebView wrapper that doesn't fall over after a few hours
 - The [Shelly Elevate Home Assistant integration](https://github.com/RapierXbox/shellyelevateintegration): every display is one HA device with its relays, sensors, screen, media player, voice assistant and Bluetooth proxy, paired over an encrypted local API (TLS on port 8443)
-- MQTT with full Home Assistant auto-discovery (temperature, humidity, light, proximity, relays, inputs, buttons, swipe events, screen brightness and night mode control) — and entities now go `unavailable` in HA when the display drops off the network
+- MQTT for systems other than Home Assistant (temperature, humidity, light, proximity, relays, inputs, buttons, swipe events, screen brightness and night mode control), with optional Home Assistant auto-discovery
 - A REST API on port 8080 for everything the device can do
 - A JavaScript bridge so your dashboard can read sensors and flip relays without going through HA
 - External wall switches and push-buttons on the SW terminal work like stock: Button/Switch input modes with local relay control
@@ -27,8 +27,28 @@ https://github.com/user-attachments/assets/adf46edd-9bf1-45da-b553-bf7781d17fbd
 - Optional extras: voice assistant with an on-device wake word, Bluetooth proxy, dimmer support over UART (voice and Bluetooth go through the Home Assistant integration)
 - A "lite" mode if you'd rather use Fully Kiosk or a Companion app but still want the hardware exposed
 
-> [!NOTE]
-> The app's own ESPHome Bluetooth proxy and its own Home Assistant voice satellite (long-lived token) were removed. Voice and the Bluetooth proxy go through the [Shelly Elevate integration](https://github.com/RapierXbox/shellyelevateintegration) now. MQTT and the HTTP API stay.
+> [!IMPORTANT]
+> **Using Home Assistant? Set the display up with the [Shelly Elevate integration](https://github.com/RapierXbox/shellyelevateintegration).**
+> It installs the app over ADB, pairs the display over an encrypted connection and gives you one device with everything on it. MQTT discovery, the ESPHome proxy and long-lived tokens are no longer needed for Home Assistant.
+
+## What changed and what no longer works
+
+These features were removed because the Home Assistant integration replaces them:
+
+| Removed | Use instead |
+|---|---|
+| ESPHome Bluetooth proxy on port 6053 (adding the display in HA's ESPHome integration) | The integration's Bluetooth proxy. Turn on **Settings → Bluetooth → Bluetooth proxy via Home Assistant integration** on the display |
+| The app's own voice assistant with a Home Assistant long-lived token and pipeline id | The integration's Assist satellite. Turn on **Settings → Audio and voice → Voice assistant via Home Assistant integration**. The wake word still runs on the display |
+| `tools/uart-setup.py` | Install over ADB from the integration's **Install** tab (or the [manual ADB install](https://github.com/RapierXbox/ShellyElevate/wiki/Installation)) |
+
+What this means after updating:
+
+- If you used the ESPHome proxy or the token voice assistant, the app switches on their replacements automatically, but they only work once the display is **paired with the integration**. Remove the old ESPHome device from Home Assistant.
+- The long-lived token and pipeline id you entered are deleted from the display. The integration lets you pick the Assist pipeline in Home Assistant.
+- If you also keep MQTT on with Home Assistant discovery, the display shows up twice. Turn off **MQTT Home Assistant discovery** once the integration is set up (the integration offers a repair for this).
+- After pairing, the plain HTTP API on port 8080 no longer shows passwords and refuses changes to the MQTT broker, MQTT login and dashboard URL. Change those on the display or through the integration.
+
+Still working as before: the dashboard and kiosk, relays, inputs and buttons, screensavers, MQTT for non-HA systems, the HTTP API on port 8080, the JavaScript bridge and in-app updates. The display keeps working without Home Assistant.
 
 ## Supported devices
 
@@ -36,12 +56,19 @@ Every Shelly Wall Display model is supported, with the right temperature offsets
 
 ## Get started
 
+**With Home Assistant (recommended):**
+
+1. Install the [Shelly Elevate integration](https://github.com/RapierXbox/shellyelevateintegration) through HACS and restart Home Assistant.
+2. On the display, enable ADB as described in the integration's README (Wi-Fi, newest Shelly firmware, unlock the Android settings, turn on ADB over Wi-Fi).
+3. Open **Shelly Elevate** in the Home Assistant sidebar, go to **Install** and enter the display's IP. Home Assistant installs the app, pairs it and adds the device.
+
+Already running ShellyElevate? Update the app, then add the display under **Settings → Devices & services** in Home Assistant (it is found automatically) and enter the code the display shows.
+
+**Without Home Assistant:**
+
 1. [Install ShellyElevate](https://github.com/RapierXbox/ShellyElevate/wiki/Installation): enable developer mode, sideload the APK over `adb`
-2. [First-time setup](https://github.com/RapierXbox/ShellyElevate/wiki/First-Time-Setup): point it at your Home Assistant URL
-3. Pick what you want to use:
-   - [Shelly Elevate integration](https://github.com/RapierXbox/shellyelevateintegration) for Home Assistant (the common path; it can also install the app over ADB)
-   - [HTTP API](https://github.com/RapierXbox/ShellyElevate/wiki/HTTP-API) or [MQTT](https://github.com/RapierXbox/ShellyElevate/wiki/MQTT) (if you're not using HA, or just want to script things)
-   - [JavaScript bridge](https://github.com/RapierXbox/ShellyElevate/wiki/JavaScript-Interface) (if you're building your own dashboard)
+2. [First-time setup](https://github.com/RapierXbox/ShellyElevate/wiki/First-Time-Setup): point it at your dashboard URL
+3. Use the [HTTP API](https://github.com/RapierXbox/ShellyElevate/wiki/HTTP-API), [MQTT](https://github.com/RapierXbox/ShellyElevate/wiki/MQTT) or the [JavaScript bridge](https://github.com/RapierXbox/ShellyElevate/wiki/JavaScript-Interface)
 
 Prebuilt APKs are on the [Releases page](https://github.com/RapierXbox/ShellyElevate/releases).
 
