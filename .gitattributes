@@ -1,0 +1,17 @@
+# store text as lf and let git pick the checkout line ending
+* text=auto
+
+# shell scripts break with crlf so keep them lf everywhere
+gradlew text eol=lf
+*.sh text eol=lf
+*.py text eol=lf
+
+# windows scripts expect crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+*.jar binary
+*.webp binary
+*.png binary
+*.tflite binary
