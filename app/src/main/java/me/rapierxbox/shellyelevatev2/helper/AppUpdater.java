@@ -111,6 +111,16 @@ public final class AppUpdater {
 
     // callbacks fire on the main thread
     public static void downloadAndInstall(Context ctx, ReleaseInfo info, InstallListener listener) {
+        install(ctx, info.apkUrl, null, listener);
+    }
+
+    // an apk named by a paired controller. the signature check still applies and sha256 is optional
+    public static void installFromUrl(Context ctx, String apkUrl, String version, String sha256, InstallListener listener) {
+        Log.i(TAG, "install of " + version + " requested");
+        install(ctx, apkUrl, sha256, listener);
+    }
+
+    private static void install(Context ctx, String apkUrl, String expectedSha256, InstallListener listener) {
         Handler main = new Handler(Looper.getMainLooper());
         Context app = ctx.getApplicationContext();
         if (!PrivAppInstaller.isPrivApp(app)) {
@@ -130,10 +140,13 @@ public final class AppUpdater {
         POOL.execute(() -> {
             boolean committed = false;
             try {
-                HttpDownloader.download(HttpDownloader.defaultClient(), info.apkUrl, staging,
+                HttpDownloader.download(HttpDownloader.defaultClient(), apkUrl, staging,
                         pct -> main.post(() -> listener.onProgress(pct)), CANCEL);
                 if (CANCEL.get()) throw new java.io.InterruptedIOException("Cancelled");
                 if (staging.length() <= 0) throw new IOException("Downloaded file is empty");
+                if (expectedSha256 != null && !expectedSha256.equalsIgnoreCase(sha256(staging))) {
+                    throw new IOException("APK checksum mismatch");
+                }
                 if (!signaturesMatch(app, staging)) {
                     Log.e(TAG, "apk signature mismatch, refusing to install");
                     throw new IOException("APK signature mismatch");
@@ -159,6 +172,20 @@ public final class AppUpdater {
                 if (!committed) IN_PROGRESS.set(false);
             }
         });
+    }
+
+    private static String sha256(File file) throws IOException {
+        try (InputStream in = new FileInputStream(file)) {
+            java.security.MessageDigest digest = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) digest.update(buf, 0, n);
+            StringBuilder hex = new StringBuilder();
+            for (byte b : digest.digest()) hex.append(String.format(java.util.Locale.ROOT, "%02x", b));
+            return hex.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            throw new IOException(e);
+        }
     }
 
     private static void commitSession(Context ctx, File apk) throws IOException {

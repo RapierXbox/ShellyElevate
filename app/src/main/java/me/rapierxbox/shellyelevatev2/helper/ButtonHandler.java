@@ -19,6 +19,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import me.rapierxbox.shellyelevatev2.api.ApiEvents;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 
 // single owner of the capacitive buttons and the power button
@@ -153,6 +154,7 @@ public class ButtonHandler {
 
         ioExecutor.execute(() -> {
             if (mMQTTServer != null && mMQTTServer.shouldSend()) mMQTTServer.publishButton(buttonId, pressType);
+            ApiEvents.button(buttonId, pressType);
         });
         if (mShellyElevateJavascriptInterface != null) {
             mShellyElevateJavascriptInterface.onButtonPressed(buttonId);

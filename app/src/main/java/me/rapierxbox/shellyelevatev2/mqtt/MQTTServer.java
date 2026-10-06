@@ -31,7 +31,6 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -39,6 +38,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import me.rapierxbox.shellyelevatev2.api.ApiInfo;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
@@ -110,14 +110,9 @@ public class MQTTServer {
         checkCredsAndConnect();
     }
 
+    // shared with the v1 api so both describe the same display
     private void setupClientId() {
-        String id = mSharedPreferences.getString(SP_MQTT_CLIENTID, "shellywalldisplay");
-        // legacy defaults would collide when several displays share one broker
-        if (id.equals("shellyelevate") || id.equals("shellywalldisplay") || id.length() <= 2) {
-            id = "shellyelevate-" + UUID.randomUUID().toString().replace("-", "").substring(2, 6);
-            mSharedPreferences.edit().putString(SP_MQTT_CLIENTID, id).apply();
-        }
-        clientId = id;
+        clientId = ApiInfo.deviceId();
     }
 
     private void registerReceivers() {

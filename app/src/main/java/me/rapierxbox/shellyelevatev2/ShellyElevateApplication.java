@@ -26,6 +26,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import me.rapierxbox.shellyelevatev2.api.ApiManager;
 import me.rapierxbox.shellyelevatev2.bluetooth.BluetoothProxyManager;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
@@ -173,6 +174,9 @@ public class ShellyElevateApplication extends Application {
         mVoiceAssistantManager = new VoiceAssistantManager();
         mBluetoothProxyManager = new BluetoothProxyManager();
         mPowerOptimizer = new PowerOptimizer(this);
+
+        // protocol v1 for the home assistant integration. idle until a controller pairs
+        ApiManager.start(this);
 
         mHttpServer = new HttpServer();
         httpWatchdog = Executors.newSingleThreadScheduledExecutor();
@@ -354,6 +358,7 @@ public class ShellyElevateApplication extends Application {
             }
         }
         if (mHttpServer != null) mHttpServer.onDestroy();
+        ApiManager.stop();
 
         if (mDeviceSensorManager != null) mDeviceSensorManager.onDestroy();
         if (mSwInputHandler != null) mSwInputHandler.onDestroy();

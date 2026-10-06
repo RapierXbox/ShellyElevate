@@ -20,12 +20,18 @@ import android.util.Log;
 
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import me.rapierxbox.shellyelevatev2.api.ApiInfo;
+import me.rapierxbox.shellyelevatev2.api.ClientTokenStore;
+import me.rapierxbox.shellyelevatev2.deprecated.DeprecatedFeatures;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
+import me.rapierxbox.shellyelevatev2.settings.SettingDef;
+import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
 import me.rapierxbox.shellyelevatev2.helper.MediaHelper;
 import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.switcher.AppSwitcher;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -33,6 +39,7 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
@@ -102,18 +109,31 @@ public class HttpServer extends NanoHTTPD {
                 JSONObject schema = DisplayModuleRegistry.schemaJson(mApplicationContext, mSharedPreferences);
                 schema.put("success", true);
                 return newFixedLengthResponse(Response.Status.OK, "application/json", schema.toString());
+            } else if (uri.equals("/api/v1/hello")) {
+                // hint for clients of the old app that the v1 api runs over tls on another port
+                JSONObject hello = new JSONObject();
+                hello.put("id", ApiInfo.deviceId());
+                hello.put("api", ApiInfo.API_VERSION);
+                hello.put("tls_port", ApiInfo.TLS_PORT);
+                return newFixedLengthResponse(Response.Status.OK, "application/json", hello.toString());
             } else if (uri.equals("/settings")) {
+                // once a controller paired secrets only travel over the pinned tls api
+                boolean hideSecrets = ClientTokenStore.get(mApplicationContext).hasClients();
                 if (method.equals(Method.GET)) {
                     jsonResponse.put("success", true);
-                    jsonResponse.put("settings", mSettingsParser.getSettings());
+                    jsonResponse.put("settings", withoutSecrets(mSettingsParser.getSettings(), hideSecrets));
                 } else if (method.equals(Method.POST)) {
                     JSONObject jsonObject = readJsonBody(session);
                     if (jsonObject == null) return badRequest("Missing or invalid JSON body");
+                    if (hideSecrets && containsSecret(jsonObject)) {
+                        return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json",
+                                "{\"success\":false,\"error\":\"secret_over_http\"}");
+                    }
 
                     mSettingsParser.setSettings(jsonObject);
 
                     jsonResponse.put("success", true);
-                    jsonResponse.put("settings", mSettingsParser.getSettings());
+                    jsonResponse.put("settings", withoutSecrets(mSettingsParser.getSettings(), hideSecrets));
                 } else {
                     jsonResponse.put("success", false);
                     jsonResponse.put("error", "Invalid request method");
@@ -140,6 +160,8 @@ public class HttpServer extends NanoHTTPD {
                     json.put("numOfInputs", device.inputs);
                     // which touchscreen reader drives swipes over other apps
                     json.put("touchReader", TouchGestureMonitor.getStatus());
+                    json.put("apiTlsPort", ApiInfo.TLS_PORT);
+                    json.put("deprecatedFeaturesActive", new JSONArray(DeprecatedFeatures.activeIds()));
                 } catch (JSONException e) {
                     Log.e(TAG, "Error responding with device details!", e);
                 }
@@ -561,6 +583,30 @@ public class HttpServer extends NanoHTTPD {
         }
 
         return newFixedLengthResponse(jsonResponse.optBoolean("success") ? Response.Status.OK : Response.Status.INTERNAL_ERROR, "application/json", jsonResponse.toString());
+    }
+
+    private static JSONObject withoutSecrets(JSONObject settings, boolean hide) {
+        if (!hide) return settings;
+        JSONObject filtered = new JSONObject();
+        for (Iterator<String> it = settings.keys(); it.hasNext(); ) {
+            String key = it.next();
+            SettingDef def = SettingsRegistry.get(key);
+            if (def != null && def.secret) continue;
+            try {
+                filtered.put(key, settings.get(key));
+            } catch (JSONException ignored) {
+                // key came from the same object
+            }
+        }
+        return filtered;
+    }
+
+    private static boolean containsSecret(JSONObject settings) {
+        for (Iterator<String> it = settings.keys(); it.hasNext(); ) {
+            SettingDef def = SettingsRegistry.get(it.next());
+            if (def != null && def.secret) return true;
+        }
+        return false;
     }
 
     private static int getNumParameter(Map<String, List<String>> params, int defaultValue) {

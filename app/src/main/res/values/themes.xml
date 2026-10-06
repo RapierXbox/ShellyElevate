@@ -62,4 +62,13 @@
         <item name="android:windowAnimationStyle">@null</item>
         <item name="colorPrimary">@color/md_theme_inversePrimary</item>
     </style>
+
+    <!-- see through window with a scrim for the pairing code so it shows over any screen -->
+    <style name="Theme.ShellyElevateV2.Pairing" parent="Theme.ShellyElevateV2">
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowContentOverlay">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
+    </style>
 </resources>

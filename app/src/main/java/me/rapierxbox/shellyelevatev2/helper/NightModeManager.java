@@ -30,6 +30,8 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.WeakHashMap;
 
+import me.rapierxbox.shellyelevatev2.api.ApiHub;
+
 // draws a translucent red overlay on top of every activity while night mode is on
 public class NightModeManager implements Application.ActivityLifecycleCallbacks {
 
@@ -76,6 +78,7 @@ public class NightModeManager implements Application.ActivityLifecycleCallbacks 
         if (mMQTTServer != null) {
             mMQTTServer.publishNightModeState();
         }
+        ApiHub.stateChanged();
     }
 
     public void onDestroy() {

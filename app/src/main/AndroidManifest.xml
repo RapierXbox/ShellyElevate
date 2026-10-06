@@ -120,6 +120,25 @@
             android:taskAffinity="me.rapierxbox.shellyelevatev2.switcher"
             android:theme="@style/Theme.ShellyElevateV2.Switcher" />
 
+        <!-- the integration hands over its token over adb. only the shell user and root hold this
+             permission so no app on the display can provision itself a token -->
+        <receiver
+            android:name=".ProvisionReceiver"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL">
+            <intent-filter>
+                <action android:name="me.rapierxbox.shellyelevatev2.PROVISION" />
+            </intent-filter>
+        </receiver>
+
+        <!-- pairing code over whatever is on screen -->
+        <activity
+            android:name=".api.PairingActivity"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.ShellyElevateV2.Pairing" />
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

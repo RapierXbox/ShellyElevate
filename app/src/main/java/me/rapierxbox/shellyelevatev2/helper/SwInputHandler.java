@@ -30,6 +30,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 
 // single owner of the sw terminal input
@@ -252,6 +253,7 @@ public class SwInputHandler {
                 if (mMQTTServer != null && mMQTTServer.shouldSend()) {
                     mMQTTServer.publishSwitch(input, pressed);
                 }
+                ApiHub.stateChanged();
             });
         }
 

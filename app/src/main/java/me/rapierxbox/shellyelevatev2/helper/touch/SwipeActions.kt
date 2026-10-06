@@ -26,6 +26,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_LEFT
 import me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_RIGHT
 import me.rapierxbox.shellyelevatev2.Constants.SWIPE_EVENT_TYPE_TWO_FINGER_UP
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext
+import me.rapierxbox.shellyelevatev2.api.ApiEvents
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
@@ -60,6 +61,10 @@ object SwipeActions {
             mScreenSaverManager?.onSwipeFired()
             openSwitcher()
             return
+        }
+
+        if (mSharedPreferences.getBoolean(SP_PUBLISH_SWIPE_EVENTS, true)) {
+            ApiEvents.swipe(swipe.direction.name, swipe.fingers)
         }
 
         if (swipe.fingers == 1) {

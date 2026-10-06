@@ -3,6 +3,7 @@ package me.rapierxbox.shellyelevatev2.helper
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
+import java.lang.ref.WeakReference
 import java.util.concurrent.CopyOnWriteArraySet
 
 // counts our resumed activities so the global touch reader knows when our own views
@@ -31,8 +32,15 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
     var resumedClass: String? = null
         private set
 
+    // our activity in front for the v1 screenshot. weak so a destroyed activity is never kept
+    @Volatile
+    private var resumedActivity: WeakReference<Activity>? = null
+
     @JvmStatic
     fun anyResumed(): Boolean = resumed > 0
+
+    @JvmStatic
+    fun resumedActivity(): Activity? = resumedActivity?.get()
 
     fun addListener(listener: (Boolean) -> Unit) {
         listeners += listener
@@ -45,6 +53,7 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
     override fun onActivityResumed(activity: Activity) {
         resumed++
         resumedClass = activity.javaClass.name
+        resumedActivity = WeakReference(activity)
         if (resumed == 1) listeners.forEach { it(true) }
         resumeListeners.forEach { it(activity.javaClass.name) }
     }
@@ -54,6 +63,7 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
         resumed = (resumed - 1).coerceAtLeast(0)
         lastPausedClass = activity.javaClass.name
         if (resumedClass == activity.javaClass.name) resumedClass = null
+        if (resumedActivity?.get() === activity) resumedActivity = null
         if (wasResumed && resumed == 0) listeners.forEach { it(false) }
     }
 

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- pairing dialog -->
+    <string name="pairing_title">Pair with %1$s</string>
+    <string name="pairing_hint">Enter this code in Home Assistant</string>
+    <string name="pairing_expires">Expires in %1$d s</string>
+    <string name="pairing_cancel">Cancel</string>
+    <string name="pairing_done">Paired with Home Assistant</string>
+</resources>

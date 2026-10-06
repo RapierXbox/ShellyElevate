@@ -24,6 +24,7 @@ import java.lang.reflect.Method;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
@@ -107,6 +108,7 @@ public class DeviceHelper {
 
         lastScreenBrightness = brightness;
         if (mMQTTServer != null) mMQTTServer.publishScreenBrightness(brightness);
+        ApiHub.stateChanged();
         writeScreenBrightness(brightness);
     }
 
@@ -331,6 +333,7 @@ public class DeviceHelper {
         if (mMQTTServer != null && mMQTTServer.shouldSend()) {
             mMQTTServer.publishRelay(num, state);
         }
+        ApiHub.stateChanged();
     }
 
     // newer models drive relays through init.rc scripts
