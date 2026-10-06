@@ -17,7 +17,7 @@ import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-// horizontal pages that follow the finger and settle on springs. the middle page can be flung up to dismiss it
+// horizontal pages that follow the finger and settle on springs. any closable page can be flung up to dismiss it
 // pages are plain children of the same size moved only through translation and scale so nothing is
 // laid out again while they move
 class SpringPager @JvmOverloads constructor(
@@ -27,7 +27,7 @@ class SpringPager @JvmOverloads constructor(
 
     interface Listener {
         fun onPageTap(index: Int)
-        fun onPageDismissed(index: Int)
+        fun onPageDismissed(page: View)
         fun canDismiss(index: Int): Boolean
         fun onOutsideTap()
         fun onPageSettled(index: Int)
@@ -40,10 +40,16 @@ class SpringPager @JvmOverloads constructor(
     private val gap = 20f * resources.displayMetrics.density
     private val stride get() = pageWidth + gap
     private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
-    private val flingVelocity = 1100f * resources.displayMetrics.density
+    // an upward flick this fast dismisses from anywhere
+    private val dismissVelocity = 400f * resources.displayMetrics.density
+    // pulling back down this fast keeps a card even past the dismiss line
+    private val keepVelocity = 300f * resources.displayMetrics.density
+    // a dismissed card never leaves slower than this
+    private val flyVelocity = 1400f * resources.displayMetrics.density
 
     // fractional index of the page in the middle
     private var position = 0f
+    private var target = 0
     private val positionHolder = FloatValueHolder()
     private val positionSpring = SpringAnimation(positionHolder).apply {
         spring = SpringForce().setStiffness(STIFFNESS_PAGE).setDampingRatio(DAMPING_PAGE)
@@ -54,8 +60,9 @@ class SpringPager @JvmOverloads constructor(
         addEndListener { _, canceled, _, _ -> if (!canceled) listener?.onPageSettled(currentPage) }
     }
 
-    // pages after a dismissed one start a page to the right and spring into the gap
-    private var shiftFrom = Int.MAX_VALUE
+    // pages next to a dismissed one start where they were and spring into the gap
+    private var shiftStart = 0
+    private var shiftEnd = -1
     private var shift = 0f
     private val shiftSpring = SpringAnimation(FloatValueHolder()).apply {
         spring = SpringForce(0f).setStiffness(STIFFNESS_PAGE).setDampingRatio(DAMPING_PAGE)
@@ -64,19 +71,40 @@ class SpringPager @JvmOverloads constructor(
             layoutPages()
         }
         addEndListener { _, _, _, _ ->
-            shiftFrom = Int.MAX_VALUE
+            shiftStart = 0
+            shiftEnd = -1
             shift = 0f
         }
     }
 
+    // vertical motion of one page. its scale and fade follow from its height so a single spring drives it
+    private inner class Lift(val view: View) : Runnable {
+        var leaving = false
+        var posted = false
+        var done = false
+        val anim = SpringAnimation(view, DynamicAnimation.TRANSLATION_Y).apply {
+            spring = SpringForce()
+            addUpdateListener { _, value, _ -> onLiftUpdate(this@Lift, value) }
+            addEndListener { _, canceled, _, _ -> onLiftEnd(this@Lift, canceled) }
+        }
+
+        override fun run() = finishLeaving(this)
+    }
+
+    private val lifts = ArrayList<Lift>()
+
     private enum class Drag { NONE, PAGES, DISMISS }
 
     private var drag = Drag.NONE
+    private var downTime = -1L
     private var downX = 0f
     private var downY = 0f
     private var startPosition = 0f
+    private var liftStart = 0f
     private var touchedIndex = -1
-    private var dismissing: View? = null
+    // the touch stopped pages that were still moving
+    private var caught = false
+    private var dismissing: Lift? = null
     private var velocityTracker: VelocityTracker? = null
 
     val currentPage: Int get() = position.roundToInt().coerceIn(0, (childCount - 1).coerceAtLeast(0))
@@ -101,32 +129,75 @@ class SpringPager @JvmOverloads constructor(
         shiftSpring.cancel()
         position = index.toFloat()
         positionHolder.value = position
+        target = index
         layoutPages()
     }
 
     fun animateTo(index: Int, velocity: Float = 0f) {
+        target = index.coerceIn(0, (childCount - 1).coerceAtLeast(0))
         positionHolder.value = position
         positionSpring.setStartVelocity(velocity)
-        positionSpring.animateToFinalPosition(index.coerceIn(0, (childCount - 1).coerceAtLeast(0)).toFloat())
+        positionSpring.animateToFinalPosition(target.toFloat())
+    }
+
+    // flies a page up and away like a swipe up would. false when the page cannot go
+    fun dismissPage(index: Int): Boolean {
+        if (index !in 0 until childCount || listener?.canDismiss(index) != true) return false
+        val child = getChildAt(index)
+        val lift = liftOf(child) ?: Lift(child).also { lifts += it }
+        if (lift.leaving) return false
+        if (dismissing === lift) dismissing = null
+        flingAway(lift, 0f)
+        settle()
+        return true
+    }
+
+    // removes every page still flying away right now so the owner sees a final list
+    fun finishDismissals() {
+        while (true) {
+            val lift = lifts.firstOrNull { it.leaving } ?: return
+            finishLeaving(lift)
+        }
     }
 
     private fun pageParams() = LayoutParams(pageWidth, pageHeight, Gravity.CENTER)
 
-    // translation scale and fade from the distance to the middle
     private fun layoutPages() {
         if (pageWidth == 0) return
+        for (i in 0 until childCount) layoutPage(getChildAt(i), i)
+    }
+
+    // translation scale and fade from the distance to the middle and the height of a lifted page
+    private fun layoutPage(child: View, i: Int) {
+        if (pageWidth == 0) return
         val step = stride
-        for (i in 0 until childCount) {
-            val child = getChildAt(i)
-            var distance = i - position
-            if (i >= shiftFrom) distance += shift / step
-            child.translationX = distance * step
-            val falloff = min(abs(distance), 1f)
-            val scale = 1f - 0.08f * falloff
-            child.scaleX = scale
-            child.scaleY = scale
-            if (child !== dismissing) child.alpha = 1f - 0.3f * falloff
+        var distance = i - position
+        if (i in shiftStart..shiftEnd) distance += shift / step
+        child.translationX = distance * step
+        val falloff = min(abs(distance), 1f)
+        val lift = if (child.translationY < 0f) min(-child.translationY / pageHeight, 1f) else 0f
+        val scale = (1f - 0.08f * falloff) * (1f - LIFT_SCALE * lift)
+        child.scaleX = scale
+        child.scaleY = scale
+        child.alpha = (1f - 0.3f * falloff) * (1f - LIFT_FADE * lift)
+    }
+
+    // a page leaving for any reason never takes its lift or transforms into the pool
+    override fun onViewRemoved(child: View) {
+        super.onViewRemoved(child)
+        val lift = liftOf(child)
+        if (lift != null) {
+            lift.done = true
+            lifts.remove(lift)
+            removeCallbacks(lift)
+            lift.anim.cancel()
+            if (dismissing === lift) dismissing = null
         }
+        child.translationX = 0f
+        child.translationY = 0f
+        child.scaleX = 1f
+        child.scaleY = 1f
+        child.alpha = 1f
     }
 
     // touch
@@ -142,16 +213,19 @@ class SpringPager @JvmOverloads constructor(
                 if (drag == Drag.NONE) decide(ev)
                 return drag != Drag.NONE
             }
-            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> drag = Drag.NONE
+            // a child took the tap. pages it stopped mid move still need to land
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                drag = Drag.NONE
+                settle()
+            }
         }
         return false
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(ev: MotionEvent): Boolean {
-        track(ev)
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN) begin(ev) else track(ev)
         when (ev.actionMasked) {
-            MotionEvent.ACTION_DOWN -> begin(ev)
             MotionEvent.ACTION_MOVE -> {
                 if (drag == Drag.NONE) decide(ev)
                 dragTo(ev)
@@ -167,13 +241,18 @@ class SpringPager @JvmOverloads constructor(
         tracker.addMovement(ev)
     }
 
+    // runs once per gesture even though the down passes both intercept and touch
     private fun begin(ev: MotionEvent) {
+        if (ev.downTime == downTime) return
+        downTime = ev.downTime
         velocityTracker?.clear()
         track(ev)
         downX = ev.x
         downY = ev.y
         drag = Drag.NONE
+        dismissing = null
         // catching a moving page stops it under the finger
+        caught = positionSpring.isRunning && abs(position - position.roundToInt()) > CATCH_OFFSET
         if (positionSpring.isRunning) positionSpring.cancel()
         startPosition = position
         touchedIndex = pageAt(ev.x, ev.y)
@@ -182,19 +261,38 @@ class SpringPager @JvmOverloads constructor(
     private fun decide(ev: MotionEvent) {
         val dx = ev.x - downX
         val dy = ev.y - downY
-        if (abs(dx) > touchSlop && abs(dx) > abs(dy)) {
+        val adx = abs(dx)
+        val ady = abs(dy)
+        // a swipe up still counts when it leans sideways. pulling down only rubber bands so it must be straight
+        if (ady > touchSlop && ((dy < 0f && ady * DISMISS_LEAN >= adx) || ady > adx) && startDismiss(ev)) return
+        if (adx > touchSlop && adx > ady) {
             drag = Drag.PAGES
             startPosition = position
             downX = ev.x
             parent?.requestDisallowInterceptTouchEvent(true)
-        } else if (dy < -touchSlop && abs(dy) > abs(dx) && touchedIndex == currentPage &&
-            listener?.canDismiss(touchedIndex) == true
-        ) {
-            drag = Drag.DISMISS
-            downY = ev.y
-            dismissing = getChildAt(touchedIndex)
-            parent?.requestDisallowInterceptTouchEvent(true)
         }
+    }
+
+    private fun startDismiss(ev: MotionEvent): Boolean {
+        val index = touchedIndex
+        if (index !in 0 until childCount || listener?.canDismiss(index) != true) return false
+        val child = getChildAt(index)
+        var lift = liftOf(child)
+        if (lift == null) {
+            lift = Lift(child)
+            lifts += lift
+        } else if (lift.leaving) {
+            return false
+        } else {
+            // a card still springing home is caught where it is
+            lift.anim.cancel()
+        }
+        dismissing = lift
+        liftStart = child.translationY
+        downY = ev.y
+        drag = Drag.DISMISS
+        parent?.requestDisallowInterceptTouchEvent(true)
+        return true
     }
 
     private fun dragTo(ev: MotionEvent) {
@@ -211,10 +309,12 @@ class SpringPager @JvmOverloads constructor(
                 layoutPages()
             }
             Drag.DISMISS -> {
-                val child = dismissing ?: return
-                val dy = ev.y - downY
-                child.translationY = if (dy < 0) dy else FluidMotion.rubberBand(dy, pageHeight.toFloat())
-                child.alpha = 1f - min(abs(child.translationY) / pageHeight, 1f) * 0.5f
+                val lift = dismissing ?: return
+                val raw = liftStart + ev.y - downY
+                // up follows the finger one to one and down resists
+                lift.view.translationY = if (raw < 0f) raw else FluidMotion.rubberBand(raw, pageHeight.toFloat())
+                val index = indexOfChild(lift.view)
+                if (index >= 0) layoutPage(lift.view, index)
             }
             Drag.NONE -> {}
         }
@@ -235,20 +335,23 @@ class SpringPager @JvmOverloads constructor(
                 animateTo(target, -vx / stride)
             }
             Drag.DISMISS -> {
-                val child = dismissing
-                if (child != null) {
-                    val projected = child.translationY + FluidMotion.project(vy)
-                    if (!canceled && (vy < -flingVelocity || projected < -pageHeight * 0.5f)) {
-                        flingAway(child, vy)
+                val lift = dismissing
+                dismissing = null
+                if (lift != null) {
+                    val past = lift.view.translationY < -pageHeight * DISMISS_FRACTION
+                    // an upward flick or a card let go above the line unless it is being pulled back down
+                    if (!canceled && (vy < -dismissVelocity || (past && vy < keepVelocity))) {
+                        flingAway(lift, vy)
                     } else {
-                        springBack(child, vy)
+                        springBack(lift, vy)
                     }
                 }
+                settle()
             }
             Drag.NONE -> if (!canceled && abs(ev.x - downX) < touchSlop && abs(ev.y - downY) < touchSlop) {
                 tap()
-            } else if (!positionSpring.isRunning) {
-                animateTo(currentPage)
+            } else {
+                settle()
             }
         }
         drag = Drag.NONE
@@ -259,55 +362,113 @@ class SpringPager @JvmOverloads constructor(
     private fun tap() {
         val index = touchedIndex
         when {
+            index == NO_PAGE -> settle()
+            // a page tapped next to the middle comes to the middle first
+            index >= 0 && index != currentPage -> animateTo(index)
+            // a tap that only stopped moving pages just lets them land
+            caught -> animateTo(currentPage)
             index < 0 -> listener?.onOutsideTap()
-            index == currentPage -> listener?.onPageTap(index)
-            // a peeking page comes to the middle first
-            else -> animateTo(index)
+            else -> listener?.onPageTap(index)
         }
     }
 
-    private fun springBack(child: View, velocity: Float) {
-        dismissing = null
-        SpringAnimation(child, DynamicAnimation.TRANSLATION_Y, 0f).apply {
-            spring.setStiffness(STIFFNESS_RETURN).dampingRatio = DAMPING_RETURN
-            setStartVelocity(velocity)
-            start()
-        }
-        SpringAnimation(child, DynamicAnimation.ALPHA, 1f).apply {
-            spring.setStiffness(STIFFNESS_RETURN).dampingRatio = SpringForce.DAMPING_RATIO_NO_BOUNCY
-            start()
+    // pages stopped between two positions spring to the nearest one
+    private fun settle() {
+        if (!positionSpring.isRunning && position != currentPage.toFloat()) animateTo(currentPage)
+    }
+
+    private fun springBack(lift: Lift, velocity: Float) {
+        lift.leaving = false
+        val anim = lift.anim
+        anim.cancel()
+        anim.spring.setStiffness(STIFFNESS_RETURN).setDampingRatio(DAMPING_RETURN).finalPosition = 0f
+        anim.setStartVelocity(velocity)
+        anim.start()
+    }
+
+    private fun flingAway(lift: Lift, velocity: Float) {
+        lift.leaving = true
+        val anim = lift.anim
+        anim.cancel()
+        // aims a bit past the top edge and the page is removed as soon as it is out of sight
+        anim.spring.setStiffness(STIFFNESS_FLY).setDampingRatio(SpringForce.DAMPING_RATIO_NO_BOUNCY)
+            .finalPosition = goneY() - pageHeight * 0.25f
+        // the card keeps the speed of the finger and is never slower than a decent flick
+        anim.setStartVelocity(min(velocity, -flyVelocity))
+        anim.start()
+    }
+
+    // translation at which a lifted page is fully above the pager
+    private fun goneY() = -(height + pageHeight) / 2f
+
+    private fun onLiftUpdate(lift: Lift, value: Float) {
+        val index = indexOfChild(lift.view)
+        if (index >= 0) layoutPage(lift.view, index)
+        // removal happens outside the animation frame so the spring is never torn down from within itself
+        if (lift.leaving && !lift.posted && value <= goneY()) {
+            lift.posted = true
+            post(lift)
         }
     }
 
-    private fun flingAway(child: View, velocity: Float) {
-        SpringAnimation(child, DynamicAnimation.TRANSLATION_Y, -height.toFloat()).apply {
-            spring.setStiffness(STIFFNESS_FLING).dampingRatio = SpringForce.DAMPING_RATIO_NO_BOUNCY
-            // the card keeps the speed of the finger and is never slower than a decent flick
-            setStartVelocity(min(velocity, -flingVelocity))
-            addEndListener { _, _, _, _ -> removeDismissed(child) }
-            start()
-        }
+    private fun onLiftEnd(lift: Lift, canceled: Boolean) {
+        if (canceled) return
+        if (lift.leaving) finishLeaving(lift) else lifts.remove(lift)
+    }
+
+    private fun finishLeaving(lift: Lift) {
+        if (lift.done) return
+        lift.done = true
+        lifts.remove(lift)
+        removeCallbacks(lift)
+        lift.anim.cancel()
+        removeDismissed(lift.view)
     }
 
     private fun removeDismissed(child: View) {
         val index = indexOfChild(child)
-        dismissing = null
         if (index < 0) return
+        val current = currentPage
         removeViewAt(index)
-        child.translationY = 0f
-        child.alpha = 1f
-        // the page that took its place slides in from where it was
-        shiftFrom = index
-        shift = stride
+        // cancel first since its end listener clears the shifted range
         shiftSpring.cancel()
-        shiftSpring.setStartValue(stride)
+        if (index < current) {
+            // pages before it slide right into the gap and the page in the middle stays put
+            val running = positionSpring.isRunning
+            positionSpring.cancel()
+            position -= 1f
+            startPosition -= 1f
+            positionHolder.value = position
+            if (running) animateTo(target - 1)
+            shiftStart = 0
+            shiftEnd = index - 1
+            shift = -stride
+        } else {
+            // pages after it slide left into the gap
+            shiftStart = index
+            shiftEnd = Int.MAX_VALUE
+            shift = stride
+        }
+        shiftSpring.setStartValue(shift)
+        shiftSpring.setStartVelocity(0f)
         shiftSpring.animateToFinalPosition(0f)
-        if (position > childCount - 1) jumpTo(childCount - 1)
+        if (touchedIndex == index) touchedIndex = NO_PAGE else if (touchedIndex > index) touchedIndex--
+        val last = (childCount - 1).coerceAtLeast(0).toFloat()
+        if (position > last) {
+            position = last
+            positionHolder.value = position
+        }
         layoutPages()
-        listener?.onPageDismissed(index)
+        listener?.onPageDismissed(child)
     }
 
-    // page under a point using the current transforms
+    private fun liftOf(view: View): Lift? {
+        for (i in lifts.indices) if (lifts[i].view === view) return lifts[i]
+        return null
+    }
+
+    // page under a point using the current transforms. a page flying away can not be grabbed again
+    // and its empty slot is no outside tap either
     private fun pageAt(x: Float, y: Float): Int {
         val centerX = width / 2f
         val top = (height - pageHeight) / 2f
@@ -316,7 +477,9 @@ class SpringPager @JvmOverloads constructor(
             val child = getChildAt(i)
             val half = pageWidth * child.scaleX / 2f
             val center = centerX + child.translationX
-            if (x >= center - half && x <= center + half) return i
+            if (x >= center - half && x <= center + half) {
+                return if (liftOf(child)?.leaving == true) NO_PAGE else i
+            }
         }
         return -1
     }
@@ -328,9 +491,20 @@ class SpringPager @JvmOverloads constructor(
         const val DAMPING_PAGE = 0.86f
         // a card let go before the dismiss point snaps home with a small bounce
         val STIFFNESS_RETURN = FluidMotion.stiffness(0.32f)
-        const val DAMPING_RETURN = 0.72f
-        // a dismissed card leaves fast without bouncing
-        val STIFFNESS_FLING = FluidMotion.stiffness(0.28f)
+        const val DAMPING_RETURN = 0.75f
+        // a dismissed card leaves in about a fifth of a second without bouncing
+        val STIFFNESS_FLY = FluidMotion.stiffness(0.4f)
         const val MAX_PAGES_PER_FLING = 4
+        // share of the page height a card must be lifted to go when let go slowly
+        const val DISMISS_FRACTION = 0.35f
+        // how far sideways a swipe up may lean and still lift the card
+        const val DISMISS_LEAN = 1.1f
+        // a fully lifted card shrinks and fades this much
+        const val LIFT_SCALE = 0.12f
+        const val LIFT_FADE = 0.4f
+        // pages further than this from resting count as moving when touched
+        const val CATCH_OFFSET = 0.04f
+        // the touched page is leaving or went away during the gesture
+        const val NO_PAGE = -2
     }
 }

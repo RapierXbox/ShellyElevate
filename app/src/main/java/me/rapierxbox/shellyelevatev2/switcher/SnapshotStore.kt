@@ -1,6 +1,7 @@
 package me.rapierxbox.shellyelevatev2.switcher
 
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
@@ -29,6 +30,9 @@ object SnapshotStore {
     private const val DOWNSCALE = 2
     // the screen the user swiped on counts as current for this long
     private const val CURRENT_VALID_MS = 15_000L
+    // a capture this recent belongs to the gesture that is opening the switcher
+    private const val GESTURE_FRESH_MS = 3_000L
+    private const val READ_FRAME_BUFFER = "android.permission.READ_FRAME_BUFFER"
 
     // raw screencap pixel formats with four bytes per pixel
     private const val FORMAT_RGBA_8888 = 1
@@ -54,6 +58,22 @@ object SnapshotStore {
     // the app that was in front when the last snapshot was taken
     fun currentPackage(): String? =
         currentPackage?.takeIf { SystemClock.elapsedRealtime() - currentAtMs < CURRENT_VALID_MS }
+
+    // called right before the switcher opens. gestures that skip capture such as an in app swipe or an
+    // http open would otherwise center whatever an older capture saw. safe from any thread
+    fun noteSwitcherOpen(context: Context) {
+        val own = ForegroundActivities.resumedClass
+        when {
+            own == MainActivity::class.java.name -> {
+                currentPackage = context.packageName
+                currentAtMs = SystemClock.elapsedRealtime()
+            }
+            // settings and other own screens never count as an app
+            own != null -> currentPackage = null
+            // another app is in front. only a capture from this very gesture knows which
+            !capturing && SystemClock.elapsedRealtime() - currentAtMs > GESTURE_FRESH_MS -> currentPackage = null
+        }
+    }
 
     // safe from any thread and ignored while a capture is still running
     // also records which app was in front so the switcher can center it even with previews off
@@ -100,6 +120,12 @@ object SnapshotStore {
         currentAtMs = SystemClock.elapsedRealtime()
         mainHandler.post { listeners.forEach { it(pkg) } }
         if (!enabled(context)) return
+        // screencap only gets a picture with the frame buffer grant so it is not even started without it
+        if (context.checkSelfPermission(READ_FRAME_BUFFER) != PackageManager.PERMISSION_GRANTED) {
+            if (!warnedNoPicture) Log.w(TAG, "no frame buffer grant, previews need install-privapp")
+            warnedNoPicture = true
+            return
+        }
 
         // without a file argument screencap streams raw pixels to stdout
         val process = Runtime.getRuntime().exec(arrayOf("screencap"))

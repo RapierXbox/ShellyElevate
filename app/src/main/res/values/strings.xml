@@ -96,6 +96,7 @@
     <string name="app_switcher_fingers">Fingers</string>
     <string name="app_switcher_direction">Direction</string>
     <string name="app_switcher_apps">Apps</string>
+    <string name="app_switcher_close_app">Close app</string>
     <string name="settings_cat_display">Display</string>
     <string name="settings_cat_display_summary">Brightness and night mode</string>
     <string name="settings_cat_screensaver">Screensaver and sleep</string>

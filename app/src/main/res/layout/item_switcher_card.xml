@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- one recent app page. not clickable so the pager sees every touch -->
+<!-- one recent app page. not clickable so the pager sees every touch except the close button -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -28,6 +28,19 @@
             android:maxLines="1"
             android:textColor="#FFFFFFFF"
             android:textSize="17sp" />
+
+        <!-- clickable on its own so a tap closes the app while drags still reach the pager -->
+        <ImageButton
+            android:id="@+id/cardClose"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginStart="8dp"
+            android:layout_marginEnd="2dp"
+            android:background="@drawable/switcher_close_bg"
+            android:contentDescription="@string/app_switcher_close_app"
+            android:padding="8dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/ic_switcher_close" />
     </LinearLayout>
 
     <FrameLayout
