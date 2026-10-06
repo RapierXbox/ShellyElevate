@@ -73,12 +73,18 @@ jobs:
       # resolve the version once so the apk and the release tag can never drift apart
       - name: Resolve version
         id: version
+        env:
+          # through env so the input is never parsed as shell code
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
-          elif [ -n "${{ inputs.version }}" ]; then
-            VERSION="${{ inputs.version }}"
-            VERSION="${VERSION#v}"
+          elif [ -n "$INPUT_VERSION" ]; then
+            VERSION="${INPUT_VERSION#v}"
+            if ! echo "$VERSION" | grep -Eq '^3\.[0-9]{5}\.[0-9]{4}$'; then
+              echo "::error::version must look like 3.26279.2140"
+              exit 1
+            fi
           else
             # manual runs use the gradle date scheme
             VERSION="3.$(date +%y%j).$(date +%H%M)"
