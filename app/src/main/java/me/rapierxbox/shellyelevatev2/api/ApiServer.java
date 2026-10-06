@@ -38,6 +38,9 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
     private final CopyOnWriteArrayList<ControllerSocket> sockets = new CopyOnWriteArrayList<>();
     // ws commands run here so a slow one never stops the socket from reading
     private final ExecutorService commandExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "ApiCommands"));
+    // every outgoing frame goes through this one thread. callers may be on the main thread
+    // and a new socket joins in queue order so it never gets a delta older than its snapshot
+    private final ExecutorService sendExecutor = Executors.newSingleThreadExecutor(r -> new Thread(r, "ApiSend"));
 
     ApiServer(Context context, ClientTokenStore tokens, Pairing pairing, StateHub stateHub) {
         super(ApiInfo.TLS_PORT);
@@ -255,12 +258,24 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
 
     @Override
     public void sendText(String json) {
-        for (ControllerSocket socket : sockets) socket.sendSafely(json);
+        enqueue(() -> {
+            for (ControllerSocket socket : sockets) socket.sendSafely(json);
+        });
     }
 
     @Override
     public void sendBinary(byte[] frame) {
-        for (ControllerSocket socket : sockets) socket.sendSafely(frame);
+        enqueue(() -> {
+            for (ControllerSocket socket : sockets) socket.sendSafely(frame);
+        });
+    }
+
+    private void enqueue(Runnable task) {
+        try {
+            sendExecutor.execute(task);
+        } catch (RejectedExecutionException ignored) {
+            // shutting down
+        }
     }
 
     // closes the sockets of clients whose token was revoked or rotated
@@ -278,6 +293,7 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
     void closeAllSockets() {
         for (ControllerSocket socket : sockets) socket.closeQuietly(WebSocketFrame.CloseCode.GoingAway, "shutting down");
         commandExecutor.shutdownNow();
+        sendExecutor.shutdownNow();
     }
 
     private void onSocketOpen(ControllerSocket socket) {
@@ -287,25 +303,31 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
                 other.closeQuietly(WebSocketFrame.CloseCode.GoingAway, "replaced");
             }
         }
-        boolean first;
-        synchronized (sockets) {
-            stateHub.attach(state -> {
-                try {
-                    socket.sendSafely(new JSONObject()
-                            .put("type", "hello")
-                            .put("api", ApiInfo.API_VERSION)
-                            .put("info", ApiInfo.info(context)).toString());
-                    socket.sendSafely(new JSONObject().put("type", "state").put("state", state).toString());
-                } catch (JSONException e) {
-                    Log.e(TAG, "Could not build hello", e);
-                }
-                sockets.add(socket);
-            });
-            first = sockets.size() == 1;
+        String hello;
+        try {
+            hello = new JSONObject()
+                    .put("type", "hello")
+                    .put("api", ApiInfo.API_VERSION)
+                    .put("info", ApiInfo.info(context)).toString();
+        } catch (JSONException e) {
+            Log.e(TAG, "Could not build hello", e);
+            socket.closeQuietly(WebSocketFrame.CloseCode.InternalServerError, "no hello");
+            return;
         }
-        Log.i(TAG, "Controller " + socket.client.name + " connected");
-        if (first) controllerChanged(true);
-        else ApiHub.notifyControllerChanged(true);
+        // queued under the state lock so the snapshot and later deltas keep their order
+        stateHub.attach(state -> enqueue(() -> {
+            socket.sendSafely(hello);
+            socket.sendSafely(wrap("state", "state", state));
+            boolean first;
+            synchronized (sockets) {
+                if (!socket.isOpen()) return;
+                sockets.add(socket);
+                first = sockets.size() == 1;
+            }
+            Log.i(TAG, "Controller " + socket.client.name + " connected");
+            if (first) controllerChanged(true);
+            else ApiHub.notifyControllerChanged(true);
+        }));
     }
 
     private void onSocketClosed(ControllerSocket socket) {
@@ -369,10 +391,11 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
                     }
                     break;
                 case "get_state":
-                    sendSafely(wrap("state", "state", stateHub.snapshot()));
+                    JSONObject snapshot = stateHub.snapshot();
+                    enqueue(() -> sendSafely(wrap("state", "state", snapshot)));
                     break;
                 case "ping":
-                    sendSafely("{\"type\":\"pong\"}");
+                    enqueue(() -> sendSafely("{\"type\":\"pong\"}"));
                     break;
                 default:
                     // unknown messages are ignored per the versioning rules
@@ -396,7 +419,8 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
                 } else {
                     result.put("error", error.code).put("message", error.getMessage());
                 }
-                sendSafely(result.toString());
+                String text = result.toString();
+                enqueue(() -> sendSafely(text));
             } catch (JSONException e) {
                 Log.w(TAG, "Could not build result", e);
             }

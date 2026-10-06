@@ -59,12 +59,11 @@ final class ScreenCapture {
                 int n;
                 while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
             }
-            process.waitFor(TIMEOUT_MS, TimeUnit.MILLISECONDS);
             byte[] png = out.toByteArray();
             // without the grant screencap prints an error or an all black frame header only
             if (png.length < 1024 || !startsWith(png, PNG_MAGIC)) return null;
             return png;
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
             return null;
         } finally {
             if (process != null) process.destroy();

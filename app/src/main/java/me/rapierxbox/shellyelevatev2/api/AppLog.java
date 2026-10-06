@@ -6,7 +6,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.util.concurrent.TimeUnit;
 
 // recent log lines of this process for GET /api/v1/logs. apps may always read their own logcat
 final class AppLog {
@@ -26,9 +25,9 @@ final class AppLog {
                 int n;
                 while ((n = in.read(buf)) > 0 && out.size() < MAX_BYTES) out.write(buf, 0, n);
             }
-            process.waitFor(5, TimeUnit.SECONDS);
+            // destroy in finally ends logcat even when the size cap stopped reading early
             return out.toString(StandardCharsets.UTF_8.name());
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
             return "logcat unavailable: " + e.getMessage() + "\n";
         } finally {
             if (process != null) process.destroy();
