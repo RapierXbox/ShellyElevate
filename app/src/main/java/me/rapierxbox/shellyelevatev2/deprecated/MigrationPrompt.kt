@@ -58,7 +58,7 @@ class MigrationPrompt : AppCompatActivity() {
             if (!mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)) return
             if (mSharedPreferences.getInt(SP_DEPRECATED_MIGRATION_PROMPTED, 0) == BuildConfig.VERSION_CODE) return
             if (!ClientTokenStore.get(context).hasClients()) return
-            markPrompted()
+            // onCreate marks it so a blocked start offers it again later
             context.startActivity(Intent(context, MigrationPrompt::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION))
         }

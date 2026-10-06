@@ -47,7 +47,6 @@ class DeprecatedSettingsSection(
         TextPref(b.voiceAssistantPipelineId, SP_VOICE_ASSISTANT_PIPELINE_ID),
     )
 
-    private val paired by lazy { ClientTokenStore.get(fragment.requireContext()).hasClients() }
 
     override fun onLoaded() {
         b.deprecatedLearnMore.setOnClickListener {
@@ -87,6 +86,7 @@ class DeprecatedSettingsSection(
         b.bluetoothProxyLayout.isVisible = b.bluetoothProxyEnabled.isChecked
         b.voiceAssistantLayout.isVisible = b.voiceAssistantEnabled.isChecked
         // switching only makes sense once a controller can take over
+        val paired = ClientTokenStore.get(fragment.requireContext()).hasClients()
         b.switchEsphomeNow.isVisible = paired && b.bluetoothProxyEnabled.isChecked
         b.switchSatelliteNow.isVisible = paired && b.voiceAssistantEnabled.isChecked
         b.deprecatedDuplicateWarning.isVisible = b.bluetoothProxyEnabled.isChecked &&

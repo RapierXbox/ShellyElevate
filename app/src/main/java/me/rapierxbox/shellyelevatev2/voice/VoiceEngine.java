@@ -132,6 +132,9 @@ public class VoiceEngine {
     }
 
     private void applySettingsNow() {
+        // the mute pref can also be written over the api or the legacy settings route
+        boolean wantMuted = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_MUTED, false);
+        if (wantMuted != muted) setMuted(wantMuted);
         Mode want = desiredMode();
         if (want == mode) {
             if (want != Mode.OFF) applyWakeDetectorSettings();
