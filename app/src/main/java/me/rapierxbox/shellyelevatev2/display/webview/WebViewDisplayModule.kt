@@ -34,7 +34,7 @@ object WebViewDisplayModule : DisplayModule {
 
     override fun createContent(host: DisplayHost, parent: ViewGroup): DisplayContent = WebViewContent(host)
 
-    override fun isInFront(context: Context) = DisplayController.isHostInFront(context)
+    override fun isInFront(context: Context): Boolean? = DisplayController.isHostInFront()
 
     override fun bringToFront(context: Context) = DisplayController.launchHost(context)
 }

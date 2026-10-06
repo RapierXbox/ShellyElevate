@@ -234,6 +234,8 @@ public class ScreenSaverManager extends BroadcastReceiver {
 
         ScreenSaver saver = getCurrentScreenSaver();
         runningSaverId = getCurrentScreenSaverId();
+        // before the saver covers anything so the end knows what the user was looking at
+        DisplayController.onScreenSaverStarted();
         saver.onStart(appContext);
         Log.i(TAG, "Starting screensaver: " + saver.getClass().getSimpleName());
 

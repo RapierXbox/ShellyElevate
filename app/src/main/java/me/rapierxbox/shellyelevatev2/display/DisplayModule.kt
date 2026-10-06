@@ -25,7 +25,8 @@ interface DisplayModule {
     fun createContent(host: DisplayHost, parent: ViewGroup): DisplayContent
 
     // used by the kiosk watchdog to decide whether the module needs to come back
-    fun isInFront(context: Context): Boolean
+    // null when nothing can tell. may shell out so keep it off the main thread
+    fun isInFront(context: Context): Boolean?
 
     // must work from a non activity context
     fun bringToFront(context: Context)

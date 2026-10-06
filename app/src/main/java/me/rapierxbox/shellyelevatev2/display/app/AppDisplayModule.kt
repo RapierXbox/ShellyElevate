@@ -14,6 +14,7 @@ import me.rapierxbox.shellyelevatev2.display.DisplayHost
 import me.rapierxbox.shellyelevatev2.display.DisplayModule
 import me.rapierxbox.shellyelevatev2.display.KeepInFront
 import me.rapierxbox.shellyelevatev2.display.options.ModuleOption
+import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities
 import me.rapierxbox.shellyelevatev2.helper.ForegroundDetector
 import me.rapierxbox.shellyelevatev2.switcher.RecentApps
 
@@ -43,10 +44,13 @@ object AppDisplayModule : DisplayModule, KeepInFront {
 
     override fun createContent(host: DisplayHost, parent: ViewGroup): DisplayContent = AppContent(host, parent)
 
-    override fun isInFront(context: Context): Boolean {
+    override fun isInFront(context: Context): Boolean? {
         val pkg = packageName(context)
         if (pkg.isEmpty()) return false
-        return ForegroundDetector.current(context)?.packageName == pkg
+        // one of our own screens covers it
+        if (ForegroundActivities.anyResumed()) return false
+        val top = ForegroundDetector.current(context) ?: return null
+        return top.packageName == pkg
     }
 
     override fun bringToFront(context: Context) {

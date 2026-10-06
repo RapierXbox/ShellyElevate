@@ -15,6 +15,9 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
     // run on the main thread whenever we go from no resumed activity to some or back
     private val listeners = CopyOnWriteArraySet<(Boolean) -> Unit>()
 
+    // run on the main thread with the class of every activity of ours that resumes
+    private val resumeListeners = CopyOnWriteArraySet<(String) -> Unit>()
+
     // class of our activity that paused last. when the host resumes and this is not the host itself
     // one of our own screens covered it and not an external app that went away
     @Volatile
@@ -35,10 +38,15 @@ object ForegroundActivities : Application.ActivityLifecycleCallbacks {
         listeners += listener
     }
 
+    fun addResumeListener(listener: (String) -> Unit) {
+        resumeListeners += listener
+    }
+
     override fun onActivityResumed(activity: Activity) {
         resumed++
         resumedClass = activity.javaClass.name
         if (resumed == 1) listeners.forEach { it(true) }
+        resumeListeners.forEach { it(activity.javaClass.name) }
     }
 
     override fun onActivityPaused(activity: Activity) {
