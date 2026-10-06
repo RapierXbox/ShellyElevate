@@ -256,22 +256,22 @@ public final class AppUpdater {
             ResponseBody body = res.body();
             if (body == null) throw new IOException("Empty body");
             JSONArray releases = new JSONArray(body.string());
-            ReleaseInfo best = null;
-            for (int i = 0; i < releases.length(); i++) {
+            // github lists the newest release first so the first of each kind is its newest
+            ReleaseInfo stable = null;
+            ReleaseInfo pre = null;
+            for (int i = 0; i < releases.length() && (stable == null || pre == null); i++) {
                 JSONObject release = releases.optJSONObject(i);
                 if (release == null || release.optBoolean("draft", false)) continue;
                 boolean prerelease = release.optBoolean("prerelease", false);
-                if (prerelease && !includePrerelease) continue;
                 String tag = release.optString("tag_name", "");
                 String version = tag.startsWith("v") ? tag.substring(1) : tag;
                 String apkUrl = pickApkUrl(release.optJSONArray("assets"));
+                // old tags with a broken version format would otherwise look newer than everything
                 if (apkUrl == null || !isCurrentScheme(version)) continue;
-                // github lists the newest release first. old tags with a broken version format
-                // would otherwise look newer than everything
-                best = new ReleaseInfo(version, apkUrl, prerelease);
-                break;
+                if (prerelease && pre == null) pre = new ReleaseInfo(version, apkUrl, true);
+                if (!prerelease && stable == null) stable = new ReleaseInfo(version, apkUrl, false);
             }
-            return best;
+            return choose(stable, includePrerelease ? pre : null);
         } catch (JSONException e) {
             throw new IOException("Bad release json");
         }
@@ -302,6 +302,14 @@ public final class AppUpdater {
             if (r[i] != l[i]) return r[i] > l[i];
         }
         return false;
+    }
+
+    // the stable release unless a pre release is strictly newer. so a device on the pre release
+    // channel still moves to a main release as soon as that one is the newest
+    static ReleaseInfo choose(ReleaseInfo stable, ReleaseInfo pre) {
+        if (pre == null) return stable;
+        if (stable == null) return pre;
+        return isNewer(stable.versionName, pre.versionName) ? pre : stable;
     }
 
     // 3.YYDDD.HHMM exactly. early tags like 3.2026111.1918 used other widths
