@@ -1,21 +1,56 @@
-*.iml
-.gradle
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
+# gradle and android build output
+.gradle/
+build/
+.kotlin/
+.cxx/
+.externalNativeBuild/
+captures/
 local.properties
-app/build/*
-.kotlin/*
-.idea/*
-.vscode/*
-*.sqlite
-/.vs
-build.log
-/.tmp
 *.apk
+*.aab
+*.ap_
+*.dex
+*.hprof
+*.log
+
+# signing material (generate-signing-keystore.sh writes the keystore into the cwd)
+*.jks
+*.keystore
+*.p12
+keystore.properties
+signing.properties
+
+# secrets
+.env
+.env.*
+
+# ide and editors
+*.iml
+.idea/
+.vscode/
+.vs/
+.fleet/
+*.swp
+*~
+
+# os junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# python tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# local scratch
+*.sqlite
+/.tmp
+
+# claude code
 /.claude/worktrees/
+/.claude/settings.local.json
 
 # apply-settings inputs can hold mqtt passwords and ha tokens
 /tools/*.json
