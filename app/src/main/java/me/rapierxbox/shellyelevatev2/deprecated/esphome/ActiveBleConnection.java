@@ -1,4 +1,4 @@
-package me.rapierxbox.shellyelevatev2.bluetooth;
+package me.rapierxbox.shellyelevatev2.deprecated.esphome;
 
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
@@ -30,6 +30,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 // one gatt connection to a peripheral with handles numbered like the flat esphome att space
 // ops are queued because android only allows one gatt call in flight at a time
+/**
+ * @deprecated since 3.26279, replaced by the Shelly Elevate Home Assistant integration (bleScannerEnabled),
+ * removal planned in a later release
+ */
+@Deprecated
 @SuppressLint("MissingPermission")
 public class ActiveBleConnection {
     private static final String TAG = "BtProxyConn";

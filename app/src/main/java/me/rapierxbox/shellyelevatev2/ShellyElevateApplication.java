@@ -27,8 +27,9 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.api.ApiManager;
+import me.rapierxbox.shellyelevatev2.api.BleChannel;
 import me.rapierxbox.shellyelevatev2.api.MediaCommands;
-import me.rapierxbox.shellyelevatev2.bluetooth.BluetoothProxyManager;
+import me.rapierxbox.shellyelevatev2.deprecated.esphome.EsphomeProxyServer;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper;
@@ -76,7 +77,6 @@ public class ShellyElevateApplication extends Application {
     public static ScreenManager mScreenManager;
     public static NightModeManager mNightModeManager;
     public static VoiceAssistantManager mVoiceAssistantManager;
-    public static BluetoothProxyManager mBluetoothProxyManager;
     public static PowerOptimizer mPowerOptimizer;
 
     // application context only so holding it statically does not leak an activity
@@ -90,6 +90,8 @@ public class ShellyElevateApplication extends Application {
     private ScheduledFuture<?> httpRetryFuture;
     private int retryDelaySeconds = HTTP_RETRY_INITIAL_SECONDS;
     private BroadcastReceiver settingsReceiver;
+    // deprecated esphome proxy. only built while bluetoothProxyEnabled is on
+    private EsphomeProxyServer esphomeProxyServer;
 
     @Override
     public void onCreate() {
@@ -117,6 +119,7 @@ public class ShellyElevateApplication extends Application {
             public void onReceive(Context context, Intent intent) {
                 applyHttpServerSetting();
                 applyMediaSetting();
+                applyEsphomeProxySetting();
                 DisplayController.onSettingsChanged(context);
             }
         };
@@ -177,7 +180,8 @@ public class ShellyElevateApplication extends Application {
 
         mMQTTServer = new MQTTServer();
         mVoiceAssistantManager = new VoiceAssistantManager();
-        mBluetoothProxyManager = new BluetoothProxyManager();
+        applyEsphomeProxySetting();
+        BleChannel.start(this);
         mPowerOptimizer = new PowerOptimizer(this);
 
         // protocol v1 for the home assistant integration. idle until a controller pairs
@@ -225,6 +229,18 @@ public class ShellyElevateApplication extends Application {
         } else if (!mediaEnabled && mMediaHelper != null) {
             mMediaHelper.onDestroy();
             mMediaHelper = null;
+        }
+    }
+
+    @SuppressWarnings("deprecation")
+    private synchronized void applyEsphomeProxySetting() {
+        boolean want = mSharedPreferences.getBoolean(Constants.SP_BLUETOOTH_PROXY_ENABLED, false);
+        if (want && esphomeProxyServer == null) {
+            esphomeProxyServer = new EsphomeProxyServer();
+            esphomeProxyServer.start();
+        } else if (!want && esphomeProxyServer != null) {
+            esphomeProxyServer.onDestroy();
+            esphomeProxyServer = null;
         }
     }
 
@@ -388,7 +404,13 @@ public class ShellyElevateApplication extends Application {
         if (mMQTTServer != null) mMQTTServer.onDestroy();
         StesProtocolHandler.close();
         if (mVoiceAssistantManager != null) mVoiceAssistantManager.onDestroy();
-        if (mBluetoothProxyManager != null) mBluetoothProxyManager.onDestroy();
+        synchronized (this) {
+            if (esphomeProxyServer != null) {
+                esphomeProxyServer.onDestroy();
+                esphomeProxyServer = null;
+            }
+        }
+        BleChannel.stop();
         if (mMediaHelper != null) mMediaHelper.onDestroy();
 
         Log.i(TAG, "Application terminated");

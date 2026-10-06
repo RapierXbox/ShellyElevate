@@ -1,7 +1,5 @@
-package me.rapierxbox.shellyelevatev2.bluetooth;
+package me.rapierxbox.shellyelevatev2.deprecated.esphome;
 
-import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
-import static me.rapierxbox.shellyelevatev2.Constants.SP_BLUETOOTH_PROXY_ENABLED;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_BLUETOOTH_PROXY_NAME;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
@@ -12,25 +10,16 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
-import android.bluetooth.BluetoothManager;
-import android.bluetooth.le.BluetoothLeScanner;
-import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanSettings;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.net.nsd.NsdManager;
 import android.net.nsd.NsdServiceInfo;
-import android.os.Build;
 import android.os.ParcelUuid;
 import android.os.SystemClock;
 import android.util.Log;
 import android.util.SparseArray;
 
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -52,18 +41,25 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
+import me.rapierxbox.shellyelevatev2.bluetooth.BleScanner;
+import me.rapierxbox.shellyelevatev2.deprecated.DeprecatedFeatures;
+
 // esphome bluetooth_proxy for home assistant
-// passive mode forwards ble ads and active mode proxies gatt connections
+// passive mode forwards ble ads from BleScanner and active mode proxies gatt connections
 // frames are [0x00][varint len][varint msg_type][payload] and only one ha client is served at a time
-public class BluetoothProxyManager {
+// built by ShellyElevateApplication only while bluetoothProxyEnabled is on and destroyed when it goes off
+/**
+ * @deprecated since 3.26279, replaced by the Shelly Elevate Home Assistant integration (bleScannerEnabled),
+ * removal planned in a later release
+ */
+@Deprecated
+public class EsphomeProxyServer {
     private static final String TAG = "BtProxy";
     private static final int PORT = 6053;
     private static final String DEFAULT_PROXY_NAME = "ShellyElevate";
@@ -139,27 +135,14 @@ public class BluetoothProxyManager {
     // android allows 4 to 7 connections depending on vendor and 3 is safe everywhere
     private static final int MAX_ACTIVE_CONNECTIONS = 3;
 
-    private static final long SCAN_WATCHDOG_PERIOD_MS    = 15_000;
-    // no ads for this long means the scan is dead
-    private static final long SCAN_SILENT_RESTART_MS     = 45_000;
-    // cycle long running scans before the os silently throttles them
-    private static final long SCAN_PREEMPTIVE_RESTART_MS = 15 * 60 * 1000;
     // probe ha after this much silence
     private static final long PING_IDLE_THRESHOLD_MS     = 60_000;
     // give up when ha does not answer the probe
     private static final long PING_DEAD_THRESHOLD_MS     = 95_000;
     private static final long PING_CHECK_PERIOD_S        = 30;
-    // android throttles at 5 scan starts per 30s so stay one under
-    private static final int  SCAN_START_BUDGET = 4;
-    private static final long SCAN_START_WINDOW_MS = 30_000;
-    // stop the scan when no ha session comes back within this window
-    private static final long SCAN_IDLE_STOP_MS = 120_000;
     // keeps a persistent accept failure from spinning the server thread
     private static final long ACCEPT_RETRY_DELAY_MS = 500;
 
-    // batch raw ads to cut frame count and queue pressure
-    private static final int  RAW_AD_BATCH_MAX = 16;
-    private static final long RAW_AD_FLUSH_MS  = 100;
     // capped so a slow ha cannot back up into the ble scan callback on the system bt thread
     private static final int  OUT_QUEUE_CAPACITY = 2000;
     private static final long DROP_LOG_INTERVAL_MS = 10_000;
@@ -176,105 +159,33 @@ public class BluetoothProxyManager {
     private volatile ServerSocket serverSocket;
     private final AtomicReference<ClientSession> activeSession = new AtomicReference<>();
 
-    // guards the scanner state below since the watchdog the session and bt broadcasts all touch it
-    private final Object scanLock = new Object();
-    private BluetoothLeScanner bleScanner;
-    private ScanCallback activeScanCb;
-    private int activeScanMode = ScanSettings.SCAN_MODE_LOW_LATENCY;
-    // ring of recent scan start times to stay under the os throttle
-    private final long[] recentScanStarts = new long[SCAN_START_BUDGET + 1];
-    private int recentScanStartsIdx = 0;
-
-    private final AtomicLong lastScanResultMs = new AtomicLong(0);
-    private final AtomicLong lastScanStartedMs = new AtomicLong(0);
-    // survives ha reconnects so the scan does not restart each time
+    // the session that subscribed to ads. the scan stays warm across ha reconnects
     private final AtomicReference<ClientSession> scanTarget = new AtomicReference<>();
+    private final BleScanner.Listener scanListener = ads -> {
+        ClientSession target = scanTarget.get();
+        if (target != null) target.forwardAdvertisements(ads);
+    };
 
-    private final BroadcastReceiver settingsReceiver;
-    private final BroadcastReceiver btStateReceiver;
-
-    private ScheduledFuture<?> scanWatchdogTask;
-    private ScheduledFuture<?> scanIdleStopTask;
-
-    public BluetoothProxyManager() {
-        settingsReceiver = new BroadcastReceiver() {
-            @Override public void onReceive(Context ctx, Intent i) { checkAndApplySettings(); }
-        };
-        LocalBroadcastManager.getInstance(mApplicationContext)
-                .registerReceiver(settingsReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
-
-        // the bt daemon sometimes bounces without onScanFailed so re-arm on STATE_ON
-        btStateReceiver = new BroadcastReceiver() {
-            @Override public void onReceive(Context ctx, Intent i) {
-                onBluetoothStateChanged(i.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR));
-            }
-        };
-        mApplicationContext.registerReceiver(btStateReceiver,
-                new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED));
-
-        checkAndApplySettings();
-    }
-
-    public void checkAndApplySettings() {
-        boolean want = mSharedPreferences.getBoolean(SP_BLUETOOTH_PROXY_ENABLED, false);
-        if (want && !enabled) {
-            enabled = true;
-            startServer();
-            startScanWatchdog();
-        } else if (!want && enabled) {
-            enabled = false;
-            shutdown();
-        }
-    }
-
-    public void setLowPowerMode(boolean low) {
-        int target = low ? ScanSettings.SCAN_MODE_LOW_POWER : ScanSettings.SCAN_MODE_LOW_LATENCY;
-        synchronized (scanLock) {
-            if (target == activeScanMode) return;
-            activeScanMode = target;
-            Log.i(TAG, "Scan mode -> " + (low ? "LOW_POWER" : "LOW_LATENCY"));
-            ClientSession s = scanTarget.get();
-            if (s != null && activeScanCb != null) restartScan(s);
-        }
+    public void start() {
+        if (enabled) return;
+        enabled = true;
+        DeprecatedFeatures.warnOnce(DeprecatedFeatures.Feature.ESPHOME_PROXY);
+        startServer();
     }
 
     public void onDestroy() {
         enabled = false;
         shutdown();
-        try {
-            mApplicationContext.unregisterReceiver(btStateReceiver);
-        } catch (IllegalArgumentException ignored) {
-            // already unregistered
-        }
-        LocalBroadcastManager.getInstance(mApplicationContext).unregisterReceiver(settingsReceiver);
         scheduler.shutdownNow();
         executor.shutdownNow();
     }
 
     private void shutdown() {
-        stopScanWatchdog();
-        cancelIdleScanStop();
         stopBleScanning();
         ClientSession s = activeSession.getAndSet(null);
         if (s != null) s.close("shutdown");
         closeQuietly(serverSocket);
         Log.i(TAG, "shutdown");
-    }
-
-    private void onBluetoothStateChanged(int state) {
-        if (state == BluetoothAdapter.STATE_OFF || state == BluetoothAdapter.STATE_TURNING_OFF) {
-            Log.w(TAG, "BT adapter going down, dropping scanner state");
-            synchronized (scanLock) {
-                activeScanCb = null;
-                bleScanner = null;
-            }
-        } else if (state == BluetoothAdapter.STATE_ON) {
-            Log.i(TAG, "BT adapter back ON, re-arming scan if a session needs it");
-            synchronized (scanLock) {
-                ClientSession s = scanTarget.get();
-                if (s != null) startBleScanning(s);
-            }
-        }
     }
 
     // ---- server ----
@@ -328,7 +239,6 @@ public class BluetoothProxyManager {
         ClientSession session = new ClientSession(client);
         ClientSession prev = activeSession.getAndSet(session);
         if (prev != null) prev.close("new connection");
-        cancelIdleScanStop();
         executor.execute(session::run);
     }
 
@@ -397,193 +307,14 @@ public class BluetoothProxyManager {
 
     // ---- scanning ----
 
-    private synchronized void startScanWatchdog() {
-        if (scanWatchdogTask != null && !scanWatchdogTask.isDone()) return;
-        scanWatchdogTask = scheduler.scheduleWithFixedDelay(this::runScanWatchdog,
-                SCAN_WATCHDOG_PERIOD_MS, SCAN_WATCHDOG_PERIOD_MS, TimeUnit.MILLISECONDS);
-    }
-
-    private synchronized void stopScanWatchdog() {
-        if (scanWatchdogTask != null) {
-            scanWatchdogTask.cancel(false);
-            scanWatchdogTask = null;
-        }
-    }
-
-    // low latency scans silently die on some devices so restart when quiet or running too long
-    private void runScanWatchdog() {
-        // an escaping exception would cancel the periodic task for good
-        try {
-            synchronized (scanLock) {
-                checkScanHealthLocked();
-            }
-        } catch (RuntimeException e) {
-            Log.e(TAG, "scan watchdog failed", e);
-        }
-    }
-
-    // must hold scanLock
-    private void checkScanHealthLocked() {
-        ClientSession s = scanTarget.get();
-        if (s == null || s.closed.get()) return;
-        if (activeScanCb == null) {
-            // onScanFailed probably cleared the callback so retry
-            Log.w(TAG, "watchdog: scan not running while subscribed, attempting restart");
-            startBleScanning(s);
-            return;
-        }
-        long now = System.currentTimeMillis();
-        long lastResult = lastScanResultMs.get();
-        long started    = lastScanStartedMs.get();
-        boolean silent  = lastResult > 0 && (now - lastResult) > SCAN_SILENT_RESTART_MS;
-        boolean stale   = started > 0    && (now - started)    > SCAN_PREEMPTIVE_RESTART_MS;
-        if (silent || stale) {
-            Log.w(TAG, "watchdog: " + (silent ? "scan silent for " + (now - lastResult) + "ms"
-                                              : "scan running " + (now - started) + "ms, preemptive cycle"));
-            restartScan(s);
-        }
-    }
-
-    @SuppressLint("MissingPermission")
     private void startBleScanning(ClientSession session) {
-        synchronized (scanLock) {
-            scanTarget.set(session);
-
-            if (activeScanCb != null) {
-                Log.i(TAG, "BLE scan already running, redirected to new session");
-                return;
-            }
-            if (!canStartScanNowLocked()) {
-                Log.w(TAG, "scan start rate-limited under OS 5/30s throttle, will retry on next watchdog tick");
-                return;
-            }
-
-            BluetoothAdapter adapter = getAdapter();
-            if (adapter == null || !adapter.isEnabled()) {
-                Log.w(TAG, "bluetooth unavailable");
-                return;
-            }
-            BluetoothLeScanner scanner = adapter.getBluetoothLeScanner();
-            bleScanner = scanner;
-            if (scanner == null) {
-                Log.w(TAG, "LE scanner unavailable");
-                return;
-            }
-
-            ScanSettings settings = new ScanSettings.Builder()
-                    .setScanMode(activeScanMode)
-                    .setReportDelay(0)
-                    .build();
-            // set before starting so an immediate onScanFailed can clear it
-            ScanCallback callback = newScanCallback();
-            activeScanCb = callback;
-            try {
-                recordScanStartLocked();
-                scanner.startScan(null, settings, callback);
-            } catch (SecurityException e) {
-                Log.e(TAG, "BLE scan permission denied, grant BLUETOOTH_SCAN / ACCESS_FINE_LOCATION");
-                activeScanCb = null;
-                return;
-            } catch (RuntimeException e) {
-                // the adapter can go down between the checks above and the start
-                Log.w(TAG, "BLE scan start failed: " + e.getMessage());
-                activeScanCb = null;
-                return;
-            }
-            long now = System.currentTimeMillis();
-            lastScanStartedMs.set(now);
-            // grace period before the watchdog flags silence
-            lastScanResultMs.set(now);
-            Log.i(TAG, "BLE scan started");
-        }
-    }
-
-    private ScanCallback newScanCallback() {
-        return new ScanCallback() {
-            @Override public void onScanResult(int callbackType, ScanResult result) {
-                lastScanResultMs.set(System.currentTimeMillis());
-                ClientSession target = scanTarget.get();
-                if (target != null) target.forwardScanResult(result);
-            }
-
-            // must clear the callback or startBleScanning thinks the scan still runs
-            // error 2 is the os throttle
-            @Override public void onScanFailed(int errorCode) {
-                Log.w(TAG, "BLE scan failed: " + errorCode + " (clearing callback so we can retry)");
-                synchronized (scanLock) {
-                    if (activeScanCb == this) activeScanCb = null;
-                }
-            }
-        };
-    }
-
-    private void restartScan(ClientSession session) {
-        synchronized (scanLock) {
-            stopScanLocked();
-            startBleScanning(session);
-        }
+        scanTarget.set(session);
+        BleScanner.get().addListener(scanListener);
     }
 
     private void stopBleScanning() {
-        synchronized (scanLock) {
-            scanTarget.set(null);
-            if (activeScanCb == null) return;
-            stopScanLocked();
-            Log.i(TAG, "BLE scan stopped");
-        }
-    }
-
-    // must hold scanLock
-    @SuppressLint("MissingPermission")
-    private void stopScanLocked() {
-        ScanCallback cb = activeScanCb;
-        BluetoothLeScanner scanner = bleScanner;
-        activeScanCb = null;
-        if (cb == null || scanner == null) return;
-        try {
-            scanner.stopScan(cb);
-        } catch (RuntimeException e) {
-            Log.w(TAG, "BLE scan stop failed: " + e.getMessage());
-        }
-    }
-
-    // must hold scanLock
-    private boolean canStartScanNowLocked() {
-        long cutoff = System.currentTimeMillis() - SCAN_START_WINDOW_MS;
-        int recent = 0;
-        for (long t : recentScanStarts) {
-            if (t > cutoff) recent++;
-        }
-        return recent < SCAN_START_BUDGET;
-    }
-
-    // must hold scanLock
-    private void recordScanStartLocked() {
-        recentScanStarts[recentScanStartsIdx] = System.currentTimeMillis();
-        recentScanStartsIdx = (recentScanStartsIdx + 1) % recentScanStarts.length;
-    }
-
-    // delayed stop so an immediate ha reconnect does not burn a scan start under the os throttle
-    private synchronized void scheduleIdleScanStop() {
-        if (scanIdleStopTask != null) scanIdleStopTask.cancel(false);
-        try {
-            scanIdleStopTask = scheduler.schedule(() -> {
-                if (activeSession.get() == null) {
-                    Log.i(TAG, "no HA session for " + SCAN_IDLE_STOP_MS + "ms, stopping idle BLE scan");
-                    stopBleScanning();
-                }
-            }, SCAN_IDLE_STOP_MS, TimeUnit.MILLISECONDS);
-        } catch (RejectedExecutionException e) {
-            // scheduler is gone after onDestroy
-            scanIdleStopTask = null;
-        }
-    }
-
-    private synchronized void cancelIdleScanStop() {
-        if (scanIdleStopTask != null) {
-            scanIdleStopTask.cancel(false);
-            scanIdleStopTask = null;
-        }
+        scanTarget.set(null);
+        BleScanner.get().removeListener(scanListener);
     }
 
     // ---- client session ----
@@ -606,11 +337,9 @@ public class BluetoothProxyManager {
 
         // set when ha subscribes with the raw flag
         private volatile boolean rawAds = false;
-        private final List<byte[]> rawAdBatch = new ArrayList<>();
 
         // periodic tasks are guarded by this so close cannot miss one scheduled concurrently
         private ScheduledFuture<?> pingTask;
-        private ScheduledFuture<?> rawFlushTask;
 
         ClientSession(Socket socket) { this.socket = socket; }
 
@@ -633,11 +362,12 @@ public class BluetoothProxyManager {
             } finally {
                 close("session ended");
                 if (activeSession.compareAndSet(this, null)) {
-                    // keep the scan running since restarting on every ha reconnect trips the os throttle
-                    if (scanTarget.compareAndSet(this, null))
+                    // keep the scan warm since restarting on every ha reconnect trips the os throttle
+                    // the scanner stops it eventually when no ha session comes back
+                    if (scanTarget.compareAndSet(this, null)) {
                         Log.i(TAG, "session ended, scan kept running for next HA reconnect");
-                    // but stop it eventually when no ha session comes back
-                    scheduleIdleScanStop();
+                        BleScanner.get().removeListenerKeepWarm(scanListener);
+                    }
                     Log.i(TAG, "session cleaned up");
                 }
             }
@@ -720,7 +450,7 @@ public class BluetoothProxyManager {
                     break;
                 case MSG_SUBSCRIBE_BLE: {
                     long flags = ProtoFields.parse(payload).varint(1);
-                    if ((flags & SUBSCRIPTION_RAW_ADVERTISEMENTS) != 0) enableRawAds();
+                    if ((flags & SUBSCRIPTION_RAW_ADVERTISEMENTS) != 0) rawAds = true;
                     startBleScanning(this);
                     break;
                 }
@@ -769,51 +499,23 @@ public class BluetoothProxyManager {
             }
         }
 
-        void forwardScanResult(ScanResult result) {
+        // raw mode sends each scanner batch as one frame and legacy mode one frame per ad
+        void forwardAdvertisements(List<BleScanner.RawAd> ads) {
+            if (closed.get()) return;
             if (rawAds) {
-                byte[] raw = buildRawAdvertisement(result);
-                if (raw != null) queueRawAdvertisement(raw);
+                ByteArrayOutputStream out = new ByteArrayOutputStream();
+                for (BleScanner.RawAd ad : ads) {
+                    byte[] raw = buildRawAdvertisement(ad);
+                    // one BluetoothLERawAdvertisementsResponse holds repeated entries in field 1
+                    if (raw != null) encodeLenField(out, 1, raw);
+                }
+                if (out.size() > 0) enqueue(buildFrame(MSG_BLE_RAW_AD_RESPONSE, out.toByteArray()));
             } else {
-                byte[] ad = buildBleScanRecord(result);
-                if (ad != null) enqueue(buildFrame(MSG_BLE_AD_RESPONSE, ad));
-            }
-        }
-
-        private synchronized void enableRawAds() {
-            rawAds = true;
-            if (rawFlushTask != null || closed.get()) return;
-            rawFlushTask = scheduler.scheduleWithFixedDelay(
-                    this::flushRawAds, RAW_AD_FLUSH_MS, RAW_AD_FLUSH_MS, TimeUnit.MILLISECONDS);
-        }
-
-        private void queueRawAdvertisement(byte[] entry) {
-            List<byte[]> toFlush = null;
-            synchronized (rawAdBatch) {
-                rawAdBatch.add(entry);
-                if (rawAdBatch.size() >= RAW_AD_BATCH_MAX) {
-                    toFlush = new ArrayList<>(rawAdBatch);
-                    rawAdBatch.clear();
+                for (BleScanner.RawAd ad : ads) {
+                    byte[] record = buildBleScanRecord(ad);
+                    if (record != null) enqueue(buildFrame(MSG_BLE_AD_RESPONSE, record));
                 }
             }
-            if (toFlush != null) sendRawAdBatch(toFlush);
-        }
-
-        private void flushRawAds() {
-            if (closed.get()) return;
-            List<byte[]> toFlush;
-            synchronized (rawAdBatch) {
-                if (rawAdBatch.isEmpty()) return;
-                toFlush = new ArrayList<>(rawAdBatch);
-                rawAdBatch.clear();
-            }
-            sendRawAdBatch(toFlush);
-        }
-
-        // one BluetoothLERawAdvertisementsResponse holds repeated entries in field 1
-        private void sendRawAdBatch(List<byte[]> entries) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            for (byte[] e : entries) encodeLenField(out, 1, e);
-            enqueue(buildFrame(MSG_BLE_RAW_AD_RESPONSE, out.toByteArray()));
         }
 
         private void enqueue(byte[] frame) {
@@ -852,7 +554,6 @@ public class BluetoothProxyManager {
 
         private synchronized void cancelPeriodicTasks() {
             if (pingTask != null) pingTask.cancel(false);
-            if (rawFlushTask != null) rawFlushTask.cancel(false);
         }
 
         // ---- active connections ----
@@ -1174,9 +875,11 @@ public class BluetoothProxyManager {
         return out.toByteArray();
     }
 
-    private static byte[] buildBleScanRecord(ScanResult result) {
+    private static byte[] buildBleScanRecord(BleScanner.RawAd ad) {
+        ScanResult result = ad.source;
+        if (result == null) return null;
         try {
-            long address = parseMacToLong(result.getDevice().getAddress());
+            long address = ad.address;
             ScanRecord record = result.getScanRecord();
             ByteArrayOutputStream out = new ByteArrayOutputStream();
 
@@ -1210,8 +913,7 @@ public class BluetoothProxyManager {
                 }
             }
 
-            int addrType = addressType(result);
-            if (addrType != 0) encodeVarintField(out, 7, addrType);
+            if (ad.addressType != 0) encodeVarintField(out, 7, ad.addressType);
 
             return out.toByteArray();
         } catch (RuntimeException e) {
@@ -1221,32 +923,16 @@ public class BluetoothProxyManager {
     }
 
     // raw adv payload straight from the scan record matches BluetoothLERawAdvertisement
-    private static byte[] buildRawAdvertisement(ScanResult result) {
-        try {
-            ScanRecord record = result.getScanRecord();
-            byte[] data = record != null ? record.getBytes() : null;
-            if (data == null) return null;
-            long address = parseMacToLong(result.getDevice().getAddress());
-            // only public and random are meaningful here
-            int addrType = addressType(result) == 1 ? 1 : 0;
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            encodeVarintField(out, 1, address);
-            encodeZigzagField(out, 2, result.getRssi());
-            encodeVarintField(out, 3, addrType);
-            encodeLenField(out, 4, data);
-            return out.toByteArray();
-        } catch (RuntimeException e) {
-            Log.w(TAG, "encode raw scan result failed: " + e.getMessage());
-            return null;
-        }
-    }
-
-    // the address type is only exposed from api 35 and reads as public before that
-    private static int addressType(ScanResult result) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            return result.getDevice().getAddressType();
-        }
-        return 0;
+    private static byte[] buildRawAdvertisement(BleScanner.RawAd ad) {
+        if (ad.data == null) return null;
+        // only public and random are meaningful here
+        int addrType = ad.addressType == 1 ? 1 : 0;
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        encodeVarintField(out, 1, ad.address);
+        encodeZigzagField(out, 2, ad.rssi);
+        encodeVarintField(out, 3, addrType);
+        encodeLenField(out, 4, ad.data);
+        return out.toByteArray();
     }
 
     private static byte[] buildServiceData(String uuid, byte[] data) {
@@ -1448,13 +1134,6 @@ public class BluetoothProxyManager {
 
     // ---- helpers ----
 
-    // "AA:BB:CC:DD:EE:FF" to 0x0000AABBCCDDEEFF
-    private static long parseMacToLong(String mac) {
-        long addr = 0;
-        for (String p : mac.split(":")) addr = (addr << 8) | Integer.parseInt(p, 16);
-        return addr;
-    }
-
     private static String macStr(long addr) {
         return String.format("%02X:%02X:%02X:%02X:%02X:%02X",
                 (addr >> 40) & 0xff, (addr >> 32) & 0xff, (addr >> 24) & 0xff,
@@ -1464,8 +1143,7 @@ public class BluetoothProxyManager {
     private static int orZero(Integer v) { return v != null ? v : 0; }
 
     private static BluetoothAdapter getAdapter() {
-        BluetoothManager bm = (BluetoothManager) mApplicationContext.getSystemService(Context.BLUETOOTH_SERVICE);
-        return bm != null ? bm.getAdapter() : null;
+        return BleScanner.getAdapter();
     }
 
     private static String getWifiMac() {
