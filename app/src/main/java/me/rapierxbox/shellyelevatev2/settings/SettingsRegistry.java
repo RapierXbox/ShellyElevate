@@ -60,7 +60,8 @@ public final class SettingsRegistry {
             Constants.SP_DIMMER_LAST_BRIGHTNESS,
             Constants.SP_DIMMER_LAST_STATE,
             "crashHandlerCount",
-            "crashHandlerLastMs"
+            "crashHandlerLastMs",
+            Constants.SP_DEPRECATED_MIGRATION_PROMPTED
     )));
 
     private static final Map<String, SettingDef> DEFS = build();

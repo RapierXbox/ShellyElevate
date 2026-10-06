@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 """
+DEPRECATED: the Shelly Elevate Home Assistant integration installs over adb and needs no uart.
+this script will be removed in a future release
+
 uart setup for a shelly wall display so tools/install-privapp can take over
 not needed when adb already works since install-privapp does the same steps
 
@@ -25,6 +28,8 @@ import re
 import sys
 import threading
 import time
+
+print("uart-setup.py is deprecated and will be removed. use the Shelly Elevate integration installer", file=sys.stderr)
 
 try:
     import serial

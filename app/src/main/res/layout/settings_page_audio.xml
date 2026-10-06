@@ -41,71 +41,32 @@
         tools:ignore="UseSwitchCompatOrMaterialXml" />
 
     <com.google.android.material.materialswitch.MaterialSwitch
-        android:id="@+id/voiceAssistantEnabled"
+        android:id="@+id/haVoiceEnabled"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
-        android:text="@string/voice_assistant"
+        android:text="@string/ha_voice_enabled"
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
 
+    <TextView
+        android:id="@+id/haVoiceHint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="4dp"
+        android:alpha="0.7"
+        android:text="@string/ha_voice_hint"
+        android:textSize="14sp" />
+
+    <!-- wake word and capture settings shared by both voice transports -->
     <LinearLayout
-        android:id="@+id/voiceAssistantLayout"
+        android:id="@+id/voiceEngineLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="48dp"
         android:layout_marginTop="8dp"
         android:orientation="vertical">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_gravity="center_vertical"
-                android:text="@string/voice_assistant_token"
-                android:textSize="18sp" />
-
-            <EditText
-                android:id="@+id/voiceAssistantToken"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="2"
-                android:hint="@string/voice_assistant_token_hint"
-                android:imeOptions="actionDone"
-                android:inputType="textVisiblePassword"
-                android:textSize="16sp" />
-        </LinearLayout>
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_gravity="center_vertical"
-                android:text="@string/voice_assistant_pipeline_id"
-                android:textSize="18sp" />
-
-            <EditText
-                android:id="@+id/voiceAssistantPipelineId"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="2"
-                android:hint="@string/voice_assistant_pipeline_id_hint"
-                android:imeOptions="actionDone"
-                android:inputType="textUri"
-                android:textSize="16sp" />
-        </LinearLayout>
 
         <LinearLayout
             android:layout_width="match_parent"

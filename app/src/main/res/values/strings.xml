@@ -102,7 +102,7 @@
     <string name="settings_cat_controls">Controls</string>
     <string name="settings_cat_controls_summary">Swipe, power button, SW input, buttons and relays</string>
     <string name="settings_cat_home_assistant">Home Assistant</string>
-    <string name="settings_cat_home_assistant_summary">MQTT broker and discovery</string>
+    <string name="settings_cat_home_assistant_summary">Integration, MQTT broker and discovery</string>
     <string name="settings_cat_sensors">Sensors</string>
     <string name="settings_cat_sensors_summary">Thermal sensors and temperature correction</string>
     <string name="settings_cat_audio">Audio and voice</string>

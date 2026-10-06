@@ -294,6 +294,8 @@ try_adb shell "appops set $PKG GET_USAGE_STATS allow"
 try_adb shell "dumpsys deviceidle whitelist +$PKG" >/dev/null
 # runtime perm so the wifi settings section gets scan results
 try_adb shell "pm grant $PKG android.permission.ACCESS_FINE_LOCATION"
+# runtime perm for the wake word and voice over the home assistant integration
+try_adb shell "pm grant $PKG android.permission.RECORD_AUDIO"
 OPS_OUT=$(adb shell "appops get $PKG WRITE_SETTINGS" | tr -d '\r\n') || true
 IDLE_OUT=$(adb shell "dumpsys deviceidle whitelist" | tr -d '\r') || true
 LOC_OUT=$(adb shell "dumpsys package $PKG" | tr -d '\r') || true

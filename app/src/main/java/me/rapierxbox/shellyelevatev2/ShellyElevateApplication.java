@@ -29,6 +29,7 @@ import java.util.concurrent.TimeUnit;
 import me.rapierxbox.shellyelevatev2.api.ApiManager;
 import me.rapierxbox.shellyelevatev2.api.BleChannel;
 import me.rapierxbox.shellyelevatev2.api.MediaCommands;
+import me.rapierxbox.shellyelevatev2.deprecated.MigrationPrompt;
 import me.rapierxbox.shellyelevatev2.deprecated.esphome.EsphomeProxyServer;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
@@ -186,6 +187,7 @@ public class ShellyElevateApplication extends Application {
 
         // protocol v1 for the home assistant integration. idle until a controller pairs
         ApiManager.start(this);
+        MigrationPrompt.install(this);
 
         mHttpServer = new HttpServer();
         httpWatchdog = Executors.newSingleThreadScheduledExecutor();

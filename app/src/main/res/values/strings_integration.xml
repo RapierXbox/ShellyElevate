@@ -6,4 +6,39 @@
     <string name="pairing_expires">Expires in %1$d s</string>
     <string name="pairing_cancel">Cancel</string>
     <string name="pairing_done">Paired with Home Assistant</string>
+
+    <!-- integration section on the home assistant page -->
+    <string name="integration_header">Shelly Elevate integration</string>
+    <string name="integration_not_paired">Not paired. In Home Assistant open Settings, Devices and services and add Shelly Elevate. The display shows a code to enter there.</string>
+    <string name="integration_paired">Paired with</string>
+    <string name="integration_api_down">The integration API is not running yet</string>
+    <string name="integration_client_row">%1$s, last seen %2$s</string>
+    <string name="integration_revoke">Remove</string>
+    <string name="integration_revoke_title">Remove %1$s?</string>
+    <string name="integration_revoke_message">It can no longer control this display until it pairs again.</string>
+    <string name="integration_fingerprint">Certificate SHA-256 %1$s</string>
+    <string name="mqtt_header">MQTT</string>
+
+    <!-- replacements of the deprecated features -->
+    <string name="ble_scanner_enabled">Bluetooth proxy via Home Assistant integration</string>
+    <string name="ble_scanner_hint">Sends Bluetooth advertisements to the paired Shelly Elevate integration. Nothing is scanned until it is connected.</string>
+    <string name="ha_voice_enabled">Voice assistant via Home Assistant integration</string>
+    <string name="ha_voice_hint">The wake word and microphone run on the display and the paired Shelly Elevate integration runs the Assist pipeline.</string>
+
+    <!-- deprecated page -->
+    <string name="settings_cat_deprecated">Deprecated</string>
+    <string name="settings_cat_deprecated_summary">Old features that will be removed</string>
+    <string name="deprecated_banner">Deprecated: replaced by the Shelly Elevate Home Assistant integration. Will be removed in a future version.</string>
+    <string name="deprecated_learn_more">Learn more</string>
+    <string name="deprecated_learn_more_url" translatable="false">https://github.com/RapierXbox/shellyelevateintegration</string>
+    <string name="deprecated_duplicate_warning">Both Bluetooth proxies are on, so Home Assistant sees this display twice. Turn the ESPHome proxy off.</string>
+    <string name="deprecated_esphome_header">ESPHome Bluetooth proxy</string>
+    <string name="deprecated_satellite_header">Standalone voice assistant (Home Assistant token)</string>
+    <string name="deprecated_satellite_wake_hint">Wake word settings are on the Audio and voice page.</string>
+    <string name="deprecated_switch_ble">Switch to the integration proxy</string>
+    <string name="deprecated_switch_voice">Switch to voice via the integration</string>
+    <string name="deprecated_switched">Switched. Save is not needed.</string>
+    <string name="deprecated_migration_voice">This display is paired with the Shelly Elevate integration. Use it for voice instead of the deprecated token voice assistant?</string>
+    <string name="deprecated_migration_switch">Switch</string>
+    <string name="deprecated_migration_later">Not now</string>
 </resources>

@@ -459,6 +459,51 @@
                         android:textSize="28sp"
                         tools:ignore="HardcodedText" />
                 </LinearLayout>
+
+                <!-- last so the old features sit below everything that stays -->
+                <LinearLayout
+                    android:id="@+id/catDeprecatedRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="?attr/selectableItemBackground"
+                    android:clickable="true"
+                    android:focusable="true"
+                    android:gravity="center_vertical"
+                    android:minHeight="72dp"
+                    android:orientation="horizontal"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:text="@string/settings_cat_deprecated"
+                            android:textColor="?attr/colorError"
+                            android:textSize="20sp" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:alpha="0.7"
+                            android:text="@string/settings_cat_deprecated_summary"
+                            android:textSize="14sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:alpha="0.5"
+                        android:text="›"
+                        android:textSize="28sp"
+                        tools:ignore="HardcodedText" />
+                </LinearLayout>
             </LinearLayout>
 
             <!-- category pages are inflated in here the first time they open -->

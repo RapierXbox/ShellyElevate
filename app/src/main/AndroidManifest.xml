@@ -139,6 +139,13 @@
             android:launchMode="singleTop"
             android:theme="@style/Theme.ShellyElevateV2.Pairing" />
 
+        <!-- deprecated: one time offer to move the token voice satellite to the integration -->
+        <activity
+            android:name=".deprecated.MigrationPrompt"
+            android:excludeFromRecents="true"
+            android:exported="false"
+            android:theme="@style/Theme.ShellyElevateV2.Pairing" />
+
         <receiver
             android:name=".BootReceiver"
             android:exported="true">

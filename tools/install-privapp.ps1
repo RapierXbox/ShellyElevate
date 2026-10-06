@@ -221,6 +221,8 @@ Write-Host "applying permissions"
 & adb shell "dumpsys deviceidle whitelist +$pkg" | Out-Null
 # runtime perm so the wifi settings section gets scan results
 & adb shell "pm grant $pkg android.permission.ACCESS_FINE_LOCATION"
+# runtime perm for the wake word and voice over the home assistant integration
+& adb shell "pm grant $pkg android.permission.RECORD_AUDIO"
 $opsOut = (& adb shell "appops get $pkg WRITE_SETTINGS") -join ""
 $idleOut = (& adb shell "dumpsys deviceidle whitelist") -join "`n"
 $locOut = (& adb shell "dumpsys package $pkg") -join "`n"

@@ -50,12 +50,15 @@ import me.rapierxbox.shellyelevatev2.databinding.SettingsPageAudioBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageBluetoothBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageControlsBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageDashboardBinding
+import me.rapierxbox.shellyelevatev2.databinding.SettingsPageDeprecatedBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageDisplayBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageHomeAssistantBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageNetworkBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageScreensaverBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageSensorsBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageUpdatesBinding
+import me.rapierxbox.shellyelevatev2.api.IntegrationSettingsSection
+import me.rapierxbox.shellyelevatev2.deprecated.DeprecatedSettingsSection
 import me.rapierxbox.shellyelevatev2.display.DisplayController
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleSettings
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
@@ -100,6 +103,7 @@ class SettingsFragment : Fragment() {
     private var sensorsPage: SettingsPageSensorsBinding? = null
     private var audioPage: SettingsPageAudioBinding? = null
     private var bluetoothPage: SettingsPageBluetoothBinding? = null
+    private var deprecatedPage: SettingsPageDeprecatedBinding? = null
     private var updatesPage: SettingsPageUpdatesBinding? = null
 
     // one binder per opened page so saving never writes defaults for pages that were never loaded
@@ -125,6 +129,7 @@ class SettingsFragment : Fragment() {
         sensorsPage = null
         audioPage = null
         bluetoothPage = null
+        deprecatedPage = null
         updatesPage = null
         binders.clear()
         pageViews.clear()
@@ -202,6 +207,7 @@ class SettingsFragment : Fragment() {
             Category(binding.catAudioRow, R.string.settings_cat_audio, ::createAudioPage),
             Category(binding.catBluetoothRow, R.string.settings_cat_bluetooth, ::createBluetoothPage),
             Category(binding.catUpdatesRow, R.string.settings_cat_updates, ::createUpdatesPage),
+            Category(binding.catDeprecatedRow, R.string.settings_cat_deprecated, ::createDeprecatedPage),
         )
         for (category in categories) {
             category.row.setOnClickListener { showCategory(category) }
@@ -474,6 +480,7 @@ class SettingsFragment : Fragment() {
             +SwitchPref(b.mqttHaDiscovery, SP_MQTT_HA_DISCOVERY, true)
             +SwitchPref(b.mqttRetainState, SP_MQTT_RETAIN_STATE, true)
         }
+        IntegrationSettingsSection(this, b)
         return b.root
     }
 
@@ -508,9 +515,11 @@ class SettingsFragment : Fragment() {
         bindPage {
             +SwitchPref(b.mediaEnabled, SP_MEDIA_ENABLED, false)
 
-            +SwitchPref(b.voiceAssistantEnabled, SP_VOICE_ASSISTANT_ENABLED, false)
-            +TextPref(b.voiceAssistantToken, SP_VOICE_ASSISTANT_TOKEN)
-            +TextPref(b.voiceAssistantPipelineId, SP_VOICE_ASSISTANT_PIPELINE_ID)
+            +SwitchPref(b.haVoiceEnabled, SP_HA_VOICE_ENABLED, false)
+            // the engine settings also serve the deprecated token satellite on its own page
+            onToggle(b.haVoiceEnabled) { isChecked ->
+                b.voiceEngineLayout.isVisible = isChecked || deprecatedVoiceEnabled()
+            }
             +IntTextPref(b.voiceAssistantMaxSeconds, SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, min = 1)
             +SwitchPref(b.voiceWakeEnabled, SP_VOICE_WAKE_ENABLED, true)
             visibleWhen(b.voiceWakeEnabled, b.voiceWakeModelLayout)
@@ -534,7 +543,6 @@ class SettingsFragment : Fragment() {
         val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         b.volumeSetting.value = (curVol.toFloat() / maxVol * 100f).coerceIn(0f, 100f).roundToInt().toFloat()
 
-        b.voiceAssistantLayout.isVisible = b.voiceAssistantEnabled.isChecked
         selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
         updateWakeModelStatus()
 
@@ -551,18 +559,6 @@ class SettingsFragment : Fragment() {
             }
         }
 
-        b.voiceAssistantEnabled.setOnCheckedChangeListener { _, isChecked ->
-            b.voiceAssistantLayout.isVisible = isChecked
-            // the unsaved url when the dashboard page is open otherwise the stored one
-            val modules = displaySettings
-            val url = if (modules != null) modules.value(SP_WEBVIEW_URL) as? String else ServiceHelper.getWebviewUrl()
-            if (isChecked && url.isNullOrEmpty()) {
-                Toast.makeText(requireContext(), R.string.voice_requires_url, Toast.LENGTH_LONG).show()
-                b.voiceAssistantEnabled.isChecked = false
-                b.voiceAssistantLayout.isVisible = false
-            }
-        }
-
         setupModelChooser(b, wakewordsDir)
         return b.root
     }
@@ -571,13 +567,37 @@ class SettingsFragment : Fragment() {
         val b = SettingsPageBluetoothBinding.inflate(layoutInflater, parent, true)
         bluetoothPage = b
         bindPage {
-            +SwitchPref(b.bluetoothProxyEnabled, SP_BLUETOOTH_PROXY_ENABLED, false)
-            visibleWhen(b.bluetoothProxyEnabled, b.bluetoothProxyLayout)
-            +TextPref(b.bluetoothProxyName, SP_BLUETOOTH_PROXY_NAME, "ShellyElevate", trim = true)
+            +SwitchPref(b.bleScannerEnabled, SP_BLE_SCANNER_ENABLED, false)
         }
-        launchIpLookup { ip ->
-            bluetoothPage?.bluetoothProxyAddress?.text = getString(R.string.bt_proxy_address, ip)
-        }
+        return b.root
+    }
+
+    // the deprecated token satellite switch wherever it is right now
+    private fun deprecatedVoiceEnabled(): Boolean =
+        deprecatedPage?.voiceAssistantEnabled?.isChecked
+            ?: mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)
+
+    @Suppress("DEPRECATION")
+    private fun createDeprecatedPage(parent: ViewGroup): View {
+        val b = SettingsPageDeprecatedBinding.inflate(layoutInflater, parent, true)
+        deprecatedPage = b
+        val section = DeprecatedSettingsSection(
+            this, b,
+            dashboardUrl = {
+                // the unsaved url when the dashboard page is open otherwise the stored one
+                val modules = displaySettings
+                if (modules != null) modules.value(SP_WEBVIEW_URL) as? String else ServiceHelper.getWebviewUrl()
+            },
+            onSwitched = { key ->
+                // pages that are open would otherwise save the old value back
+                when (key) {
+                    SP_BLE_SCANNER_ENABLED -> bluetoothPage?.bleScannerEnabled?.isChecked = true
+                    SP_HA_VOICE_ENABLED -> audioPage?.haVoiceEnabled?.isChecked = true
+                }
+            },
+        )
+        bindPage { +section }
+        launchIpLookup { ip -> if (deprecatedPage != null) section.setBluetoothAddress(ip) }
         return b.root
     }
 

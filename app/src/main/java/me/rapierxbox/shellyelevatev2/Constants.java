@@ -102,6 +102,8 @@ public final class Constants {
     public static final String SP_VOICE_ASSISTANT_PIPELINE_ID = "voiceAssistantPipelineId";
     // voice through the paired controller over the v1 websocket
     public static final String SP_HA_VOICE_ENABLED = "haVoiceEnabled";
+    // version code the switch to the integration was last offered for
+    public static final String SP_DEPRECATED_MIGRATION_PROMPTED = "deprecatedMigrationPrompted";
     public static final String SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS = "voiceAssistantMaxRecordSeconds";
     public static final String SP_VOICE_WAKE_ENABLED = "voiceWakeEnabled";
     public static final String SP_VOICE_WAKE_MODEL_NAME = "voiceWakeModelName";

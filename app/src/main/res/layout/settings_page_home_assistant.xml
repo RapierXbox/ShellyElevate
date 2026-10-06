@@ -6,11 +6,54 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
+    <!-- ─────────────── Shelly Elevate integration ─────────────── -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="@string/integration_header"
+        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
+    <TextView
+        android:id="@+id/integrationStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="16sp"
+        tools:text="@string/integration_not_paired" />
+
+    <!-- one row per paired controller built in IntegrationSettingsSection -->
+    <LinearLayout
+        android:id="@+id/integrationClients"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:orientation="vertical" />
+
+    <TextView
+        android:id="@+id/integrationFingerprint"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:alpha="0.6"
+        android:fontFamily="monospace"
+        android:textIsSelectable="true"
+        android:textSize="12sp"
+        tools:text="Certificate SHA-256 ab12cd34" />
+
+    <!-- ─────────────── MQTT ─────────────── -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="32dp"
+        android:text="@string/mqtt_header"
+        android:textAppearance="?attr/textAppearanceTitleMedium" />
+
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/mqttEnabled"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="8dp"
         android:text="@string/mqtt"
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
