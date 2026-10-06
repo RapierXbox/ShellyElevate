@@ -10,6 +10,10 @@ on:
         description: "Publish as a pre-release (only devices with pre-releases enabled pick it up)"
         type: boolean
         default: false
+      version:
+        description: "Version like 3.26279.2140. Empty uses the runner clock in UTC, which can sort below a tag made in local time"
+        type: string
+        required: false
 
 permissions:
   contents: write
@@ -72,6 +76,9 @@ jobs:
         run: |
           if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          elif [ -n "${{ inputs.version }}" ]; then
+            VERSION="${{ inputs.version }}"
+            VERSION="${VERSION#v}"
           else
             # manual runs use the gradle date scheme
             VERSION="3.$(date +%y%j).$(date +%H%M)"
