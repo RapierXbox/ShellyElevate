@@ -11,6 +11,8 @@ class FluidMotionTest {
         // uikit normal deceleration throws about half a second worth of the release velocity
         assertEquals(499f, FluidMotion.project(1000f), 1f)
         assertEquals(-998f, FluidMotion.project(-2000f), 1f)
+        // paging deceleration throws only a tenth of a second so a flick cannot skip pages
+        assertEquals(99f, FluidMotion.project(1000f, FluidMotion.DECELERATION_FAST), 1f)
     }
 
     @Test

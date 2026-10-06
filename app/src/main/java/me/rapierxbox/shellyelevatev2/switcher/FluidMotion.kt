@@ -12,6 +12,8 @@ object FluidMotion {
 
     // uiscrollview normal deceleration per millisecond. the thrown distance converges to v * 0.499s
     const val DECELERATION_NORMAL = 0.998f
+    // uiscrollview fast deceleration used for paging. the thrown distance converges to v * 0.099s
+    const val DECELERATION_FAST = 0.99f
 
     // spring stiffness for a unit mass that settles in roughly the given response time in seconds
     fun stiffness(responseSeconds: Float): Float {

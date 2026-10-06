@@ -46,13 +46,15 @@ class SpringPager @JvmOverloads constructor(
     private val keepVelocity = 300f * resources.displayMetrics.density
     // a dismissed card never leaves slower than this
     private val flyVelocity = 1400f * resources.displayMetrics.density
+    // a sideways flick this fast turns the page even after a short drag
+    private val pageFlingVelocity = 300f * resources.displayMetrics.density
 
     // fractional index of the page in the middle
     private var position = 0f
     private var target = 0
     private val positionHolder = FloatValueHolder()
     private val positionSpring = SpringAnimation(positionHolder).apply {
-        spring = SpringForce().setStiffness(STIFFNESS_PAGE).setDampingRatio(DAMPING_PAGE)
+        spring = SpringForce().setStiffness(STIFFNESS_SETTLE).setDampingRatio(DAMPING_SETTLE)
         addUpdateListener { _, value, _ ->
             position = value
             layoutPages()
@@ -328,11 +330,15 @@ class SpringPager @JvmOverloads constructor(
         when (drag) {
             Drag.PAGES -> {
                 val start = startPosition.roundToInt()
-                // the throw is projected with scroll view deceleration so a hard flick can pass several pages
-                // and the spring starts at the finger velocity so the hand off has no jolt
-                val projected = position - FluidMotion.project(vx) / stride
-                val target = projected.roundToInt().coerceIn(start - MAX_PAGES_PER_FLING, start + MAX_PAGES_PER_FLING)
-                animateTo(target, -vx / stride)
+                // paging deceleration keeps a throw short so one swipe moves one page and never skips an app
+                val projected = position - FluidMotion.project(vx, FluidMotion.DECELERATION_FAST) / stride
+                var target = projected.roundToInt()
+                // a clear flick still moves a page even when the finger travelled only a little
+                if (target == start && abs(vx) > pageFlingVelocity) target = if (vx < 0f) start + 1 else start - 1
+                target = target.coerceIn(start - 1, start + 1)
+                // the spring takes over the finger speed but capped so the landing stays soft
+                val handoff = (-vx / stride).coerceIn(-MAX_HANDOFF_VELOCITY, MAX_HANDOFF_VELOCITY)
+                animateTo(target, handoff)
             }
             Drag.DISMISS -> {
                 val lift = dismissing
@@ -486,7 +492,12 @@ class SpringPager @JvmOverloads constructor(
 
     // tuned by response time and bounce like uikit springs instead of raw stiffness numbers
     private companion object {
-        // pages settle in about a third of a second with a hint of overshoot
+        // pages land in a bit under half a second and barely overshoot
+        val STIFFNESS_SETTLE = FluidMotion.stiffness(0.45f)
+        const val DAMPING_SETTLE = 0.92f
+        // fastest hand off from the finger in pages per second
+        const val MAX_HANDOFF_VELOCITY = 3f
+        // pages next to a dismissed card close the gap in about a third of a second
         val STIFFNESS_PAGE = FluidMotion.stiffness(0.34f)
         const val DAMPING_PAGE = 0.86f
         // a card let go before the dismiss point snaps home with a small bounce
@@ -494,7 +505,6 @@ class SpringPager @JvmOverloads constructor(
         const val DAMPING_RETURN = 0.75f
         // a dismissed card leaves in about a fifth of a second without bouncing
         val STIFFNESS_FLY = FluidMotion.stiffness(0.4f)
-        const val MAX_PAGES_PER_FLING = 4
         // share of the page height a card must be lifted to go when let go slowly
         const val DISMISS_FRACTION = 0.35f
         // how far sideways a swipe up may lean and still lift the card
