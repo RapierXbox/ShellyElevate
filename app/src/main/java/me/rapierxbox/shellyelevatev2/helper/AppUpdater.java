@@ -265,11 +265,11 @@ public final class AppUpdater {
                 String tag = release.optString("tag_name", "");
                 String version = tag.startsWith("v") ? tag.substring(1) : tag;
                 String apkUrl = pickApkUrl(release.optJSONArray("assets"));
-                if (version.isEmpty() || apkUrl == null || parse(version) == null) continue;
-                // github sorts by creation date so compare versions to be safe
-                if (best == null || isNewer(best.versionName, version)) {
-                    best = new ReleaseInfo(version, apkUrl, prerelease);
-                }
+                if (apkUrl == null || !isCurrentScheme(version)) continue;
+                // github lists the newest release first. old tags with a broken version format
+                // would otherwise look newer than everything
+                best = new ReleaseInfo(version, apkUrl, prerelease);
+                break;
             }
             return best;
         } catch (JSONException e) {
@@ -302,6 +302,11 @@ public final class AppUpdater {
             if (r[i] != l[i]) return r[i] > l[i];
         }
         return false;
+    }
+
+    // 3.YYDDD.HHMM exactly. early tags like 3.2026111.1918 used other widths
+    static boolean isCurrentScheme(String version) {
+        return version != null && version.matches("3\\.\\d{5}\\.\\d{4}");
     }
 
     private static int[] parse(String version) {
