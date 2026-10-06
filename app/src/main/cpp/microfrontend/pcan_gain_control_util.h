@@ -15,7 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_UTIL_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_PCAN_GAIN_CONTROL_UTIL_H_
 
-#include "tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control.h"
+#include "pcan_gain_control.h"
 
 #define kWideDynamicFunctionBits 32
 #define kWideDynamicFunctionLUTSize (4 * kWideDynamicFunctionBits - 3)

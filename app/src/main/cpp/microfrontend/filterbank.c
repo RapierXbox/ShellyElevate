@@ -12,11 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/experimental/microfrontend/lib/filterbank.h"
+#include "filterbank.h"
 
 #include <string.h>
 
-#include "tensorflow/lite/experimental/microfrontend/lib/bits.h"
+#include "bits.h"
 
 void FilterbankConvertFftComplexToEnergy(struct FilterbankState* state,
                                          struct complex_int16_t* fft_output,

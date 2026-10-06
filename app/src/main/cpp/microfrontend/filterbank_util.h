@@ -15,7 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_UTIL_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FILTERBANK_UTIL_H_
 
-#include "tensorflow/lite/experimental/microfrontend/lib/filterbank.h"
+#include "filterbank.h"
 
 #ifdef __cplusplus
 extern "C" {

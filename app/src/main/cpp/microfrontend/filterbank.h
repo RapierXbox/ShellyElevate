@@ -18,7 +18,7 @@ limitations under the License.
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "tensorflow/lite/experimental/microfrontend/lib/fft.h"
+#include "fft.h"
 
 #define kFilterbankBits 12
 

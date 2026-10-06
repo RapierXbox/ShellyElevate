@@ -15,7 +15,7 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_UTIL_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_NOISE_REDUCTION_UTIL_H_
 
-#include "tensorflow/lite/experimental/microfrontend/lib/noise_reduction.h"
+#include "noise_reduction.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -12,11 +12,11 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/experimental/microfrontend/lib/fft.h"
+#include "fft.h"
 
 #include <string.h>
 
-#include "tensorflow/lite/experimental/microfrontend/lib/kiss_fft_int16.h"
+#include "kiss_fft_int16.h"
 
 void FftCompute(struct FftState* state, const int16_t* input,
                 int input_scale_shift) {

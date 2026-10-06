@@ -6,8 +6,7 @@ add_library(shellyinput SHARED shellyinput.cpp)
 target_link_libraries(shellyinput android log)
 
 # wake word mel frontend on top of the vendored tflm microfrontend
-set(TFLM_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/tflm)
-set(MFE_DIR ${TFLM_ROOT}/tensorflow/lite/experimental/microfrontend/lib)
+set(MFE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/microfrontend)
 
 add_library(melfrontend SHARED
     mel_jni.cpp
@@ -30,19 +29,12 @@ add_library(melfrontend SHARED
 
     # vendored kissfft
     ${MFE_DIR}/kiss_fft.c
-    ${MFE_DIR}/tools/kiss_fftr.c
+    ${MFE_DIR}/kiss_fftr.c
 )
 
 # kissfft must be built with 16 bit fixed point butterflies and fft.cc
 # reaches the kiss_fftr symbols through the kissfft_fixed16 namespace alias
 target_compile_definitions(melfrontend PRIVATE FIXED_POINT=16)
-
-# the tflm root lets sources use their upstream include paths verbatim
-target_include_directories(melfrontend PRIVATE
-    ${TFLM_ROOT}
-    ${MFE_DIR}
-    ${MFE_DIR}/tools
-)
 
 # the vendored c sources trip these harmless warnings
 target_compile_options(melfrontend PRIVATE

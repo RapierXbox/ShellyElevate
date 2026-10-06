@@ -7,8 +7,8 @@
 #include <vector>
 
 extern "C" {
-#include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
-#include "tensorflow/lite/experimental/microfrontend/lib/frontend_util.h"
+#include "microfrontend/frontend.h"
+#include "microfrontend/frontend_util.h"
 }
 
 #define TAG "MelJni"
@@ -45,7 +45,6 @@ struct Instance {
     // reused across feed calls so steady state feeding does not allocate
     std::vector<int16_t> samples;
     std::vector<jbyte> out_bytes;
-    std::vector<jshort> out_shorts;
 };
 
 void initConfig(FrontendConfig& cfg) {
@@ -74,16 +73,10 @@ jbyte quantizeInt8(uint16_t value) {
     return static_cast<jbyte>(v);
 }
 
-jshort passThrough(uint16_t value) {
-    return static_cast<jshort>(value);
-}
-
 // copies the little endian pcm16 bytes in and runs the frontend over them
-// writing one converted row per 10 ms step into out. returns the row count
+// writing one int8 row per 10 ms step into out_bytes. returns the row count
 // or -1 when the java arguments are invalid and an exception is pending
-template <typename T, typename Convert>
-int processPcm(JNIEnv* env, Instance* inst, jbyteArray pcm, jint pcmByteLen,
-               std::vector<T>& out, jint outCapacity, Convert convert) {
+int processPcm(JNIEnv* env, Instance* inst, jbyteArray pcm, jint pcmByteLen, jint outCapacity) {
     if (pcmByteLen <= 0 || (pcmByteLen & 1) != 0) return 0;
     const jsize sample_count = pcmByteLen / 2;
 
@@ -95,6 +88,7 @@ int processPcm(JNIEnv* env, Instance* inst, jbyteArray pcm, jint pcmByteLen,
 
     // compute into a member buffer then copy out once so no jni critical
     // section is held across the dsp loop
+    std::vector<jbyte>& out = inst->out_bytes;
     out.resize(outCapacity > 0 ? static_cast<size_t>(outCapacity) : 0);
 
     int rows_written = 0;
@@ -115,8 +109,8 @@ int processPcm(JNIEnv* env, Instance* inst, jbyteArray pcm, jint pcmByteLen,
             break;
         }
 
-        T* row = out.data() + rows_written * PREPROCESSOR_FEATURE_SIZE;
-        for (size_t i = 0; i < frame.size; ++i) row[i] = convert(frame.values[i]);
+        jbyte* row = out.data() + rows_written * PREPROCESSOR_FEATURE_SIZE;
+        for (size_t i = 0; i < frame.size; ++i) row[i] = quantizeInt8(frame.values[i]);
         ++rows_written;
     }
     return rows_written;
@@ -166,23 +160,8 @@ Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedInt8(
     auto* inst = reinterpret_cast<Instance*>(handle);
     if (!inst) return -1;
 
-    int rows = processPcm(env, inst, pcm, pcmByteLen, inst->out_bytes, outCapacityBytes, quantizeInt8);
+    int rows = processPcm(env, inst, pcm, pcmByteLen, outCapacityBytes);
     if (rows > 0)
         env->SetByteArrayRegion(outInt8Buffer, 0, rows * PREPROCESSOR_FEATURE_SIZE, inst->out_bytes.data());
-    return rows;
-}
-
-// raw uint16 features before quantization for diagnostics and unused by the detector
-extern "C" JNIEXPORT jint JNICALL
-Java_me_rapierxbox_shellyelevatev2_voice_NativeMelExtractor_nativeFeedUint16(
-        JNIEnv* env, jclass /*clazz*/, jlong handle,
-        jbyteArray pcm, jint pcmByteLen,
-        jshortArray outU16Buffer, jint outCapacityShorts) {
-    auto* inst = reinterpret_cast<Instance*>(handle);
-    if (!inst) return -1;
-
-    int rows = processPcm(env, inst, pcm, pcmByteLen, inst->out_shorts, outCapacityShorts, passThrough);
-    if (rows > 0)
-        env->SetShortArrayRegion(outU16Buffer, 0, rows * PREPROCESSOR_FEATURE_SIZE, inst->out_shorts.data());
     return rows;
 }

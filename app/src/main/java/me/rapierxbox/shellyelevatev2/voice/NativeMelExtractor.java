@@ -74,7 +74,4 @@ public final class NativeMelExtractor {
     private static native void nativeReset(long handle);
     private static native int nativeFeedInt8(long handle, byte[] pcm, int pcmByteLen,
                                              byte[] outInt8Buffer, int outCapacityBytes);
-    // raw uint16 features for diagnostics and not used by the detector
-    private static native int nativeFeedUint16(long handle, byte[] pcm, int pcmByteLen,
-                                               short[] outU16Buffer, int outCapacityShorts);
 }

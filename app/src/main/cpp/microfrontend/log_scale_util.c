@@ -12,23 +12,16 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
+#include "log_scale_util.h"
 
-#include "tensorflow/lite/experimental/microfrontend/lib/fft.h"
+void LogScaleFillConfigWithDefaults(struct LogScaleConfig* config) {
+  config->enable_log = 1;
+  config->scale_shift = 6;
+}
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-// Prepares and FFT for the given input size.
-int FftPopulateState(struct FftState* state, size_t input_size);
-
-// Frees any allocated buffers.
-void FftFreeStateContents(struct FftState* state);
-
-#ifdef __cplusplus
-}  // extern "C"
-#endif
-
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
+int LogScalePopulateState(const struct LogScaleConfig* config,
+                          struct LogScaleState* state) {
+  state->enable_log = config->enable_log;
+  state->scale_shift = config->scale_shift;
+  return 1;
+}

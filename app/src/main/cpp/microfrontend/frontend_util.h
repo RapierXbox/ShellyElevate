@@ -15,13 +15,13 @@ limitations under the License.
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_UTIL_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FRONTEND_UTIL_H_
 
-#include "tensorflow/lite/experimental/microfrontend/lib/fft_util.h"
-#include "tensorflow/lite/experimental/microfrontend/lib/filterbank_util.h"
-#include "tensorflow/lite/experimental/microfrontend/lib/frontend.h"
-#include "tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h"
-#include "tensorflow/lite/experimental/microfrontend/lib/noise_reduction_util.h"
-#include "tensorflow/lite/experimental/microfrontend/lib/pcan_gain_control_util.h"
-#include "tensorflow/lite/experimental/microfrontend/lib/window_util.h"
+#include "fft_util.h"
+#include "filterbank_util.h"
+#include "frontend.h"
+#include "log_scale_util.h"
+#include "noise_reduction_util.h"
+#include "pcan_gain_control_util.h"
+#include "window_util.h"
 
 #ifdef __cplusplus
 extern "C" {

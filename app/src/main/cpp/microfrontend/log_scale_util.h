@@ -12,16 +12,34 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/experimental/microfrontend/lib/log_scale_util.h"
+#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
+#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
 
-void LogScaleFillConfigWithDefaults(struct LogScaleConfig* config) {
-  config->enable_log = 1;
-  config->scale_shift = 6;
-}
+#include <stdint.h>
+#include <stdlib.h>
 
+#include "log_scale.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+struct LogScaleConfig {
+  // set to false (0) to disable this module
+  int enable_log;
+  // scale results by 2^(scale_shift)
+  int scale_shift;
+};
+
+// Populates the LogScaleConfig with "sane" default values.
+void LogScaleFillConfigWithDefaults(struct LogScaleConfig* config);
+
+// Allocates any buffers.
 int LogScalePopulateState(const struct LogScaleConfig* config,
-                          struct LogScaleState* state) {
-  state->enable_log = config->enable_log;
-  state->scale_shift = config->scale_shift;
-  return 1;
-}
+                          struct LogScaleState* state);
+
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
+#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_

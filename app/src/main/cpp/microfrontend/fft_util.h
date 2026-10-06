@@ -12,34 +12,23 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
+#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
+#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_
 
-#include "tensorflow/lite/experimental/microfrontend/lib/window.h"
+#include "fft.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct WindowConfig {
-  // length of window frame in milliseconds
-  size_t size_ms;
-  // length of step for next frame in milliseconds
-  size_t step_size_ms;
-};
-
-// Populates the WindowConfig with "sane" default values.
-void WindowFillConfigWithDefaults(struct WindowConfig* config);
-
-// Allocates any buffers.
-int WindowPopulateState(const struct WindowConfig* config,
-                        struct WindowState* state, int sample_rate);
+// Prepares and FFT for the given input size.
+int FftPopulateState(struct FftState* state, size_t input_size);
 
 // Frees any allocated buffers.
-void WindowFreeStateContents(struct WindowState* state);
+void FftFreeStateContents(struct FftState* state);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
+#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_FFT_UTIL_H_

@@ -7,15 +7,13 @@
 #ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_INT16_H_
 #define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_KISS_FFT_INT16_H_
 
-#include "tensorflow/lite/experimental/microfrontend/lib/kiss_fft_common.h"
-
 #ifndef FIXED_POINT
 #define FIXED_POINT 16
 #endif
 
 extern "C" {
 #include "kiss_fft.h"
-#include "tools/kiss_fftr.h"
+#include "kiss_fftr.h"
 }
 
 namespace kissfft_fixed16 {

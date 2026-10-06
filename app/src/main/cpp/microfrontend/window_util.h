@@ -12,34 +12,34 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
-#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
+#ifndef TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
+#define TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_
 
-#include <stdint.h>
-#include <stdlib.h>
-
-#include "tensorflow/lite/experimental/microfrontend/lib/log_scale.h"
+#include "window.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-struct LogScaleConfig {
-  // set to false (0) to disable this module
-  int enable_log;
-  // scale results by 2^(scale_shift)
-  int scale_shift;
+struct WindowConfig {
+  // length of window frame in milliseconds
+  size_t size_ms;
+  // length of step for next frame in milliseconds
+  size_t step_size_ms;
 };
 
-// Populates the LogScaleConfig with "sane" default values.
-void LogScaleFillConfigWithDefaults(struct LogScaleConfig* config);
+// Populates the WindowConfig with "sane" default values.
+void WindowFillConfigWithDefaults(struct WindowConfig* config);
 
 // Allocates any buffers.
-int LogScalePopulateState(const struct LogScaleConfig* config,
-                          struct LogScaleState* state);
+int WindowPopulateState(const struct WindowConfig* config,
+                        struct WindowState* state, int sample_rate);
+
+// Frees any allocated buffers.
+void WindowFreeStateContents(struct WindowState* state);
 
 #ifdef __cplusplus
 }  // extern "C"
 #endif
 
-#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_LOG_SCALE_UTIL_H_
+#endif  // TENSORFLOW_LITE_EXPERIMENTAL_MICROFRONTEND_LIB_WINDOW_UTIL_H_

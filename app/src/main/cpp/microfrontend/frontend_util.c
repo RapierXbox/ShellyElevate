@@ -12,12 +12,12 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/experimental/microfrontend/lib/frontend_util.h"
+#include "frontend_util.h"
 
 #include <stdio.h>
 #include <string.h>
 
-#include "tensorflow/lite/experimental/microfrontend/lib/bits.h"
+#include "bits.h"
 
 void FrontendFillConfigWithDefaults(struct FrontendConfig* config) {
   WindowFillConfigWithDefaults(&config->window);

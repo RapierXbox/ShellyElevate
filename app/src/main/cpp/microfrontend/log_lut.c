@@ -12,7 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "tensorflow/lite/experimental/microfrontend/lib/log_lut.h"
+#include "log_lut.h"
 const uint16_t kLogLut[]
 #ifndef _MSC_VER
     __attribute__((aligned(4)))
