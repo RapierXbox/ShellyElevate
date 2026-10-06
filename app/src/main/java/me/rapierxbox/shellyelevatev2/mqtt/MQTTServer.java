@@ -43,6 +43,7 @@ import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
+import me.rapierxbox.shellyelevatev2.voice.VoiceEngine;
 
 public class MQTTServer {
     private static final String TAG = "MQTTServer";
@@ -783,12 +784,12 @@ public class MQTTServer {
     }
 
     public void publishVoiceState() {
-        if (mVoiceAssistantManager == null) return;
-        if (!mVoiceAssistantManager.isEnabled() && !mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_ENABLED, false)) return;
+        if (mVoiceEngine == null) return;
+        if (!mVoiceEngine.isEnabled() && !VoiceEngine.isConfigured()) return;
         publishInternal(parseTopic(MQTT_TOPIC_VOICE_STATUS),
-                mVoiceAssistantManager.getPublishedStatus(), 1, shouldRetainState());
+                mVoiceEngine.getPublishedStatus(), 1, shouldRetainState());
         publishInternal(parseTopic(MQTT_TOPIC_VOICE_MUTE_STATE),
-                mVoiceAssistantManager.isMuted() ? "ON" : "OFF", 1, shouldRetainState());
+                mVoiceEngine.isMuted() ? "ON" : "OFF", 1, shouldRetainState());
     }
 
     public void publishNightModeState() {

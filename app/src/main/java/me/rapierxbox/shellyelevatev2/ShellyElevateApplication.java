@@ -50,7 +50,7 @@ import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 import me.rapierxbox.shellyelevatev2.settings.SettingsChangeTracker;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.switcher.AppCatalog;
-import me.rapierxbox.shellyelevatev2.voice.VoiceAssistantManager;
+import me.rapierxbox.shellyelevatev2.voice.VoiceEngine;
 
 public class ShellyElevateApplication extends Application {
     private static final String TAG = "ShellyElevateApplication";
@@ -76,7 +76,7 @@ public class ShellyElevateApplication extends Application {
     public static ScreenSaverManager mScreenSaverManager;
     public static ScreenManager mScreenManager;
     public static NightModeManager mNightModeManager;
-    public static VoiceAssistantManager mVoiceAssistantManager;
+    public static VoiceEngine mVoiceEngine;
     public static PowerOptimizer mPowerOptimizer;
 
     // application context only so holding it statically does not leak an activity
@@ -179,7 +179,7 @@ public class ShellyElevateApplication extends Application {
         MediaCommands.register();
 
         mMQTTServer = new MQTTServer();
-        mVoiceAssistantManager = new VoiceAssistantManager();
+        mVoiceEngine = new VoiceEngine();
         applyEsphomeProxySetting();
         BleChannel.start(this);
         mPowerOptimizer = new PowerOptimizer(this);
@@ -403,7 +403,7 @@ public class ShellyElevateApplication extends Application {
 
         if (mMQTTServer != null) mMQTTServer.onDestroy();
         StesProtocolHandler.close();
-        if (mVoiceAssistantManager != null) mVoiceAssistantManager.onDestroy();
+        if (mVoiceEngine != null) mVoiceEngine.onDestroy();
         synchronized (this) {
             if (esphomeProxyServer != null) {
                 esphomeProxyServer.onDestroy();

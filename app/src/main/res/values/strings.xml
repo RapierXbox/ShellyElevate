@@ -206,6 +206,9 @@
     <string name="voice_wake_sensitivity">Detection sensitivity</string>
     <string name="voice_score_bar">Show wake word score bar</string>
     <string name="voice_wake_experimental_models">Show experimental community models</string>
+    <string name="voice_ha_not_connected">Home Assistant not connected</string>
+    <string name="voice_timer_done">%1$s done</string>
+    <string name="voice_timer_default_name">Timer</string>
     <string name="voice_wake_model_refresh">Refresh model list</string>
     <string name="voice_wake_model_fetch_failed">Could not fetch model list from GitHub</string>
     <string name="voice_wake_model_downloaded">Model \'%1$s\' downloaded</string>

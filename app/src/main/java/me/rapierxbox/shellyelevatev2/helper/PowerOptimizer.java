@@ -9,7 +9,7 @@ import static me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mMQTTServer;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceAssistantManager;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceEngine;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -109,7 +109,7 @@ public class PowerOptimizer extends BroadcastReceiver {
         if (level >= SLEEP_OPT_AGGRESSIVE) {
             if (mMQTTServer != null) mMQTTServer.setLowPowerMode(true);
             BleScanner.get().setLowPowerMode(true);
-            if (mVoiceAssistantManager != null) mVoiceAssistantManager.setLowPowerMode(true);
+            if (mVoiceEngine != null) mVoiceEngine.setLowPowerMode(true);
         }
     }
 
@@ -123,7 +123,7 @@ public class PowerOptimizer extends BroadcastReceiver {
 
         // undone in reverse order of enterSleep
         if (level >= SLEEP_OPT_AGGRESSIVE) {
-            if (mVoiceAssistantManager != null) mVoiceAssistantManager.setLowPowerMode(false);
+            if (mVoiceEngine != null) mVoiceEngine.setLowPowerMode(false);
             BleScanner.get().setLowPowerMode(false);
             if (mMQTTServer != null) mMQTTServer.setLowPowerMode(false);
         }

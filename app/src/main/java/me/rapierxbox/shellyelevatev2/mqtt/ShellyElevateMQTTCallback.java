@@ -5,7 +5,7 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicatio
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mNightModeManager;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceAssistantManager;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mVoiceEngine;
 
 import android.content.Intent;
 import android.util.Log;
@@ -67,11 +67,11 @@ public class ShellyElevateMQTTCallback {
                 handleReboot();
                 break;
             case MQTT_TOPIC_VOICE_TRIGGER:
-                if (mVoiceAssistantManager != null) mVoiceAssistantManager.trigger();
+                if (mVoiceEngine != null) mVoiceEngine.trigger();
                 break;
             case MQTT_TOPIC_VOICE_MUTE_COMMAND:
-                if (mVoiceAssistantManager != null) {
-                    mVoiceAssistantManager.setMuted("ON".equalsIgnoreCase(payload.trim()));
+                if (mVoiceEngine != null) {
+                    mVoiceEngine.setMuted("ON".equalsIgnoreCase(payload.trim()));
                 }
                 break;
             case MQTT_TOPIC_SCREEN_BRIGHTNESS_COMMAND:

@@ -1,4 +1,4 @@
-package me.rapierxbox.shellyelevatev2.voice;
+package me.rapierxbox.shellyelevatev2.deprecated.satellite;
 
 import android.net.Uri;
 import android.util.Log;
@@ -22,6 +22,11 @@ import okio.ByteString;
 // run-start carries stt_binary_handler_id then we stream pcm as binary frames
 // prefixed with that handler id byte; a frame with only the handler id byte ends audio
 // server replies with stt-end intent-end tts-end and run-end events
+/**
+ * @deprecated since 3.26279, replaced by the Shelly Elevate Home Assistant integration (haVoiceEnabled),
+ * removal planned in a later release
+ */
+@Deprecated
 public class HAVoicePipeline {
     private static final String TAG = "HAVoicePipeline";
 
