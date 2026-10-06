@@ -83,9 +83,12 @@ public final class BleChannel {
     private static void setListening(boolean want) {
         if (want == listening) return;
         listening = want;
-        // the scan stops at once when nothing else listens
         if (want) {
             BleScanner.get().addListener(scanListener);
+        } else if (mSharedPreferences.getBoolean(SP_BLE_SCANNER_ENABLED, false)) {
+            // only the controller went away. a quick reconnect then reuses the scan
+            // instead of spending a start under the os scan throttle
+            BleScanner.get().removeListenerKeepWarm(scanListener);
         } else {
             BleScanner.get().removeListener(scanListener);
         }
