@@ -273,6 +273,18 @@ public class SettingVisibilityTest {
     }
 
     @Test
+    public void mqttSettingsNeedMqtt() {
+        List<String> children = Arrays.asList(Constants.SP_MQTT_BROKER, Constants.SP_MQTT_CLIENTID,
+                Constants.SP_PUBLISH_THERMAL_SENSORS);
+        // unset falls back to the default which is off
+        for (String key : children) assertFalse(key, visible(key));
+        values.put(Constants.SP_MQTT_ENABLED, true);
+        for (String key : children) assertTrue(key, visible(key));
+        values.put(Constants.SP_MQTT_ENABLED, false);
+        for (String key : children) assertFalse(key, visible(key));
+    }
+
+    @Test
     public void voiceNeedsMicrophoneAndIntegrationApi() {
         values.put(Constants.SP_HA_VOICE_ENABLED, true);
         assertFalse(visible(Constants.SP_HA_VOICE_ENABLED));

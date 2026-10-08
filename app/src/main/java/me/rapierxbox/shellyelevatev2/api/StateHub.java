@@ -49,6 +49,7 @@ import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.display.webview.WebViewDisplayModule;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
+import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 // the flat state of protocol-v1 section 5 and the state_delta push
@@ -67,6 +68,8 @@ final class StateHub {
 
     private final Context context;
     private final Pusher pusher;
+    // without a light sensor there is no lux and automatic brightness never applies
+    private final boolean hasLightSensor;
     private final AtomicBoolean pokeScheduled = new AtomicBoolean(false);
     private final Map<String, Object> sensorCache = new HashMap<>();
     private final Map<String, Object> slowCache = new HashMap<>();
@@ -79,6 +82,7 @@ final class StateHub {
     StateHub(Context context, Pusher pusher) {
         this.context = context.getApplicationContext();
         this.pusher = pusher;
+        hasLightSensor = DeviceCapabilities.hasLightSensor(this.context);
     }
 
     synchronized void start() {
@@ -257,7 +261,7 @@ final class StateHub {
         }
 
         if (mDeviceSensorManager != null) {
-            state.put("lux", round1(mDeviceSensorManager.getLastMeasuredLux()));
+            if (hasLightSensor) state.put("lux", round1(mDeviceSensorManager.getLastMeasuredLux()));
             if (device.hasProximitySensor) {
                 float distance = mDeviceSensorManager.getLastMeasuredDistance();
                 float max = mDeviceSensorManager.getMaxProximitySensorValue();
@@ -282,7 +286,7 @@ final class StateHub {
         boolean saverRunning = mScreenSaverManager != null && mScreenSaverManager.isScreenSaverRunning();
         state.put("screen.on", !saverRunning);
         if (mDeviceHelper != null) state.put("screen.brightness", mDeviceHelper.getScreenBrightness());
-        state.put("screen.auto_brightness", mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true));
+        state.put("screen.auto_brightness", hasLightSensor && mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true));
         state.put("night_mode", mNightModeManager != null && mNightModeManager.isEnabled());
         // the page on screen and the configured dashboard until the webview loaded one
         String shownUrl = DISPLAY_MODULE_WEBVIEW.equals(DisplayModuleRegistry.activeId(mSharedPreferences))

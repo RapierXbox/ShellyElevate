@@ -122,7 +122,9 @@ public final class BleScanner {
 
     private BleScanner() {}
 
+    // checked on every read since a grant or the location switch changes it without a broadcast
     public String getScanBlockedReason() {
+        refreshScanBlockedReason();
         return scanBlockedReason;
     }
 
@@ -245,6 +247,11 @@ public final class BleScanner {
     // api 23 to 30 deliver no scan results without location permission and location mode on
     // the scan still starts and stays silent so the reason is logged and reported to the controller
     private void updateScanBlockedReason() {
+        if (refreshScanBlockedReason()) ApiHub.stateChanged();
+    }
+
+    // true when the reason changed
+    private boolean refreshScanBlockedReason() {
         String reason = null;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
             Context ctx = mApplicationContext;
@@ -256,13 +263,13 @@ public final class BleScanner {
                 reason = "location is off";
             }
         }
-        if (Objects.equals(reason, scanBlockedReason)) return;
+        if (Objects.equals(reason, scanBlockedReason)) return false;
         scanBlockedReason = reason;
         if (reason != null) {
             Log.w(TAG, "BLE scan will find nothing: " + reason
                     + ". grant ACCESS_FINE_LOCATION and set location_mode 3 (tools/install-privapp does both)");
         }
-        ApiHub.stateChanged();
+        return true;
     }
 
     // must hold scanLock
@@ -301,6 +308,8 @@ public final class BleScanner {
             synchronized (scanLock) {
                 checkScanHealthLocked();
             }
+            // a reason that went away or came up after the start reaches the controller
+            if (!listeners.isEmpty()) updateScanBlockedReason();
         } catch (RuntimeException e) {
             Log.e(TAG, "scan watchdog failed", e);
         }

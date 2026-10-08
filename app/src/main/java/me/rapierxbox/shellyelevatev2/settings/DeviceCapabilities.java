@@ -42,7 +42,6 @@ public final class DeviceCapabilities {
     // integers and booleans by capability name
     public static Map<String, Object> snapshot(Context context) {
         DeviceModel device = DeviceModel.getReportedDevice();
-        PackageManager pm = context.getPackageManager();
         Map<String, Object> caps = new LinkedHashMap<>();
         // none on unknown hardware since the fallback relay paths are only a guess
         int relays = DeviceModel.apiRelayCount();
@@ -58,13 +57,17 @@ public final class DeviceCapabilities {
         caps.put(HUMIDITY, DeviceHelper.hasTempAndHumSensor());
         caps.put(LUX, hasLightSensor(context));
         caps.put(SPEAKER, true);
-        // some firmware leaves the feature flag out although a mic records fine
-        caps.put(MICROPHONE, pm.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
-                || AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0);
+        caps.put(MICROPHONE, hasMicrophone(context));
         caps.put(BLUETOOTH, BluetoothAdapter.getDefaultAdapter() != null);
         caps.put(SCREENSHOT, true);
         caps.put(SELF_UPDATE, canSelfUpdate(context));
         return Collections.unmodifiableMap(caps);
+    }
+
+    // some firmware leaves the feature flag out although a mic records fine
+    public static boolean hasMicrophone(Context context) {
+        return context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
+                || AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT) > 0;
     }
 
     public static boolean hasLightSensor(Context context) {

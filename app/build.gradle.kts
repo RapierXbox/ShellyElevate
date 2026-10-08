@@ -134,7 +134,7 @@ dependencies {
     implementation(libs.webkit)
     implementation(libs.recyclerview)
     implementation(libs.dynamicanimation)
-    implementation(libs.tensorflow.lite)
+    implementation(libs.litert)
     implementation(libs.serialport)
 
     implementation(platform(libs.okhttpbom))

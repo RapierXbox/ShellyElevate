@@ -247,6 +247,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
     override fun onDestroy() {
         destroyed = true
+        // a later module or webview must not report the page of this one
+        WebViewDisplayModule.shownUrl = null
         unregisterBroadcastReceivers()
         initialLoadJob?.cancel()
         initialLoadJob = null
@@ -366,6 +368,11 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         if (destroyed) return
         // any explicit load makes a pending offline retry obsolete
         cancelRetry()
+        // the old page stops counting as shown once another dashboard is requested
+        if (url != lastRequestedUrl && WebViewDisplayModule.shownUrl != null) {
+            WebViewDisplayModule.shownUrl = null
+            ApiHub.stateChanged()
+        }
         lastRequestedUrl = url
         webView.loadUrl(url)
     }
@@ -653,7 +660,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     }
 
     private fun reportShownUrl(url: String?) {
-        if (destroyed || url.isNullOrEmpty() || url == WebViewDisplayModule.shownUrl) return
+        // the offline fallback is not a page the user configured
+        if (destroyed || url.isNullOrEmpty() || isOfflineUrl(url) || url.startsWith(ASSET_URL_PREFIX)) return
+        if (url == WebViewDisplayModule.shownUrl) return
         WebViewDisplayModule.shownUrl = url
         ApiHub.stateChanged()
     }
@@ -664,7 +673,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         const val TAG = "WebViewContent"
 
         const val OFFLINE_PAGE = "offline.html"
-        const val OFFLINE_URL = "file:///android_asset/$OFFLINE_PAGE"
+        const val ASSET_URL_PREFIX = "file:///android_asset/"
+        const val OFFLINE_URL = "$ASSET_URL_PREFIX$OFFLINE_PAGE"
         const val APP_URL_SCHEME = "shellyelevate:"
 
         const val MAX_PENDING_JS = 50

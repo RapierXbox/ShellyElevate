@@ -161,7 +161,9 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
             if (timer == null || timer.optString("id", "").isEmpty()) {
                 throw ApiHub.CommandException.invalid("timer with id is required");
             }
-            engine.timers().update(event, timer.optString("id"), timer.optString("name", ""),
+            // home assistant sends null for an unnamed timer and optString turns that into "null"
+            String name = timer.isNull("name") ? "" : timer.optString("name", "");
+            engine.timers().update(event, timer.optString("id"), name,
                     timer.optInt("remaining", 0), timer.optBoolean("active", true));
             return null;
         });

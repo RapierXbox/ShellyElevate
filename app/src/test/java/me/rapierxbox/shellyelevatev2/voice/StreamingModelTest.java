@@ -1,8 +1,11 @@
 package me.rapierxbox.shellyelevatev2.voice;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import org.junit.Test;
+import org.tensorflow.lite.DataType;
 
 public class StreamingModelTest {
     private static final float EPS = 1e-6f;
@@ -48,5 +51,26 @@ public class StreamingModelTest {
     public void scoreWindowNeverEmpty() {
         StreamingModel.ScoreWindow window = new StreamingModel.ScoreWindow(0);
         assertEquals(0.3f, window.add(0.3f), EPS);
+    }
+
+    @Test
+    public void checkTensorsAcceptsMicroWakeWordLayouts() {
+        // hey jarvis okay nabu and the vad all look like this
+        assertNull(StreamingModel.checkTensors(new int[]{1, 3, 40}, DataType.INT8, new int[]{1, 1}, DataType.UINT8));
+        assertNull(StreamingModel.checkTensors(new int[]{1, 1, 40, 1}, DataType.FLOAT32, new int[]{1, 2}, DataType.FLOAT32));
+    }
+
+    @Test
+    public void checkTensorsRejectsWhatTheBuffersCannotFeed() {
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 40}, DataType.INT8, new int[]{1, 1}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{2, 3, 40}, DataType.INT8, new int[]{1, 1}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 0, 40}, DataType.INT8, new int[]{1, 1}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 3, 32}, DataType.INT8, new int[]{1, 1}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 3, 40, 2}, DataType.FLOAT32, new int[]{1, 1}, DataType.FLOAT32));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 3, 40}, DataType.INT32, new int[]{1, 1}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 3, 40}, DataType.INT8, new int[]{2, 1}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 3, 40}, DataType.INT8, new int[]{1, 0}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 3, 40}, DataType.INT8, new int[]{}, DataType.UINT8));
+        assertNotNull(StreamingModel.checkTensors(new int[]{1, 3, 40}, DataType.INT8, new int[]{1, 1}, DataType.INT64));
     }
 }

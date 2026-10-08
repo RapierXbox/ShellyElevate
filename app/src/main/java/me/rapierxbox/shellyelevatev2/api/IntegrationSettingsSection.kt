@@ -41,7 +41,8 @@ class IntegrationSettingsSection(
                 }
                 handler.post {
                     if (fragment.view == null) return@post
-                    b.integrationFingerprint.isVisible = fingerprint != null
+                    // the api switch hides the row while the integration is off
+                    b.integrationFingerprint.isVisible = fingerprint != null && b.integrationApiEnabled.isChecked
                     if (fingerprint != null) {
                         // grouped so it can be compared with home assistant by eye
                         b.integrationFingerprint.text = fragment.getString(R.string.integration_fingerprint,

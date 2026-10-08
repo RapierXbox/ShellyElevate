@@ -22,7 +22,7 @@ public final class RemovedSettings {
     public static void clear(SharedPreferences prefs) {
         SharedPreferences.Editor editor = null;
         // users of a removed feature keep the feature through its replacement in the integration
-        // both only stream while a controller is connected so they are always safe to carry over
+        // both only stream to a controller and voice records nothing before the first one connects
         editor = carryOver(prefs, editor, "bluetoothProxyEnabled", "bleScannerEnabled");
         editor = carryOver(prefs, editor, "voiceAssistantEnabled", "haVoiceEnabled");
         for (String key : KEYS) {

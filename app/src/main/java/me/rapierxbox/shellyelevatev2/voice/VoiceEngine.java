@@ -45,6 +45,7 @@ import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.api.ControllerVoiceTransport;
 import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities;
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader;
+import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities;
 
 // mic wake word vad and playback for voice sessions. the transport decides where a session goes
 // state machine: DISABLED -> IDLE -> LISTENING -> PROCESSING -> SPEAKING -> IDLE
@@ -96,6 +97,12 @@ public class VoiceEngine {
     private volatile WakeWordDetector wakeDetector;
     private final Object wakeLock = new Object();
     private volatile String loadedModelName = "";
+    // kept so a detector created later starts in the same mode
+    private volatile boolean lowPowerMode = false;
+    // the detector and the model download wait for the first controller so a display
+    // that only carried voice over from an old version never records on its own
+    private volatile boolean controllerSeen = false;
+    private static volatile Boolean microphonePresent;
 
     private final ScheduledThreadPoolExecutor scheduler = new ScheduledThreadPoolExecutor(2);
     // single thread so settings broadcasts apply in order off the main thread
@@ -125,6 +132,11 @@ public class VoiceEngine {
 
         muted = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_MUTED, false);
         ControllerVoiceTransport.install(this);
+        ApiHub.addControllerListener(connected -> {
+            if (!connected || controllerSeen) return;
+            controllerSeen = true;
+            checkAndApplySettings();
+        });
         // the permission dialog pauses our activity so a resume is where a grant shows up
         ForegroundActivities.INSTANCE.addResumeListener(cls -> {
             onForegroundResumed();
@@ -135,7 +147,7 @@ public class VoiceEngine {
 
     // true when voice is switched on in the settings even if it is not running yet
     public static boolean isConfigured() {
-        return mSharedPreferences.getBoolean(SP_HA_VOICE_ENABLED, false);
+        return desiredMode() != Mode.OFF;
     }
 
     public void checkAndApplySettings() {
@@ -144,8 +156,25 @@ public class VoiceEngine {
         settingsExecutor.execute(this::applySettingsNow);
     }
 
+    // the switch is hidden without the integration api or a microphone so it counts as off then
     private static Mode desiredMode() {
-        return mSharedPreferences.getBoolean(SP_HA_VOICE_ENABLED, false) ? Mode.CONTROLLER : Mode.OFF;
+        if (!mSharedPreferences.getBoolean(SP_HA_VOICE_ENABLED, false)) return Mode.OFF;
+        if (!mSharedPreferences.getBoolean(SP_INTEGRATION_API_ENABLED, true)) return Mode.OFF;
+        return hasMicrophone() ? Mode.CONTROLLER : Mode.OFF;
+    }
+
+    private static boolean hasMicrophone() {
+        Boolean present = microphonePresent;
+        if (present == null) {
+            present = DeviceCapabilities.hasMicrophone(mApplicationContext);
+            microphonePresent = present;
+        }
+        return present;
+    }
+
+    private boolean controllerKnown() {
+        if (!controllerSeen && ApiHub.hasController()) controllerSeen = true;
+        return controllerSeen;
     }
 
     private void applySettingsNow() {
@@ -189,7 +218,7 @@ public class VoiceEngine {
             // checked whenever voice is on since voice.start records as well
             boolean micAllowed = mode == Mode.OFF || checkMicPermission();
 
-            if (!wakeEnabled || muted || mode == Mode.OFF) {
+            if (!wakeEnabled || muted || mode == Mode.OFF || !controllerKnown()) {
                 if (wakeDetector != null) {
                     wakeDetector.onDestroy();
                     wakeDetector = null; loadedModelName = "";
@@ -205,6 +234,7 @@ public class VoiceEngine {
 
             if (wakeDetector == null) {
                 wakeDetector = new WakeWordDetector(mApplicationContext, this::onWakeDetected);
+                wakeDetector.setLowPowerMode(lowPowerMode);
                 loadedModelName = "";
             }
 
@@ -632,6 +662,7 @@ public class VoiceEngine {
     }
 
     public void setLowPowerMode(boolean low) {
+        lowPowerMode = low;
         WakeWordDetector det = wakeDetector;
         if (det != null) det.setLowPowerMode(low);
     }

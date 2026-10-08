@@ -11,7 +11,8 @@ okhttp = "5.4.0"
 webkit = "1.16.0"
 recyclerview = "1.4.0"
 dynamicanimation = "1.0.0"
-tensorflowLite = "2.17.0"
+# 2.x bundles a ruy that survives hotplugged cores (cpuinfo null processors)
+litert = "2.1.6"
 serialport = "2.1.2"
 
 [libraries]
@@ -28,7 +29,7 @@ okhttp = { group = "com.squareup.okhttp3", name = "okhttp" }
 webkit = { group = "androidx.webkit", name = "webkit", version.ref = "webkit" }
 recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 dynamicanimation = { group = "androidx.dynamicanimation", name = "dynamicanimation", version.ref = "dynamicanimation" }
-tensorflow-lite = { group = "org.tensorflow", name = "tensorflow-lite", version.ref = "tensorflowLite" }
+litert = { group = "com.google.ai.edge.litert", name = "litert", version.ref = "litert" }
 serialport = { group = "io.github.xmaihh", name = "serialport", version.ref = "serialport" }
 
 [plugins]

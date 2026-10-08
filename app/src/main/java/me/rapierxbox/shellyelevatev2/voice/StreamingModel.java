@@ -85,18 +85,19 @@ final class StreamingModel {
         this.file = file;
         this.interpreter = interp;
 
+        if (interp.getInputTensorCount() != 1 || interp.getOutputTensorCount() != 1)
+            throw new IllegalArgumentException("expected one input and one output tensor");
         Tensor in = interp.getInputTensor(0);
         Tensor out = interp.getOutputTensor(0);
 
         int[] shape = in.shape();
-        if (shape.length != 3 && shape.length != 4)
-            throw new IllegalArgumentException("unsupported input rank: " + shape.length);
-        nFrames = shape[1];
-        hasChannelDim = shape.length == 4;
-        if (nFrames <= 0) throw new IllegalArgumentException("invalid nFrames=" + nFrames);
-
         DataType inType = in.dataType();
         DataType outType = out.dataType();
+        // a model that does not match the buffers below is refused here and never run
+        String problem = checkTensors(shape, inType, out.shape(), outType);
+        if (problem != null) throw new IllegalArgumentException(file.getName() + ": " + problem);
+        nFrames = shape[1];
+        hasChannelDim = shape.length == 4;
         inputIs8bit = is8bit(inType);
         outputIs8bit = is8bit(outType);
         inputIsUnsigned = inType == DataType.UINT8;
@@ -142,6 +143,28 @@ final class StreamingModel {
                 + " inType=" + inType + " outType=" + outType
                 + " inScale=" + inputScale + " inZP=" + inputZeroPoint
                 + " outScale=" + outputScale + " outZP=" + outputZeroPoint;
+    }
+
+    // why the tensors do not fit the mel frames this class feeds or null when they do
+    // input [1 n 40] or [1 n 40 1] and output [1 k] as f32 int8 or uint8
+    static String checkTensors(int[] in, DataType inType, int[] out, DataType outType) {
+        if (in == null || (in.length != 3 && in.length != 4)) return "unsupported input rank";
+        if (in[0] != 1) return "input batch must be 1";
+        if (in[1] <= 0) return "invalid frame count " + in[1];
+        if (in[2] != N_MELS) return "input needs " + N_MELS + " mel bins but has " + in[2];
+        if (in.length == 4 && in[3] != 1) return "input channel dim must be 1";
+        if (!isSupported(inType)) return "unsupported input type " + inType;
+        if (out == null || out.length == 0) return "output has no shape";
+        if (out[out.length - 1] <= 0) return "output has no classes";
+        int elements = 1;
+        for (int d : out) elements *= d;
+        if (elements != out[out.length - 1]) return "output must be a single row";
+        if (!isSupported(outType)) return "unsupported output type " + outType;
+        return null;
+    }
+
+    private static boolean isSupported(DataType type) {
+        return type == DataType.FLOAT32 || is8bit(type);
     }
 
     private static boolean is8bit(DataType type) {
@@ -301,10 +324,8 @@ final class StreamingModel {
         // plain cpu kernels only (#105)
         // xnnpack aarch32 qs8 gemm segfaults on the 32 bit wall displays
         // (x2 pegasus and gen1 stargate) as soon as a model runs on live audio
-        // nnapi on these socs leaks a thread and memory mappings per inference
-        // until pthread_create fails (~3 min on the x2) and gains nothing here
+        // nnapi leaked a thread per inference on these socs and litert 2 no longer has it
         opts.setUseXNNPACK(false);
-        opts.setUseNNAPI(false);
         return new Interpreter(mapFile(file), opts);
     }
 
