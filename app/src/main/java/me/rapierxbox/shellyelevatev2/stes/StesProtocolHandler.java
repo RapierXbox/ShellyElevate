@@ -11,6 +11,7 @@ import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
+import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.helper.UartHelper;
 
 public class StesProtocolHandler {
@@ -135,6 +136,7 @@ public class StesProtocolHandler {
         byte[] payload = {(byte) (bri >> 8), (byte) (bri & 0xFF), 0, 0, (byte) DEFAULT_GAMMA};
         request(StesCommand.SET_DIMMER, payload, StesProtocolHandler::parseStatus, s -> {
             lastStatus = s;
+            ApiHub.stateChanged();
             if (cb != null) cb.onResult(s);
         }, e -> { if (cb != null) cb.onError(e); });
     }
@@ -146,6 +148,7 @@ public class StesProtocolHandler {
     public static synchronized void getStatus(OnStatusListener cb) {
         request(StesCommand.GET_STATUS, NO_PAYLOAD, StesProtocolHandler::parseStatus, s -> {
             lastStatus = s;
+            ApiHub.stateChanged();
             if (cb != null) cb.onResult(s);
         }, e -> { if (cb != null) cb.onError(e); });
     }
@@ -153,6 +156,7 @@ public class StesProtocolHandler {
     public static synchronized void getPowerMeter(OnPowerListener cb) {
         request(StesCommand.POWER_METER, new byte[]{0}, StesProtocolHandler::parsePowerMeter, p -> {
             lastPower = p;
+            ApiHub.stateChanged();
             if (cb != null) cb.onResult(p);
         }, e -> { if (cb != null) cb.onError(e); });
     }

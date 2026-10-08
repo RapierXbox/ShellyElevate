@@ -33,11 +33,10 @@ final class ApiDiscovery {
         info.setServiceName(id);
         info.setServiceType(SERVICE_TYPE);
         info.setPort(ApiInfo.TLS_PORT);
-        DeviceModel device = DeviceModel.getReportedDevice();
         info.setAttribute("id", id);
         info.setAttribute("mac", ApiInfo.mac());
-        info.setAttribute("model", device.sku);
-        info.setAttribute("codename", device.name());
+        info.setAttribute("model", DeviceModel.apiModel());
+        info.setAttribute("codename", ApiInfo.codename());
         info.setAttribute("name", ApiInfo.name());
         info.setAttribute("fw", BuildConfig.VERSION_NAME);
         info.setAttribute("api", ApiInfo.API_VERSION);

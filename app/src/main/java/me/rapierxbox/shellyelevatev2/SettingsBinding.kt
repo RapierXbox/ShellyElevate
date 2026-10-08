@@ -2,10 +2,12 @@ package me.rapierxbox.shellyelevatev2
 
 import android.content.SharedPreferences
 import android.view.View
+import android.widget.AdapterView
 import android.widget.EditText
 import android.widget.Spinner
 import androidx.core.content.edit
 import androidx.core.view.isVisible
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
 
@@ -43,10 +45,10 @@ private fun SharedPreferences.floatOr(key: String, default: Float): Float = try 
 }
 
 class SwitchPref(
-    private val view: MaterialSwitch,
+    internal val view: MaterialSwitch,
     private val key: String,
     private val default: Boolean,
-    live: ((Boolean) -> Unit)? = null
+    internal val live: ((Boolean) -> Unit)? = null
 ) : ValueBinding {
     init {
         if (live != null) {
@@ -186,16 +188,63 @@ class SpinnerIdPref(
     }
 }
 
-class SettingsBinder(private val prefs: SharedPreferences) {
+// onParentChanged runs whenever a value other rows depend on changes
+class SettingsBinder(private val prefs: SharedPreferences, private val onParentChanged: () -> Unit = {}) {
     private val bindings = mutableListOf<PrefBinding>()
     private val sections = mutableListOf<SettingsSection>()
     private val toggleActions = mutableMapOf<MaterialSwitch, MutableList<(Boolean) -> Unit>>()
+    // only run when the switch flips and not when the page loads
+    private val changeActions = mutableMapOf<MaterialSwitch, MutableList<(Boolean) -> Unit>>()
+    // rows that show only while the schema rules of their setting hold
+    private val rows = linkedMapOf<String, MutableList<View>>()
 
-    operator fun PrefBinding.unaryPlus() { bindings += this }
+    operator fun PrefBinding.unaryPlus() {
+        bindings += this
+        watchLive(this)
+    }
 
     operator fun SettingsSection.unaryPlus() {
         sections += this
         this@SettingsBinder.bindings += bindings
+        bindings.forEach { watchLive(it) }
+    }
+
+    // loadAll replaces the switch listener so a live preview has to run through it
+    private fun watchLive(binding: PrefBinding) {
+        if (binding !is SwitchPref) return
+        val live = binding.live ?: return
+        changeActions.getOrPut(binding.view) { mutableListOf() } += live
+    }
+
+    // views of the setting key that follow its visible_if and requires rules
+    fun row(key: String, vararg views: View) {
+        rows.getOrPut(key) { mutableListOf() } += views
+    }
+
+    fun parent(switch: MaterialSwitch) {
+        changeActions.getOrPut(switch) { mutableListOf() }.add { onParentChanged() }
+    }
+
+    // replaces any item listener of the spinner
+    fun parent(spinner: Spinner) {
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) = onParentChanged()
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+    }
+
+    fun parent(group: MaterialButtonToggleGroup) {
+        group.addOnButtonCheckedListener { _, _, checked -> if (checked) onParentChanged() }
+    }
+
+    // unsaved values of this page by key as a save would write them
+    fun values(): Map<String, Any?> = record().filterValues { it !== RecordingEditor.REMOVED }
+
+    fun applyVisibility(visible: (String) -> Boolean) {
+        for ((key, views) in rows) {
+            val show = visible(key)
+            views.forEach { it.isVisible = show }
+        }
     }
 
     fun visibleWhen(switch: MaterialSwitch, vararg targets: View) {
@@ -220,9 +269,14 @@ class SettingsBinder(private val prefs: SharedPreferences) {
 
     fun loadAll() {
         bindings.forEach { it.load(prefs) }
-        toggleActions.forEach { (switch, actions) ->
+        for (switch in toggleActions.keys + changeActions.keys) {
+            val actions = toggleActions[switch].orEmpty()
+            val changes = changeActions[switch].orEmpty()
             actions.forEach { it(switch.isChecked) }
-            switch.setOnCheckedChangeListener { _, checked -> actions.forEach { it(checked) } }
+            switch.setOnCheckedChangeListener { _, checked ->
+                actions.forEach { it(checked) }
+                changes.forEach { it(checked) }
+            }
         }
         sections.forEach { it.onLoaded() }
         loaded = record()

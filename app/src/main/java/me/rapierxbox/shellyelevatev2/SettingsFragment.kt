@@ -17,7 +17,6 @@ import android.view.MenuItem
 import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
-import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.EditText
 import android.widget.Toast
@@ -44,6 +43,7 @@ import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.*
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader
 import me.rapierxbox.shellyelevatev2.voice.WakeWordDetector
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModel
+import me.rapierxbox.shellyelevatev2.voice.WakeWordModelDownloader
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModelManager
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageAudioBinding
@@ -69,6 +69,9 @@ import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
 import me.rapierxbox.shellyelevatev2.helper.WifiIpConfig
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager
+import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities
+import me.rapierxbox.shellyelevatev2.settings.SettingVisibility
+import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry
 import me.rapierxbox.shellyelevatev2.switcher.AppSwitcherSettings
 import java.io.File
 import java.io.IOException
@@ -110,6 +113,8 @@ class SettingsFragment : Fragment() {
     // the zone list loads in the background and must not be saved before it is there
     private var zonesLoaded = false
     private var menuScrollY = 0
+    // what the requires rules of the settings are checked against
+    private var caps: Map<String, Any> = emptyMap()
 
     override fun onDestroyView() {
         super.onDestroyView()
@@ -178,12 +183,20 @@ class SettingsFragment : Fragment() {
         }, viewLifecycleOwner)
 
         mSharedPreferences.edit { putBoolean(SP_SETTINGS_EVER_SHOWN, true) }
+        caps = DeviceCapabilities.snapshot(requireContext())
         setupCategories()
     }
 
     // ---- categories ----
 
-    private class Category(val row: View, @StringRes val title: Int, val create: (ViewGroup) -> View)
+    // a page whose only content are settings lists them in only so its row hides when none of them applies
+    private class Category(
+        val row: View,
+        @StringRes val title: Int,
+        val create: (ViewGroup) -> View,
+        val only: List<String>? = null
+    )
+    private var categories: List<Category> = emptyList()
 
     // back closes an open category before it leaves settings
     private val categoryBack = object : OnBackPressedCallback(false) {
@@ -192,28 +205,66 @@ class SettingsFragment : Fragment() {
     private var openCategory: View? = null
 
     private fun setupCategories() {
-        val categories = listOf(
+        categories = listOf(
             Category(binding.catDashboardRow, R.string.settings_cat_dashboard, ::createDashboardPage),
             Category(binding.catDisplayRow, R.string.settings_cat_display, ::createDisplayPage),
             Category(binding.catScreenSaverRow, R.string.settings_cat_screensaver, ::createScreenSaverPage),
             Category(binding.catNetworkRow, R.string.settings_cat_network, ::createNetworkPage),
             Category(binding.catControlsRow, R.string.settings_cat_controls, ::createControlsPage),
             Category(binding.catHomeAssistantRow, R.string.settings_cat_home_assistant, ::createHomeAssistantPage),
-            Category(binding.catSensorsRow, R.string.settings_cat_sensors, ::createSensorsPage),
+            Category(binding.catSensorsRow, R.string.settings_cat_sensors, ::createSensorsPage,
+                only = listOf(SP_PUBLISH_THERMAL_SENSORS, SP_DYNAMIC_TEMP_OFFSET_ENABLED)),
             Category(binding.catAudioRow, R.string.settings_cat_audio, ::createAudioPage),
-            Category(binding.catBluetoothRow, R.string.settings_cat_bluetooth, ::createBluetoothPage),
+            Category(binding.catBluetoothRow, R.string.settings_cat_bluetooth, ::createBluetoothPage,
+                only = listOf(SP_BLE_SCANNER_ENABLED)),
             Category(binding.catUpdatesRow, R.string.settings_cat_updates, ::createUpdatesPage),
         )
         for (category in categories) {
             category.row.setOnClickListener { showCategory(category) }
         }
+        refreshCategories()
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, categoryBack)
+    }
+
+    private fun refreshCategories() {
+        val values = currentValues()
+        for (category in categories) {
+            val only = category.only ?: continue
+            category.row.isVisible = only.any { isSettingVisible(it, values) }
+        }
+    }
+
+    // ---- visibility ----
+
+    // unsaved values of every opened page first so a parent on another page counts right away
+    private fun currentValues(): SettingVisibility.Values {
+        val stored = mSharedPreferences.all
+        val unsaved = HashMap<String, Any?>()
+        binders.forEach { unsaved.putAll(it.values()) }
+        return SettingVisibility.Values { key ->
+            if (unsaved.containsKey(key)) unsaved[key]
+            else SettingsRegistry.get(key)?.let { SettingsRegistry.resolve(it, stored) }
+        }
+    }
+
+    private fun isSettingVisible(key: String, values: SettingVisibility.Values): Boolean {
+        val def = SettingsRegistry.get(key) ?: return true
+        return SettingVisibility.visible(def, values, caps)
+    }
+
+    // the rules span pages so every opened page is checked again
+    private fun refreshVisibility() {
+        if (_binding == null) return
+        val values = currentValues()
+        binders.forEach { binder -> binder.applyVisibility { isSettingVisible(it, values) } }
     }
 
     private fun showCategory(category: Category) {
         // a second queued tap must not stack another page on top
         if (openCategory != null) return
         val page = pageViews.getOrPut(category.title) { category.create(binding.settingsPages) }
+        // a parent may have changed on another page since this one was built
+        refreshVisibility()
         menuScrollY = binding.settingsScroll.scrollY
         binding.settingsMenu.isVisible = false
         page.isVisible = true
@@ -231,6 +282,7 @@ class SettingsFragment : Fragment() {
             it.isVisible = false
         }
         openCategory = null
+        refreshCategories()
         binding.settingsMenu.isVisible = true
         categoryBack.isEnabled = false
         activity?.setTitle(R.string.settings)
@@ -256,10 +308,11 @@ class SettingsFragment : Fragment() {
 
     // builds and loads a binder for one page and keeps it for saving
     private inline fun bindPage(setup: SettingsBinder.() -> Unit) {
-        val binder = SettingsBinder(mSharedPreferences)
+        val binder = SettingsBinder(mSharedPreferences) { refreshVisibility() }
         binder.setup()
         binder.loadAll()
         binders += binder
+        refreshVisibility()
     }
 
     private fun launchIpLookup(apply: (String?) -> Unit) {
@@ -283,6 +336,8 @@ class SettingsFragment : Fragment() {
             +SwitchPref(b.liteMode, SP_LITE_MODE, false)
             +AppSwitcherSettings(b.appSwitcherFingers, b.appSwitcherDirection,
                 b.appSwitcherDirectionLayout, b.appSwitcherPreviews)
+            row(SP_APP_SWITCHER_PREVIEWS, b.appSwitcherPreviews)
+            parent(b.appSwitcherFingers)
         }
         return b.root
     }
@@ -292,8 +347,10 @@ class SettingsFragment : Fragment() {
         displayPage = b
         bindPage {
             +SwitchPref(b.automaticBrightness, SP_AUTOMATIC_BRIGHTNESS, true)
-            visibleWhenNot(b.automaticBrightness, b.brightnessSettingLayout)
-            visibleWhen(b.automaticBrightness, b.minBrightnessLayout)
+            row(SP_AUTOMATIC_BRIGHTNESS, b.automaticBrightness)
+            parent(b.automaticBrightness)
+            row(SP_BRIGHTNESS, b.brightnessSettingLayout)
+            row(SP_MIN_BRIGHTNESS, b.minBrightnessLayout)
             +SliderPref(b.brightnessSetting, SP_BRIGHTNESS, DEFAULT_BRIGHTNESS) { mDeviceHelper.setScreenBrightness(it) }
             +SliderPref(b.minBrightness, SP_MIN_BRIGHTNESS, 48) { mDeviceHelper.setScreenBrightness(it) }
 
@@ -307,42 +364,26 @@ class SettingsFragment : Fragment() {
     private fun createScreenSaverPage(parent: ViewGroup): View {
         val b = SettingsPageScreensaverBinding.inflate(layoutInflater, parent, true)
         screenSaverPage = b
-        val hasProximitySensor = device.hasProximitySensor
         b.screenSaverType.adapter = getScreenSaverSpinnerAdapter()
         b.sleepOptimizationLevel.adapter = getSleepOptimizationSpinnerAdapter()
         bindPage {
             +SwitchPref(b.screenSaver, SP_SCREEN_SAVER_ENABLED, true)
+            parent(b.screenSaver)
             // min matches the ime action check so leaving settings cannot persist 0
             +IntTextPref(b.screenSaverDelay, SP_SCREEN_SAVER_DELAY, SCREEN_SAVER_DEFAULT_DELAY, min = 5)
+            row(SP_SCREEN_SAVER_DELAY, b.screenSaverDelayLayout)
             +SpinnerPref(b.screenSaverType, SP_SCREEN_SAVER_ID, 0)
+            row(SP_SCREEN_SAVER_ID, b.screenSaverTypeLayout)
+            parent(b.screenSaverType)
             +SpinnerPref(b.sleepOptimizationLevel, SP_SLEEP_OPTIMIZATION_LEVEL, SLEEP_OPT_NONE)
+            row(SP_SLEEP_OPTIMIZATION_LEVEL, b.sleepOptimizationLevelLayout)
+            +SwitchPref(b.wakeOnProximity, SP_WAKE_ON_PROXIMITY, true)
+            row(SP_WAKE_ON_PROXIMITY, b.wakeOnProximity)
+            parent(b.wakeOnProximity)
             +IntTextPref(b.proximityKeepAwakeSeconds, SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS, min = 0)
+            row(SP_PROXIMITY_KEEP_AWAKE_SECONDS, b.proximityKeepAwakeLayout)
             +SliderPref(b.screensaverMinBrightness, SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT) { mDeviceHelper.setScreenBrightness(it) }
-        }
-
-        b.wakeOnProximity.isChecked = mSharedPreferences.getBoolean(SP_WAKE_ON_PROXIMITY, true)
-        val enabled = b.screenSaver.isChecked
-        b.screenSaverDelayLayout.isVisible = enabled
-        b.screenSaverTypeLayout.isVisible = enabled
-        b.minBrightnessScreenSaverLayout.isVisible = enabled
-        b.wakeOnProximity.isVisible = enabled && hasProximitySensor
-        b.proximityKeepAwakeLayout.isVisible = enabled && hasProximitySensor
-        applyAodVisibility(b, mSharedPreferences.getInt(SP_SCREEN_SAVER_ID, 0), enabled)
-
-        b.screenSaver.setOnCheckedChangeListener { _, isChecked ->
-            b.screenSaverDelayLayout.isVisible = isChecked
-            b.screenSaverTypeLayout.isVisible = isChecked
-            b.wakeOnProximity.isVisible = isChecked && hasProximitySensor
-            b.proximityKeepAwakeLayout.isVisible = isChecked && hasProximitySensor
-            b.minBrightnessScreenSaverLayout.isVisible = isChecked
-            applyAodVisibility(b, b.screenSaverType.selectedItemPosition, isChecked)
-        }
-
-        b.screenSaverType.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                applyAodVisibility(b, position, b.screenSaver.isChecked)
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
+            row(SP_SCREEN_SAVER_MIN_BRIGHTNESS, b.minBrightnessScreenSaverLayout)
         }
 
         b.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
@@ -365,11 +406,6 @@ class SettingsFragment : Fragment() {
             false
         }
         return b.root
-    }
-
-    private fun applyAodVisibility(b: SettingsPageScreensaverBinding, saverPosition: Int, screenSaverEnabled: Boolean) {
-        val isAod = saverPosition == SCREEN_SAVER_ID_AOD
-        b.minBrightnessScreenSaverLayout.isVisible = screenSaverEnabled && !isAod
     }
 
     private fun createNetworkPage(parent: ViewGroup): View {
@@ -421,38 +457,38 @@ class SettingsFragment : Fragment() {
         val hasButtonRelayCapability = device.buttons > 0 && device.relays > 0
         val hasSwInput = device.inputs > 0
         b.swInputMode.adapter = getSwInputModeSpinnerAdapter()
+        // ui edits input 0; every current model has at most one sw input
+        val swInputModeKey = String.format(Locale.US, SP_SW_INPUT_MODE_FORMAT, 0)
+        val buttonLayouts = listOf(b.buttonRelayMap0Layout, b.buttonRelayMap1Layout, b.buttonRelayMap2Layout, b.buttonRelayMap3Layout)
 
         bindPage {
             +SwitchPref(b.switchOnSwipe, SP_SWITCH_ON_SWIPE, true)
+            row(SP_SWITCH_ON_SWIPE, b.switchOnSwipe)
             +SwitchPref(b.publishSwipeEvents, SP_PUBLISH_SWIPE_EVENTS, true)
             +SwitchPref(b.powerButtonAutoReboot, SP_POWER_BUTTON_AUTO_REBOOT, true)
+            row(SP_POWER_BUTTON_AUTO_REBOOT, b.powerButtonAutoReboot)
 
             if (hasSwInput) {
-                // ui edits input 0; every current model has at most one sw input
-                +SpinnerPref(b.swInputMode, String.format(Locale.US, SP_SW_INPUT_MODE_FORMAT, 0), SW_INPUT_MODE_BUTTON)
+                +SpinnerPref(b.swInputMode, swInputModeKey, SW_INPUT_MODE_BUTTON)
+                parent(b.swInputMode)
                 +SwitchPref(b.swInputInvert, String.format(Locale.US, SP_SW_INPUT_INVERT_FORMAT, 0), false)
             }
+            row(swInputModeKey, b.swInputModeLayout)
+            row(String.format(Locale.US, SP_SW_INPUT_INVERT_FORMAT, 0), b.swInputInvert)
+            row(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), b.swInputRelayLayout)
 
             if (hasButtonRelayCapability) {
                 +SwitchPref(b.buttonRelayEnabled, SP_BUTTON_RELAY_ENABLED, false)
-                visibleWhen(b.buttonRelayEnabled, b.buttonRelayMappingLayout)
+                parent(b.buttonRelayEnabled)
             }
+            row(SP_BUTTON_RELAY_ENABLED, b.buttonRelayEnabled)
+            // the mapping block shows with its first row since every row needs the switch on
+            row(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, 0), b.buttonRelayMappingLayout)
+            buttonLayouts.forEachIndexed { i, layout -> row(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), layout) }
         }
 
-        b.buttonRelayEnabled.isVisible = hasButtonRelayCapability
-        if (hasButtonRelayCapability) {
-            setupButtonRelaySpinners(b, device.buttons, device.relays)
-        } else {
-            b.buttonRelayMappingLayout.isVisible = false
-        }
-
-        b.swInputModeLayout.isVisible = hasSwInput
-        b.swInputInvert.isVisible = hasSwInput
-        if (hasSwInput) {
-            setupSwInputRelaySpinner(b, device.relays)
-        } else {
-            b.swInputRelayLayout.isVisible = false
-        }
+        if (hasButtonRelayCapability) setupButtonRelaySpinners(b, device.buttons, device.relays)
+        if (hasSwInput) setupSwInputRelaySpinner(b, device.relays)
         return b.root
     }
 
@@ -463,12 +499,17 @@ class SettingsFragment : Fragment() {
         bindPage {
             +SwitchPref(b.integrationApiEnabled, SP_INTEGRATION_API_ENABLED, true)
             visibleWhen(b.integrationApiEnabled, b.integrationStatus, b.integrationClients, b.integrationFingerprint)
+            // voice and the bluetooth proxy on other pages need the integration api
+            parent(b.integrationApiEnabled)
             +SwitchPref(b.mqttEnabled, SP_MQTT_ENABLED, false)
-            visibleWhen(b.mqttEnabled,
-                b.mqttBrokerLayout, b.mqttPortLayout,
-                b.mqttUsernameLayout, b.mqttPasswordLayout,
-                b.mqttClientIdLayout,
-                b.mqttHaDiscovery, b.mqttRetainState)
+            parent(b.mqttEnabled)
+            row(SP_MQTT_BROKER, b.mqttBrokerLayout)
+            row(SP_MQTT_PORT, b.mqttPortLayout)
+            row(SP_MQTT_USERNAME, b.mqttUsernameLayout)
+            row(SP_MQTT_PASSWORD, b.mqttPasswordLayout)
+            row(SP_MQTT_CLIENTID, b.mqttClientIdLayout)
+            row(SP_MQTT_HA_DISCOVERY, b.mqttHaDiscovery)
+            row(SP_MQTT_RETAIN_STATE, b.mqttRetainState)
             +TextPref(b.mqttBroker, SP_MQTT_BROKER)
             +IntTextPref(b.mqttPort, SP_MQTT_PORT, MQTT_DEFAULT_PORT)
             +TextPref(b.mqttUsername, SP_MQTT_USERNAME)
@@ -486,8 +527,14 @@ class SettingsFragment : Fragment() {
         sensorsPage = b
         bindPage {
             +SwitchPref(b.publishThermalSensors, SP_PUBLISH_THERMAL_SENSORS, false)
+            row(SP_PUBLISH_THERMAL_SENSORS, b.publishThermalSensors)
             +SwitchPref(b.dynamicTempOffsetEnabled, SP_DYNAMIC_TEMP_OFFSET_ENABLED, false)
-            visibleWhen(b.dynamicTempOffsetEnabled, b.dynamicTempOffsetLayout)
+            row(SP_DYNAMIC_TEMP_OFFSET_ENABLED, b.dynamicTempOffsetEnabled)
+            parent(b.dynamicTempOffsetEnabled)
+            // the offset block shares the rule of its first row
+            row(SP_DYNAMIC_TEMP_OFFSET_ZONE, b.dynamicTempOffsetLayout, b.dynamicTempOffsetZoneLayout)
+            row(SP_DYNAMIC_TEMP_OFFSET_BASELINE, b.dynamicTempOffsetBaselineLayout)
+            row(SP_DYNAMIC_TEMP_OFFSET_K, b.dynamicTempOffsetKLayout)
             +FloatTextPref(b.dynamicTempOffsetBaseline, SP_DYNAMIC_TEMP_OFFSET_BASELINE, 40.0f)
             +FloatTextPref(b.dynamicTempOffsetK, SP_DYNAMIC_TEMP_OFFSET_K, 0.3f)
         }
@@ -513,10 +560,20 @@ class SettingsFragment : Fragment() {
             +SwitchPref(b.mediaEnabled, SP_MEDIA_ENABLED, false)
 
             +SwitchPref(b.haVoiceEnabled, SP_HA_VOICE_ENABLED, false)
-            visibleWhen(b.haVoiceEnabled, b.voiceEngineLayout)
+            row(SP_HA_VOICE_ENABLED, b.haVoiceEnabled, b.haVoiceHint)
+            parent(b.haVoiceEnabled)
+            // the engine block shares the rule of its first row
+            row(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, b.voiceEngineLayout, b.voiceAssistantMaxSecondsLayout)
             +IntTextPref(b.voiceAssistantMaxSeconds, SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, min = 1)
             +SwitchPref(b.voiceWakeEnabled, SP_VOICE_WAKE_ENABLED, true)
-            visibleWhen(b.voiceWakeEnabled, b.voiceWakeModelLayout)
+            row(SP_VOICE_WAKE_ENABLED, b.voiceWakeEnabled)
+            parent(b.voiceWakeEnabled)
+            row(SP_VOICE_WAKE_MODEL_NAME, b.voiceWakeModelLayout)
+            row(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, b.voiceWakeExperimentalModels)
+            row(SP_VOICE_WAKE_SENSITIVITY, b.voiceWakeSensitivityLayout)
+            row(SP_VOICE_WAKE_COOLDOWN_SEC, b.voiceWakeCooldownLayout)
+            row(SP_VOICE_WAKE_SOUND_ENABLED, b.voiceWakeSoundEnabled)
+            row(SP_VOICE_SCORE_BAR_ENABLED, b.voiceScoreBarEnabled)
             // the vad model is required to suppress false wake triggers so fetch
             // it as soon as wake word detection is enabled registered via the binder
             // so it does not clobber the visibility toggle listener
@@ -562,6 +619,7 @@ class SettingsFragment : Fragment() {
         bluetoothPage = b
         bindPage {
             +SwitchPref(b.bleScannerEnabled, SP_BLE_SCANNER_ENABLED, false)
+            row(SP_BLE_SCANNER_ENABLED, b.bleScannerEnabled, b.bleScannerHint)
         }
         return b.root
     }
@@ -942,16 +1000,6 @@ class SettingsFragment : Fragment() {
         // stored value -1 is none position 0 then relay 0 at position 1 and so on
         val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), 0)
         b.swInputRelay.setSelection((storedRelay + 1).coerceIn(0, optionCount - 1))
-
-        // the relay row only applies while the input actually drives a relay
-        b.swInputMode.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                b.swInputRelayLayout.isVisible = relayCount > 0 && position != SW_INPUT_MODE_DETACHED
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-        val storedMode = mSharedPreferences.getInt(String.format(Locale.US, SP_SW_INPUT_MODE_FORMAT, 0), SW_INPUT_MODE_BUTTON)
-        b.swInputRelayLayout.isVisible = relayCount > 0 && storedMode != SW_INPUT_MODE_DETACHED
     }
 
     private fun setupModelChooser(b: SettingsPageAudioBinding, wakewordsDir: File) {
@@ -1079,24 +1127,13 @@ class SettingsFragment : Fragment() {
         downloadJob = viewLifecycleOwner.lifecycleScope.launch {
             val destTflite = File(wakewordsDir, "$name.tflite")
             val destJson   = File(wakewordsDir, "$name.json")
-            val hasJson = jsonUrl.isNotEmpty()
             try {
                 withContext(Dispatchers.IO) {
-                    WakeWordModelManager.downloadFile(okHttpClient, tfliteUrl, destTflite) { pct ->
-                        val overall = if (hasJson) pct / 2 else pct
+                    WakeWordModelDownloader.download(okHttpClient, wakewordsDir, name, tfliteUrl, jsonUrl) { overall ->
                         mainHandler.post { audioPage?.let {
                             it.voiceWakeProgressBar.progress = overall
                             it.voiceWakeProgressText.text = "$overall%"
                         }}
-                    }
-                    if (hasJson) {
-                        WakeWordModelManager.downloadFile(okHttpClient, jsonUrl, destJson) { pct ->
-                            val overall = 50 + pct / 2
-                            mainHandler.post { audioPage?.let {
-                                it.voiceWakeProgressBar.progress = overall
-                                it.voiceWakeProgressText.text = "$overall%"
-                            }}
-                        }
                     }
                 }
                 selectedModelName = name
@@ -1180,16 +1217,13 @@ class SettingsFragment : Fragment() {
         val buttonLabels  = listOf(b.buttonRelayMap0Label,  b.buttonRelayMap1Label,  b.buttonRelayMap2Label,  b.buttonRelayMap3Label)
         val buttonSpinners = listOf(b.buttonRelayMap0, b.buttonRelayMap1, b.buttonRelayMap2, b.buttonRelayMap3)
 
-        for (i in buttonLayouts.indices) {
-            val visible = i < buttonCount
-            buttonLayouts[i].isVisible = visible
-            if (visible) {
-                buttonLabels[i].text = getString(R.string.button_relay_button_label, i)
-                buttonSpinners[i].adapter = adapter
-                // stored value -1 is none position 0 then relay 0 at position 1 and so on
-                val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
-                buttonSpinners[i].setSelection((storedRelay + 1).coerceIn(0, optionCount - 1))
-            }
+        // the rows of missing buttons are hidden by their requires rule
+        for (i in 0 until buttonCount.coerceAtMost(buttonLayouts.size)) {
+            buttonLabels[i].text = getString(R.string.button_relay_button_label, i)
+            buttonSpinners[i].adapter = adapter
+            // stored value -1 is none position 0 then relay 0 at position 1 and so on
+            val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
+            buttonSpinners[i].setSelection((storedRelay + 1).coerceIn(0, optionCount - 1))
         }
 
         if (buttonCount > buttonLayouts.size) {
@@ -1202,10 +1236,6 @@ class SettingsFragment : Fragment() {
         mSharedPreferences.edit {
             // only pages that were opened write anything so unopened ones keep their stored values
             binders.forEach { it.saveTo(this) }
-
-            screenSaverPage?.let {
-                putBoolean(SP_WAKE_ON_PROXIMITY, it.wakeOnProximity.isChecked && device.hasProximitySensor)
-            }
 
             if (audioPage != null) putString(SP_VOICE_WAKE_MODEL_NAME, selectedModelName)
 

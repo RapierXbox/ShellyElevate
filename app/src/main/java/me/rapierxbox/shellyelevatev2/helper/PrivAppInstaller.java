@@ -4,6 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.util.Log;
 
 // checks for the priv-app install that tools/install-privapp sets up and grants the manual adb perms
@@ -34,5 +35,30 @@ public final class PrivAppInstaller {
         PrivilegedShell.Result d = PrivilegedShell.allowAppOp(pkg, "SYSTEM_ALERT_WINDOW");
         Log.i(TAG, "autoGrant writeSettings=" + a.exitCode + " deviceidle=" + b.exitCode
                 + " usageStats=" + c.exitCode + " overlay=" + d.exitCode);
+        logMissingRuntimePermissions(ctx);
+    }
+
+    // pm grant needs GRANT_RUNTIME_PERMISSIONS which this app never holds so runtime perms come over adb
+    // they survive self updates since a same package install keeps them
+    private static void logMissingRuntimePermissions(Context ctx) {
+        StringBuilder missing = new StringBuilder();
+        for (String perm : runtimePermissions()) {
+            if (ctx.checkSelfPermission(perm) != PackageManager.PERMISSION_GRANTED) {
+                missing.append(' ').append(perm.substring(perm.lastIndexOf('.') + 1));
+            }
+        }
+        if (missing.length() > 0) {
+            Log.w(TAG, "runtime permissions missing:" + missing
+                    + ". install-privapp or the home assistant integration grant them over adb");
+        }
+    }
+
+    // same list as install-privapp and the integration post install steps
+    private static String[] runtimePermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return new String[]{Manifest.permission.RECORD_AUDIO,
+                    Manifest.permission.BLUETOOTH_SCAN, Manifest.permission.BLUETOOTH_CONNECT};
+        }
+        return new String[]{Manifest.permission.RECORD_AUDIO, Manifest.permission.ACCESS_FINE_LOCATION};
     }
 }

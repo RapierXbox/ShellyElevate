@@ -186,6 +186,7 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
             SettingsParser.PatchResult result = settingsParser.applyPatch(patch);
             JSONObject response = settingsJson();
             response.put("restart_required", result.restartRequired);
+            if (result.ignored.length() > 0) response.put("ignored", result.ignored);
             return json(Status.OK, response);
         } catch (IllegalArgumentException e) {
             return error(Status.BAD_REQUEST, "invalid_params", e.getMessage());

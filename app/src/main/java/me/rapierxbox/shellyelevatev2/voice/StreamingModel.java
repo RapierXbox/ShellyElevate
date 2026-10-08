@@ -53,11 +53,17 @@ final class StreamingModel {
     private final float[][][][] input4d;
     private final float[][] outputFloats;
 
+    // about 300 ms of frames so windows whose inference was put off can run later
+    // low power keeps them while the room is quiet and replays them on the next sound
+    static final int PRE_ROLL_FRAMES = 30;
+    private final int ringWindows;
     private final float[][] frameRing;
     // long so ring index math never overflows on long uptimes
     private long frameRingPos;
     private long framesCollected;
     private int newFramesSinceInfer;
+    // full windows that were not run yet
+    private int pendingWindows;
     private int lastRawByte = -1;
 
     static File modelDir(Context context) {
@@ -129,7 +135,8 @@ final class StreamingModel {
             outputBytes = null;
             outputFloats = new float[1][outputCols];
         }
-        frameRing = new float[nFrames][N_MELS];
+        ringWindows = ringWindows(nFrames);
+        frameRing = new float[nFrames * ringWindows][N_MELS];
 
         description = "input=" + Arrays.toString(shape)
                 + " inType=" + inType + " outType=" + outType
@@ -164,34 +171,60 @@ final class StreamingModel {
         frameRingPos = 0;
         framesCollected = 0;
         newFramesSinceInfer = 0;
+        pendingWindows = 0;
     }
 
     // copies the frame since the frontend reuses its buffer and returns true once
     // a full fresh window is ready. esphome fills a whole stride before invoking
     // and overlapping windows would corrupt the lstm state for any n above one
+    // a caller may put runs off and the next run catches up on the newest windows
     boolean pushFrame(float[] mel) {
-        System.arraycopy(mel, 0, frameRing[(int) (frameRingPos % nFrames)], 0, N_MELS);
+        System.arraycopy(mel, 0, frameRing[(int) (frameRingPos % frameRing.length)], 0, N_MELS);
         frameRingPos++;
         framesCollected++;
         newFramesSinceInfer++;
         if (framesCollected < nFrames || newFramesSinceInfer < nFrames) return false;
         newFramesSinceInfer = 0;
+        pendingWindows = Math.min(pendingWindows + 1, ringWindows);
         return true;
     }
 
     float[] latestFrame() {
-        return frameRing[(int) ((frameRingPos - 1 + nFrames) % nFrames)];
+        return frameRing[(int) ((frameRingPos - 1 + frameRing.length) % frameRing.length)];
     }
 
+    static int ringWindows(int nFrames) {
+        return Math.max(2, (PRE_ROLL_FRAMES + nFrames - 1) / nFrames);
+    }
+
+    // runs every pending window oldest first so the streaming state sees each frame
+    // the output then belongs to the newest window
     void run() {
+        while (runNext()) {}
+    }
+
+    // runs the oldest pending window. false once none is left
+    boolean runNext() {
+        if (pendingWindows <= 0) return false;
+        pendingWindows--;
+        runWindow(frameRingPos - (long) pendingWindows * nFrames - nFrames);
+        return true;
+    }
+
+    // windows that were put off and the window that just filled
+    int pendingWindows() {
+        return pendingWindows;
+    }
+
+    private void runWindow(long start) {
         // covers a model swapped in while a session is already running
         interpreterUsed = true;
-        int base = (int) (frameRingPos % nFrames);
+        int base = (int) (start % frameRing.length);
         Object out = outputIs8bit ? rewound(outputBytes) : outputFloats;
         if (inputIs8bit) {
             inputBytes.rewind();
             for (int t = 0; t < nFrames; t++) {
-                float[] row = frameRing[(base + t) % nFrames];
+                float[] row = frameRing[(base + t) % frameRing.length];
                 for (int f = 0; f < N_MELS; f++)
                     inputBytes.put(quantizeMel(row[f], inputZeroPoint, inputIsUnsigned));
             }
@@ -199,13 +232,13 @@ final class StreamingModel {
             interpreter.run(inputBytes, out);
         } else if (hasChannelDim) {
             for (int t = 0; t < nFrames; t++) {
-                float[] row = frameRing[(base + t) % nFrames];
+                float[] row = frameRing[(base + t) % frameRing.length];
                 for (int f = 0; f < N_MELS; f++) input4d[0][t][f][0] = row[f];
             }
             interpreter.run(input4d, out);
         } else {
             for (int t = 0; t < nFrames; t++)
-                System.arraycopy(frameRing[(base + t) % nFrames], 0, input3d[0][t], 0, N_MELS);
+                System.arraycopy(frameRing[(base + t) % frameRing.length], 0, input3d[0][t], 0, N_MELS);
             interpreter.run(input3d, out);
         }
     }

@@ -185,6 +185,7 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
 
     private static void contributeState(VoiceEngine engine, Map<String, Object> state) {
         state.put("voice.state", engine.getProtocolState());
+        state.put("voice.error", engine.getProtocolError());
         state.put("voice.muted", engine.isMuted());
     }
 
@@ -202,10 +203,13 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
                         .put("languages", new JSONArray()));
             }
             payload.put("available", available);
+            // the pref and not the engine mode since this runs before the engine applied a change
+            boolean enabled = VoiceEngine.isConfigured();
             JSONArray active = new JSONArray();
-            String current = engine.activeWakeWord();
+            String current = enabled ? engine.activeWakeWord() : null;
             if (current != null) active.put(current);
             payload.put("active", active);
+            payload.put("enabled", enabled);
             payload.put("max_active", 1);
             String text = payload.toString();
             if (!force && text.equals(lastConfig)) return;

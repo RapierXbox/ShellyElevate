@@ -10,6 +10,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
+import android.app.Activity;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -22,13 +24,16 @@ import android.util.Log;
 import android.widget.Toast;
 
 import androidx.annotation.RequiresPermission;
+import androidx.core.app.ActivityCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -38,6 +43,8 @@ import java.util.concurrent.atomic.AtomicLong;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.api.ControllerVoiceTransport;
+import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities;
+import me.rapierxbox.shellyelevatev2.helper.HttpDownloader;
 
 // mic wake word vad and playback for voice sessions. the transport decides where a session goes
 // state machine: DISABLED -> IDLE -> LISTENING -> PROCESSING -> SPEAKING -> IDLE
@@ -64,6 +71,9 @@ public class VoiceEngine {
     // a session that never gets an answer frees the wake word again
     private static final long PROCESSING_TIMEOUT_SEC = 60;
     private static final long ERROR_SHOW_MS = 3_000L;
+    private static final int MIC_PERMISSION_REQUEST = 4712;
+    // a failed default model download is tried again after this
+    private static final long MODEL_DOWNLOAD_RETRY_SEC = 120;
 
     public enum State { DISABLED, IDLE, LISTENING, PROCESSING, SPEAKING }
 
@@ -75,6 +85,11 @@ public class VoiceEngine {
     private volatile VoiceTransport transport;
     private volatile boolean muted = false;
     private volatile long errorUntil = 0L;
+    // voice is on but the app may not record so nothing would ever be heard
+    private volatile boolean micPermissionMissing = false;
+    // main thread only. the dialog is shown once per switch on so a denial does not loop it
+    private boolean micPermissionAsked = false;
+    private final AtomicBoolean modelDownloadRunning = new AtomicBoolean(false);
 
     // volatile for the status getters; mutations go through wakeLock so the settings
     // executor and a mute toggle cant interleave and null it mid check-then-act
@@ -110,6 +125,11 @@ public class VoiceEngine {
 
         muted = mSharedPreferences.getBoolean(SP_VOICE_ASSISTANT_MUTED, false);
         ControllerVoiceTransport.install(this);
+        // the permission dialog pauses our activity so a resume is where a grant shows up
+        ForegroundActivities.INSTANCE.addResumeListener(cls -> {
+            onForegroundResumed();
+            return kotlin.Unit.INSTANCE;
+        });
         checkAndApplySettings();
     }
 
@@ -143,10 +163,12 @@ public class VoiceEngine {
         }
         mode = want;
         if (want == Mode.OFF) {
+            micPermissionMissing = false;
             ApiHub.stateChanged();
             return;
         }
         Log.i(TAG, "enabling " + want);
+        mainHandler.post(() -> micPermissionAsked = false);
         VoiceTransport t = new ControllerVoiceTransport();
         transport = t;
         t.open(new TransportCallbacks(t));
@@ -164,6 +186,8 @@ public class VoiceEngine {
         // between the checks below (this runs on the settings executor and the transport thread)
         synchronized (wakeLock) {
             boolean wakeEnabled = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true);
+            // checked whenever voice is on since voice.start records as well
+            boolean micAllowed = mode == Mode.OFF || checkMicPermission();
 
             if (!wakeEnabled || muted || mode == Mode.OFF) {
                 if (wakeDetector != null) {
@@ -174,6 +198,10 @@ public class VoiceEngine {
             }
 
             String modelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "").trim();
+            if (modelName.isEmpty()) modelName = pickDefaultModel();
+            if (!WakeWordModelManager.isVadPresent(WakeWordModelManager.getModelDirectory(mApplicationContext))) {
+                downloadModelsLater(false);
+            }
 
             if (wakeDetector == null) {
                 wakeDetector = new WakeWordDetector(mApplicationContext, this::onWakeDetected);
@@ -190,11 +218,103 @@ public class VoiceEngine {
             wakeDetector.setCooldown(mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5));
             wakeDetector.setScoreBroadcastEnabled(mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false));
 
-            if (state == State.IDLE && !wakeDetector.isRunning()
+            if (micAllowed && state == State.IDLE && !wakeDetector.isRunning()
                     && wakeDetector.getModelStatus() == WakeWordDetector.ModelStatus.LOADED) {
                 wakeDetector.start();
             }
         }
+    }
+
+    // ---------------------------------------------------------------- microphone permission
+
+    private static boolean hasMicPermission() {
+        return mApplicationContext.checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    // false while voice may not record. the state reports it and the foreground activity asks for it
+    private boolean checkMicPermission() {
+        boolean missing = !hasMicPermission();
+        if (missing != micPermissionMissing) {
+            micPermissionMissing = missing;
+            if (missing) Log.w(TAG, "voice is on but RECORD_AUDIO is not granted");
+            ApiHub.stateChanged();
+        }
+        if (missing) mainHandler.post(this::requestMicPermission);
+        return !missing;
+    }
+
+    // main thread
+    private void requestMicPermission() {
+        if (micPermissionAsked || mode == Mode.OFF || hasMicPermission()) return;
+        Activity activity = ForegroundActivities.resumedActivity();
+        if (activity == null || activity.isFinishing()) return;
+        micPermissionAsked = true;
+        ActivityCompat.requestPermissions(activity, new String[]{Manifest.permission.RECORD_AUDIO}, MIC_PERMISSION_REQUEST);
+    }
+
+    // main thread
+    private void onForegroundResumed() {
+        if (mode == Mode.OFF || !micPermissionMissing) return;
+        // granted in the dialog or the system settings so the detector can start now
+        if (hasMicPermission()) checkAndApplySettings();
+        else requestMicPermission();
+    }
+
+    // ---------------------------------------------------------------- wake word model
+
+    // an installed model or the default one once it is downloaded. empty until then
+    private String pickDefaultModel() {
+        List<String> installed = availableWakeWords();
+        String name;
+        if (installed.contains(WakeWordModelDownloader.DEFAULT_MODEL)) {
+            name = WakeWordModelDownloader.DEFAULT_MODEL;
+        } else if (!installed.isEmpty()) {
+            name = installed.get(0);
+        } else {
+            downloadModelsLater(true);
+            return "";
+        }
+        Log.i(TAG, "no wake model selected, using installed " + name);
+        mSharedPreferences.edit().putString(SP_VOICE_WAKE_MODEL_NAME, name).apply();
+        return name;
+    }
+
+    // fetches the default model or the vad in the background then applies the settings again
+    private void downloadModelsLater(boolean withModel) {
+        if (!modelDownloadRunning.compareAndSet(false, true)) return;
+        new Thread(() -> {
+            boolean apply = true;
+            boolean retry = false;
+            try {
+                File dir = WakeWordModelManager.getModelDirectory(mApplicationContext);
+                if (withModel) {
+                    Log.i(TAG, "no wake model installed, downloading " + WakeWordModelDownloader.DEFAULT_MODEL);
+                    WakeWordModelDownloader.downloadDefault(HttpDownloader.defaultClient(), dir);
+                    // the user may have picked one meanwhile
+                    if (mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "").trim().isEmpty()) {
+                        mSharedPreferences.edit().putString(SP_VOICE_WAKE_MODEL_NAME, WakeWordModelDownloader.DEFAULT_MODEL).apply();
+                    }
+                } else if (WakeWordModelManager.ensureVadDownloaded(HttpDownloader.defaultClient(), dir)
+                        == WakeWordModelManager.VadResult.DOWNLOADED) {
+                    // reload so the detector picks up the fresh vad
+                    loadedModelName = "";
+                } else {
+                    apply = false;
+                }
+            } catch (Exception e) {
+                Log.w(TAG, "wake model download failed: " + e.getMessage());
+                apply = false;
+                retry = withModel;
+            } finally {
+                modelDownloadRunning.set(false);
+            }
+            try {
+                if (retry) scheduler.schedule(this::checkAndApplySettings, MODEL_DOWNLOAD_RETRY_SEC, TimeUnit.SECONDS);
+                else if (apply) checkAndApplySettings();
+            } catch (RejectedExecutionException ignored) {
+                // shutting down
+            }
+        }, "WakeModelDownload").start();
     }
 
     public WakeWordDetector.ModelStatus getWakeModelStatus() {
@@ -340,7 +460,7 @@ public class VoiceEngine {
         // restart detector after a short delay so leftover spectrogram state from
         // this session does not immediately retrigger the wake word
         scheduler.schedule(() -> {
-            if (mode != Mode.OFF && state == State.IDLE
+            if (mode != Mode.OFF && state == State.IDLE && !micPermissionMissing
                     && mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
                     && detSnapshot == wakeDetector
                     && detSnapshot.getModelStatus() == WakeWordDetector.ModelStatus.LOADED
@@ -494,6 +614,7 @@ public class VoiceEngine {
 
     // voice.state of protocol v1
     public String getProtocolState() {
+        if (mode != Mode.OFF && micPermissionMissing) return "error";
         if (SystemClock.elapsedRealtime() < errorUntil) return "error";
         switch (state) {
             case IDLE:       return "idle";
@@ -502,6 +623,12 @@ public class VoiceEngine {
             case SPEAKING:   return "responding";
             default:         return "disabled";
         }
+    }
+
+    // why voice.state is error on the display side or null
+    public String getProtocolError() {
+        if (mode != Mode.OFF && micPermissionMissing) return "microphone permission missing";
+        return null;
     }
 
     public void setLowPowerMode(boolean low) {

@@ -40,6 +40,13 @@ public final class BleChannel {
         }
     };
 
+    // a scan that cannot find anything while forwarding is on
+    private static final ApiHub.StateProvider stateProvider = state -> {
+        if (mSharedPreferences.getBoolean(SP_BLE_SCANNER_ENABLED, false)) {
+            state.put("ble.error", BleScanner.get().getScanBlockedReason());
+        }
+    };
+
     private BleChannel() {}
 
     public static void start(Context context) {
@@ -53,6 +60,7 @@ public final class BleChannel {
                     .registerReceiver(settingsReceiver, new IntentFilter(INTENT_SETTINGS_CHANGED));
             controllerListener = connected -> apply();
             ApiHub.addControllerListener(controllerListener);
+            ApiHub.addStateProvider(stateProvider);
         }
         apply();
     }
@@ -67,6 +75,7 @@ public final class BleChannel {
                 ApiHub.removeControllerListener(controllerListener);
                 controllerListener = null;
             }
+            ApiHub.removeStateProvider(stateProvider);
             setListening(false);
         }
     }

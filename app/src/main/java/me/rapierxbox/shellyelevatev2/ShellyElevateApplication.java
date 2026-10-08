@@ -28,7 +28,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.api.ApiManager;
-import me.rapierxbox.shellyelevatev2.api.ClientTokenStore;
+import me.rapierxbox.shellyelevatev2.api.ApiInfo;
 import me.rapierxbox.shellyelevatev2.api.BleChannel;
 import me.rapierxbox.shellyelevatev2.api.MediaCommands;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
@@ -148,7 +148,9 @@ public class ShellyElevateApplication extends Application {
         mApplicationContext = getApplicationContext();
         mSharedPreferences = getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
         // keys of the removed esphome proxy and token satellite. before any manager reads them
-        RemovedSettings.clear(mSharedPreferences, ClientTokenStore.get(this).hasClients());
+        RemovedSettings.clear(mSharedPreferences);
+        // seeds the api id before the mqtt id can be renamed
+        ApiInfo.deviceId();
         // reports settings changes from every writer to the v1 api
         SettingsChangeTracker.start(mSharedPreferences);
         warmUpWebViewProvider();

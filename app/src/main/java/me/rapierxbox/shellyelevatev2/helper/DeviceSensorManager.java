@@ -67,6 +67,8 @@ public class DeviceSensorManager implements SensorEventListener {
     private final Runnable trailingLux = () -> onLightChanged(lastMeasuredLux);
 
     private volatile float lastMeasuredDistance = 1.0f;
+    // false until the first proximity value arrived
+    private volatile boolean hasProximityReading = false;
     private float lastPublishedProximity = -1f;
     private volatile float maxProximitySensorValue = 1.0f;
 
@@ -133,6 +135,10 @@ public class DeviceSensorManager implements SensorEventListener {
 
     public float getLastMeasuredDistance() {
         return lastMeasuredDistance;
+    }
+
+    public boolean hasProximityReading() {
+        return hasProximityReading;
     }
 
     public float getMaxProximitySensorValue() {
@@ -390,6 +396,7 @@ public class DeviceSensorManager implements SensorEventListener {
 
         lastMeasuredDistance = value;
         lastPublishedProximity = value;
+        hasProximityReading = true;
 
         Intent intent = new Intent(INTENT_PROXIMITY_UPDATED);
         intent.putExtra(INTENT_PROXIMITY_KEY, value);

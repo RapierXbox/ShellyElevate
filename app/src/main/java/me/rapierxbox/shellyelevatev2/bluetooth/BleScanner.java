@@ -2,6 +2,7 @@ package me.rapierxbox.shellyelevatev2.bluetooth;
 
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 
+import android.Manifest;
 import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothManager;
@@ -14,12 +15,15 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.os.Build;
+import android.provider.Settings;
 import android.util.Log;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -27,6 +31,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+
+import me.rapierxbox.shellyelevatev2.api.ApiHub;
 
 // shared ble scan for every consumer of advertisements
 // the v1 api channel is a listener and the scan only runs while one exists
@@ -111,7 +117,14 @@ public final class BleScanner {
 
     private final List<RawAd> batch = new ArrayList<>();
 
+    // why a running scan cannot find anything or null
+    private volatile String scanBlockedReason;
+
     private BleScanner() {}
+
+    public String getScanBlockedReason() {
+        return scanBlockedReason;
+    }
 
     public boolean isScanning() {
         synchronized (scanLock) {
@@ -229,6 +242,29 @@ public final class BleScanner {
         }
     }
 
+    // api 23 to 30 deliver no scan results without location permission and location mode on
+    // the scan still starts and stays silent so the reason is logged and reported to the controller
+    private void updateScanBlockedReason() {
+        String reason = null;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && Build.VERSION.SDK_INT <= Build.VERSION_CODES.R) {
+            Context ctx = mApplicationContext;
+            if (ctx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
+                    && ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+                reason = "location permission missing";
+            } else if (Settings.Secure.getInt(ctx.getContentResolver(), Settings.Secure.LOCATION_MODE,
+                    Settings.Secure.LOCATION_MODE_OFF) == Settings.Secure.LOCATION_MODE_OFF) {
+                reason = "location is off";
+            }
+        }
+        if (Objects.equals(reason, scanBlockedReason)) return;
+        scanBlockedReason = reason;
+        if (reason != null) {
+            Log.w(TAG, "BLE scan will find nothing: " + reason
+                    + ". grant ACCESS_FINE_LOCATION and set location_mode 3 (tools/install-privapp does both)");
+        }
+        ApiHub.stateChanged();
+    }
+
     // must hold scanLock
     private void scheduleIdleStopLocked() {
         cancelIdleStopLocked();
@@ -308,6 +344,7 @@ public final class BleScanner {
             Log.w(TAG, "bluetooth unavailable");
             return;
         }
+        updateScanBlockedReason();
         BluetoothLeScanner scanner = adapter.getBluetoothLeScanner();
         bleScanner = scanner;
         if (scanner == null) {

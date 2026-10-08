@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2.api;
 
+import static me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STARTED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STOPPED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_LIGHT_UPDATED;
@@ -44,7 +45,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import me.rapierxbox.shellyelevatev2.DeviceModel;
+import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
+import me.rapierxbox.shellyelevatev2.display.webview.WebViewDisplayModule;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 // the flat state of protocol-v1 section 5 and the state_delta push
@@ -52,7 +56,7 @@ import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 final class StateHub {
     private static final String TAG = "ApiState";
     private static final long POKE_DEBOUNCE_MS = 50;
-    // sht3x and dimmer values have no change broadcast so they are polled
+    // sht3x values have no change broadcast so they are polled
     private static final long SENSOR_PERIOD_S = 10;
     // values that change all the time are only refreshed this often
     private static final long SLOW_PERIOD_S = 60;
@@ -244,7 +248,7 @@ final class StateHub {
         DeviceModel device = DeviceModel.getReportedDevice();
 
         if (mDeviceHelper != null) {
-            for (int i = 0; i < device.relays; i++) {
+            for (int i = 0; i < DeviceModel.apiRelayCount(); i++) {
                 state.put("relay." + i, mDeviceHelper.getRelay(i));
             }
         }
@@ -258,8 +262,21 @@ final class StateHub {
                 float distance = mDeviceSensorManager.getLastMeasuredDistance();
                 float max = mDeviceSensorManager.getMaxProximitySensorValue();
                 state.put("proximity", round1(distance));
-                state.put("presence", max > 0 && distance < max);
+                // same near rule as the screensaver wake and never present before the first reading
+                state.put("presence", mDeviceSensorManager.hasProximityReading()
+                        && ScreenSaverManager.isNear(distance, max));
             }
+        }
+
+        // the dimmer values are cached fields so they are read on every build
+        if (mDeviceHelper != null && mDeviceHelper.isDimmerAttached()) {
+            StesProtocolHandler.DimmerStatus status = mDeviceHelper.getDimmerStatus();
+            StesProtocolHandler.DimmerPower power = mDeviceHelper.getDimmerPower();
+            if (status != null) {
+                state.put("dimmer.on", status.on);
+                state.put("dimmer.brightness", status.actualBrightness / 10);
+            }
+            if (power != null) state.put("dimmer.power", round1(power.powerW));
         }
 
         boolean saverRunning = mScreenSaverManager != null && mScreenSaverManager.isScreenSaverRunning();
@@ -267,7 +284,10 @@ final class StateHub {
         if (mDeviceHelper != null) state.put("screen.brightness", mDeviceHelper.getScreenBrightness());
         state.put("screen.auto_brightness", mSharedPreferences.getBoolean(SP_AUTOMATIC_BRIGHTNESS, true));
         state.put("night_mode", mNightModeManager != null && mNightModeManager.isEnabled());
-        state.put("webview.url", mSharedPreferences.getString(SP_WEBVIEW_URL, ""));
+        // the page on screen and the configured dashboard until the webview loaded one
+        String shownUrl = DISPLAY_MODULE_WEBVIEW.equals(DisplayModuleRegistry.activeId(mSharedPreferences))
+                ? WebViewDisplayModule.getShownUrl() : null;
+        state.put("webview.url", shownUrl != null ? shownUrl : mSharedPreferences.getString(SP_WEBVIEW_URL, ""));
 
         for (ApiHub.StateProvider provider : ApiHub.stateProviders()) {
             try {
@@ -303,15 +323,6 @@ final class StateHub {
         // -999 marks a missing sensor or a failed read and is never reported
         if (temperature > -100) out.put("temperature", round1(temperature));
         if (humidity > -100) out.put("humidity", round1(humidity));
-        if (mDeviceHelper.isDimmerAttached()) {
-            StesProtocolHandler.DimmerStatus status = mDeviceHelper.getDimmerStatus();
-            StesProtocolHandler.DimmerPower power = mDeviceHelper.getDimmerPower();
-            if (status != null) {
-                out.put("dimmer.on", status.on);
-                out.put("dimmer.brightness", status.actualBrightness / 10);
-            }
-            if (power != null) out.put("dimmer.power", round1(power.powerW));
-        }
     }
 
     private void readSlow(Map<String, Object> out) {

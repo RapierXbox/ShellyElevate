@@ -111,9 +111,9 @@ public class MQTTServer {
         checkCredsAndConnect();
     }
 
-    // shared with the v1 api so both describe the same display
+    // the v1 api id starts as this id so both describe the same display
     private void setupClientId() {
-        clientId = ApiInfo.deviceId();
+        clientId = ApiInfo.mqttClientId();
     }
 
     private void registerReceivers() {

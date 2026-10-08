@@ -30,6 +30,7 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import me.rapierxbox.shellyelevatev2.api.ApiEvents;
 import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 
@@ -76,11 +77,13 @@ public class SwInputHandler {
         configuredModes = new int[device.inputs];
         configuredInverts = new boolean[device.inputs];
         for (int i = 0; i < device.inputs; i++) {
+            final int input = i;
             pressDetectors[i] = new ButtonPressDetector(JS_BUTTON_ID_BASE + i, (buttonId, pressType) ->
                     ioExecutor.execute(() -> {
                         if (mMQTTServer != null && mMQTTServer.shouldSend()) {
                             mMQTTServer.publishButton(buttonId, pressType);
                         }
+                        ApiEvents.input(input, pressType);
                     }));
         }
 

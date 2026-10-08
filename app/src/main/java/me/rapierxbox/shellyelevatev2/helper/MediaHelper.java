@@ -19,6 +19,7 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
+import me.rapierxbox.shellyelevatev2.api.ApiEvents;
 import me.rapierxbox.shellyelevatev2.api.ApiHub;
 
 // music player with a queue plus an announce channel that pauses the music and resumes it afterwards
@@ -78,6 +79,8 @@ public class MediaHelper {
             if (connected) post(this::pushStatus);
         };
         ApiHub.addControllerListener(controllerListener);
+        // a controller that is already connected gets the status as soon as media is enabled
+        if (ApiHub.hasController()) post(this::pushStatus);
         Log.i(TAG, "MediaHelper enabled");
     }
 
@@ -327,7 +330,7 @@ public class MediaHelper {
             setState(State.BUFFERING);
         } catch (IOException | IllegalArgumentException | IllegalStateException | SecurityException e) {
             Log.e(TAG, "Cannot play " + track.url, e);
-            onMusicFailed();
+            onMusicFailed(MediaPlayer.MEDIA_ERROR_UNKNOWN, MediaPlayer.MEDIA_ERROR_IO);
         }
     }
 
@@ -348,7 +351,7 @@ public class MediaHelper {
             musicPlayer.setOnErrorListener((mp, what, extra) -> {
                 Log.e(TAG, "Music error: " + what + " / " + extra);
                 musicPrepared = false;
-                onMusicFailed();
+                onMusicFailed(what, extra);
                 // true so onCompletion does not fire as well
                 return true;
             });
@@ -396,7 +399,9 @@ public class MediaHelper {
     }
 
     // a broken url skips ahead but a queue where every item fails stops
-    private void onMusicFailed() {
+    private void onMusicFailed(int what, int extra) {
+        MediaQueue.Track failed = queue.current();
+        ApiEvents.mediaError(failed != null ? failed.url : null, what, extra);
         musicPrepared = false;
         consecutiveErrors++;
         MediaQueue.Track next = consecutiveErrors < queue.size() ? queue.advance(true) : null;

@@ -58,6 +58,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL
 import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
+import me.rapierxbox.shellyelevatev2.api.ApiHub
 import me.rapierxbox.shellyelevatev2.display.DisplayContent
 import me.rapierxbox.shellyelevatev2.display.DisplayHost
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
@@ -533,6 +534,17 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             firstPaintDone = false
         }
 
+        override fun onPageFinished(view: WebView?, url: String?) {
+            super.onPageFinished(view, url)
+            reportShownUrl(url)
+        }
+
+        // single page dashboards switch views through the history api without a new page load
+        override fun doUpdateVisitedHistory(view: WebView?, url: String?, isReload: Boolean) {
+            super.doUpdateVisitedHistory(view, url, isReload)
+            reportShownUrl(url)
+        }
+
         override fun onPageCommitVisible(view: WebView?, url: String?) {
             super.onPageCommitVisible(view, url)
             firstPaintDone = true
@@ -638,6 +650,12 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             if (consoleMessage.message().contains("PacProcessor")) return true
             return super.onConsoleMessage(consoleMessage)
         }
+    }
+
+    private fun reportShownUrl(url: String?) {
+        if (destroyed || url.isNullOrEmpty() || url == WebViewDisplayModule.shownUrl) return
+        WebViewDisplayModule.shownUrl = url
+        ApiHub.stateChanged()
     }
 
     private fun isOfflineUrl(url: String?): Boolean = url?.contains(OFFLINE_PAGE) == true

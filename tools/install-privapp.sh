@@ -292,14 +292,28 @@ try_adb shell "appops set $PKG WRITE_SETTINGS allow"
 try_adb shell "appops set $PKG SYSTEM_ALERT_WINDOW allow"
 try_adb shell "appops set $PKG GET_USAGE_STATS allow"
 try_adb shell "dumpsys deviceidle whitelist +$PKG" >/dev/null
-# runtime perm so the wifi settings section gets scan results
-try_adb shell "pm grant $PKG android.permission.ACCESS_FINE_LOCATION"
+# same list as post_install_commands in the home assistant integration
+SDK=$(get_shell "getprop ro.build.version.sdk")
+[[ $SDK =~ ^[0-9]+$ ]] || SDK=0
+if [ "$SDK" -lt 31 ]; then
+    # runtime perm so the wifi settings section gets scan results
+    try_adb shell "pm grant $PKG android.permission.ACCESS_FINE_LOCATION"
+    # ble scans on api 23 to 30 also need location on. the wall display runs api 24
+    try_adb shell "settings put secure location_mode 3"
+    PERM_CHECK="ACCESS_FINE_LOCATION: granted=true"
+else
+    # ble scans on api 31 and up need these instead of location
+    try_adb shell "pm grant $PKG android.permission.BLUETOOTH_SCAN"
+    try_adb shell "pm grant $PKG android.permission.BLUETOOTH_CONNECT"
+    PERM_CHECK="BLUETOOTH_SCAN: granted=true"
+fi
 # runtime perm for the wake word and voice over the home assistant integration
 try_adb shell "pm grant $PKG android.permission.RECORD_AUDIO"
 OPS_OUT=$(adb shell "appops get $PKG WRITE_SETTINGS" | tr -d '\r\n') || true
 IDLE_OUT=$(adb shell "dumpsys deviceidle whitelist" | tr -d '\r') || true
 LOC_OUT=$(adb shell "dumpsys package $PKG" | tr -d '\r') || true
-if ! contains "$OPS_OUT" "allow" || ! contains "$IDLE_OUT" "$PKG" || ! contains "$LOC_OUT" "ACCESS_FINE_LOCATION: granted=true"; then
+if ! contains "$OPS_OUT" "allow" || ! contains "$IDLE_OUT" "$PKG" || ! contains "$LOC_OUT" "$PERM_CHECK" \
+        || ! contains "$LOC_OUT" "RECORD_AUDIO: granted=true"; then
     die "permissions did not apply. appops: $OPS_OUT"
 fi
 

@@ -79,7 +79,9 @@ public class WakeWordDetector {
     private int positiveOutputIdx = 0;
     private int wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
     private float lastRawScore = 0f;
-    private boolean skipNextInference = false;
+    // low power pauses the models while the room is quiet
+    private final QuietGate quietGate = new QuietGate();
+    private boolean chunkActive = true;
     private long lastTriggerAt = 0L;
     // set during a chunk so the callback runs after the lock is released
     private boolean wakePending = false;
@@ -211,7 +213,7 @@ public class WakeWordDetector {
         scoreBroadcastEnabled = enabled;
     }
 
-    // skips every other inference for roughly half the cpu at twice the latency
+    // pauses inference while the room is quiet and replays the buffered frames on the next sound
     public void setLowPowerMode(boolean low) {
         lowPowerMode = low;
     }
@@ -350,6 +352,7 @@ public class WakeWordDetector {
                         // recheck under the lock since a destroy may have closed the model
                         if (!isCurrentSession(session)) break;
                         wakePending = false;
+                        chunkActive = !lowPowerMode || quietGate.update(calculateRms(buf, read));
                         frontend.feed(buf, read, this::processFrame);
                         wake = wakePending;
                     }
@@ -401,6 +404,8 @@ public class WakeWordDetector {
             vadScoreWindow.reset();
         }
         vadDetected = false;
+        quietGate.reset();
+        chunkActive = true;
         debugMaxScore = 0f;
         debugInferCount = 0;
         wakeIgnoreWindows = -MIN_SLICES_BEFORE_DETECTION;
@@ -421,40 +426,45 @@ public class WakeWordDetector {
 
         if (!wakeModel.pushFrame(melFrame)) return;
 
-        if (lowPowerMode) {
-            skipNextInference = !skipNextInference;
-            if (skipNextInference) return;
-        }
+        // a quiet chunk leaves its windows in the model ring. the next sound runs them
+        // oldest first so the start of a wake word is never lost
+        if (!chunkActive) return;
 
-        try {
-            wakeModel.run();
-        } catch (Exception e) {
-            Log.e(TAG, "inference error", e);
-            return;
+        while (true) {
+            try {
+                if (!wakeModel.runNext()) return;
+            } catch (Exception e) {
+                Log.e(TAG, "inference error", e);
+                return;
+            }
+            if (onWakeScore(wakeModel.readScore(positiveOutputIdx))) return;
         }
+    }
 
-        float rawScore = wakeModel.readScore(positiveOutputIdx);
+    // true once the score triggered a wake
+    private boolean onWakeScore(float rawScore) {
         lastRawScore = rawScore;
         float avgScore = scoreWindow.add(rawScore);
 
         if (BuildConfig.DEBUG) logScore(avgScore, rawScore);
         maybeBroadcastScore(avgScore);
 
-        if (avgScore < scoreThreshold || wakeIgnoreWindows < 0) return;
+        if (avgScore < scoreThreshold || wakeIgnoreWindows < 0) return false;
         if (vadModel != null && vadModel.hasInterpreter() && !vadDetected) {
             if (BuildConfig.DEBUG) {
                 Log.d(TAG, "wake candidate blocked by VAD (score=" + String.format("%.3f", avgScore) + ")");
             }
-            return;
+            return false;
         }
 
         long now = System.currentTimeMillis();
-        if ((now - lastTriggerAt) < cooldownMs) return;
+        if ((now - lastTriggerAt) < cooldownMs) return false;
         lastTriggerAt = now;
         Log.i(TAG, "wake word detected (score=" + String.format("%.3f", avgScore) + ")");
 
         resetProbabilities();
         wakePending = true;
+        return true;
     }
 
     private void logScore(float avgScore, float rawScore) {
@@ -504,6 +514,7 @@ public class WakeWordDetector {
     private void processVadFrame(float[] melFrame) {
         if (vadModel == null || !vadModel.hasInterpreter()) return;
         if (!vadModel.pushFrame(melFrame)) return;
+        if (!chunkActive) return;
         try {
             vadModel.run();
         } catch (Exception e) {

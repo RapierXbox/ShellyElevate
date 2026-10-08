@@ -13,6 +13,8 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPref
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.PowerManager;
 import android.os.SystemClock;
 import android.provider.Settings;
@@ -67,6 +69,8 @@ public class DeviceHelper {
 
     // runs the root shell power fallbacks off the caller thread
     private static final ExecutorService POWER_EXEC = Executors.newSingleThreadExecutor();
+    private static final long INIT_RELAY_RECHECK_MS = 500;
+    private final Handler relayRecheckHandler = new Handler(Looper.getMainLooper());
 
     private final DeviceModel deviceModel;
     private String screenBrightnessFile;
@@ -326,6 +330,8 @@ public class DeviceHelper {
         boolean physicalState = state ^ deviceModel.invertRelay;
         if (deviceModel.usesInitScriptRelay()) {
             triggerInitRelay(num, physicalState);
+            // the init script switches a moment later so the state is read again once it ran
+            relayRecheckHandler.postDelayed(ApiHub::stateChanged, INIT_RELAY_RECHECK_MS);
         } else {
             SysFs.write(getRelayFile(num), physicalState ? "1" : "0");
         }

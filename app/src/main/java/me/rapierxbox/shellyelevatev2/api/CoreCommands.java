@@ -41,6 +41,8 @@ import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 // voice and media register their own commands
 final class CoreCommands {
     private static final String TAG = "ApiCommands";
+    // ScreenManager animates on the main looper
+    private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private CoreCommands() {}
 
@@ -53,7 +55,8 @@ final class CoreCommands {
             return null;
         });
         ApiHub.registerCommand("screen.sleep", p -> {
-            if (mScreenSaverManager != null) mScreenSaverManager.startScreenSaver();
+            // the controller asked for it so it sleeps even with the screensaver setting off
+            if (mScreenSaverManager != null) mScreenSaverManager.startScreenSaver(true);
             ApiHub.stateChanged();
             return null;
         });
@@ -73,8 +76,11 @@ final class CoreCommands {
         ApiHub.registerCommand("webview.navigate", CoreCommands::webviewNavigate);
         ApiHub.registerCommand("ui.notify", CoreCommands::notify);
         ApiHub.registerCommand("device.reboot", p -> {
-            if (!RebootHelper.rebootUnlessJustStarted(mApplicationContext)) {
+            if (RebootHelper.justStarted(mApplicationContext)) {
                 throw new ApiHub.CommandException("busy", "the display just started");
+            }
+            if (!RebootHelper.rebootAndConfirm()) {
+                throw new ApiHub.CommandException("internal", "the reboot could not be started");
             }
             return null;
         });
@@ -88,7 +94,7 @@ final class CoreCommands {
     private static JSONObject relaySet(JSONObject p) throws ApiHub.CommandException {
         int index = requireInt(p, "index");
         boolean on = requireBoolean(p, "on");
-        if (index < 0 || index >= DeviceModel.getReportedDevice().relays) {
+        if (index < 0 || index >= DeviceModel.apiRelayCount()) {
             throw ApiHub.CommandException.invalid("no relay " + index);
         }
         mDeviceHelper.setRelay(index, on);
@@ -125,8 +131,10 @@ final class CoreCommands {
         }
         if (p.has("auto")) editor.putBoolean(SP_AUTOMATIC_BRIGHTNESS, requireBoolean(p, "auto"));
         editor.apply();
-        if (mScreenManager != null) mScreenManager.reapplyBrightness();
-        ApiHub.stateChanged();
+        mainHandler.post(() -> {
+            if (mScreenManager != null) mScreenManager.reapplyBrightness();
+            ApiHub.stateChanged();
+        });
         return null;
     }
 
@@ -205,7 +213,8 @@ final class CoreCommands {
             throw ApiHub.CommandException.unsupported("self update needs the privileged install");
         }
         if (AppUpdater.isInProgress()) throw new ApiHub.CommandException("busy", "an update is already running");
-        String sha256 = p.optString("sha256", "");
+        // optString turns a json null into the text null
+        String sha256 = p.isNull("sha256") ? "" : p.optString("sha256", "");
         AppUpdater.installFromUrl(mApplicationContext, url, version, sha256.isEmpty() ? null : sha256,
                 new AppUpdater.InstallListener() {
                     @Override public void onProgress(int percent) {}
@@ -214,6 +223,7 @@ final class CoreCommands {
                     }
                     @Override public void onFailed(String reason) {
                         Log.w(TAG, "Update failed: " + reason);
+                        ApiEvents.appUpdateFailed(version, reason);
                     }
                     @Override public void onCancelled() {}
                 });

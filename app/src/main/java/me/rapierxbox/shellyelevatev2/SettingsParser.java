@@ -74,6 +74,8 @@ public class SettingsParser {
         for (Iterator<String> it = settings.keys(); it.hasNext(); ) {
             String key = it.next();
             Object value = settings.get(key);
+            // the v1 api id never changes once set
+            if (Constants.SP_API_DEVICE_ID.equals(key)) continue;
 
             // explicit json null removes the key
             if (value == JSONObject.NULL) {
@@ -167,21 +169,29 @@ public class SettingsParser {
         // key to resolved value for keys whose value actually changed
         public final JSONObject changes;
         public final boolean restartRequired;
+        // keys the schema does not know. they are skipped and not written
+        public final JSONArray ignored;
 
-        PatchResult(JSONObject changes, boolean restartRequired) {
+        PatchResult(JSONObject changes, boolean restartRequired, JSONArray ignored) {
             this.changes = changes;
             this.restartRequired = restartRequired;
+            this.ignored = ignored;
         }
     }
 
     // validates every key first so a bad value leaves all settings untouched
-    // null resets a key to its default
+    // null resets a key to its default. unknown keys are skipped and reported as ignored
+    // since GET /settings passes unknown stored keys through and a client may send them back
     public PatchResult applyPatch(JSONObject patch) throws IllegalArgumentException {
         Map<String, Object> writes = new LinkedHashMap<>();
+        JSONArray ignored = new JSONArray();
         for (Iterator<String> it = patch.keys(); it.hasNext(); ) {
             String key = it.next();
             SettingDef def = SettingsRegistry.get(key);
-            if (def == null) throw new IllegalArgumentException("unknown setting " + key);
+            if (def == null) {
+                ignored.put(key);
+                continue;
+            }
             Object value = patch.opt(key);
             // ApiInfo replaces short ids with a random one which would change the display identity
             if (Constants.SP_MQTT_CLIENTID.equals(key) && (value == null || value == JSONObject.NULL
@@ -216,7 +226,7 @@ public class SettingsParser {
             LocalBroadcastManager.getInstance(mApplicationContext)
                     .sendBroadcast(new Intent(Constants.INTENT_SETTINGS_CHANGED));
         }
-        return new PatchResult(changes, restart);
+        return new PatchResult(changes, restart, ignored);
     }
 
     // stores with the shared preferences type every reader of the key expects

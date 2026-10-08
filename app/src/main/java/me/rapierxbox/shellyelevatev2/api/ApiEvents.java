@@ -43,6 +43,44 @@ public final class ApiEvents {
         }
     }
 
+    // a press on a wired sw input
+    public static void input(int index, String pressType) {
+        if (!ApiHub.hasController()) return;
+        try {
+            ApiHub.event("input", new JSONObject()
+                    .put("index", index)
+                    .put("press", press(pressType)));
+        } catch (JSONException e) {
+            Log.w(TAG, "Could not build input event", e);
+        }
+    }
+
+    // a music url that could not be played. what and extra are the MediaPlayer error codes
+    public static void mediaError(String url, int what, int extra) {
+        if (!ApiHub.hasController()) return;
+        try {
+            ApiHub.event("media_error", new JSONObject()
+                    .put("url", url != null ? url : JSONObject.NULL)
+                    .put("what", what)
+                    .put("extra", extra));
+        } catch (JSONException e) {
+            Log.w(TAG, "Could not build media_error event", e);
+        }
+    }
+
+    // a self update started by app.update that did not install
+    public static void appUpdateFailed(String version, String reason) {
+        if (!ApiHub.hasController()) return;
+        try {
+            ApiHub.event("app_update", new JSONObject()
+                    .put("status", "failed")
+                    .put("version", version)
+                    .put("reason", reason != null ? reason : ""));
+        } catch (JSONException e) {
+            Log.w(TAG, "Could not build app_update event", e);
+        }
+    }
+
     static String press(String pressType) {
         if (Constants.BUTTON_PRESS_TYPE_SHORT.equals(pressType)) return "single";
         return pressType;

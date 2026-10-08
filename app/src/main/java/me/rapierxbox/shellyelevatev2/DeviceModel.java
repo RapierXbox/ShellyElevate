@@ -92,6 +92,32 @@ public enum DeviceModel {
 
     // unknown hardware falls back to the original wall display
     public static DeviceModel getReportedDevice() {
+        DeviceModel known = findKnown();
+        return known != null ? known : DeviceModel.STARGATE;
+    }
+
+    // false when the build matched no model and the stargate defaults are only a guess
+    public static boolean isKnownHardware() {
+        return findKnown() != null;
+    }
+
+    // the v1 api describes unknown hardware as it is and offers no relays on it
+    public static String apiCodename() {
+        DeviceModel known = findKnown();
+        return known != null ? known.name() : "UNKNOWN";
+    }
+
+    public static String apiModel() {
+        DeviceModel known = findKnown();
+        return known != null ? known.sku : (Build.MODEL != null ? Build.MODEL : "");
+    }
+
+    public static int apiRelayCount() {
+        DeviceModel known = findKnown();
+        return known != null ? known.relays : 0;
+    }
+
+    private static DeviceModel findKnown() {
         String reportedModel   = normalize(Build.MODEL);
         String reportedDevice  = normalize(Build.DEVICE);
         String reportedProduct = normalize(Build.PRODUCT);
@@ -99,7 +125,7 @@ public enum DeviceModel {
         return Arrays.stream(DeviceModel.values())
                 .filter(d -> matches(d, reportedModel, reportedDevice, reportedProduct))
                 .findFirst()
-                .orElse(DeviceModel.STARGATE);
+                .orElse(null);
     }
 
     // the codename only ever shows up in build.model while the sku can appear in any build field

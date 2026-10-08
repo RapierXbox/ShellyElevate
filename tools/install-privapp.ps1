@@ -219,14 +219,27 @@ Write-Host "applying permissions"
 & adb shell "appops set $pkg SYSTEM_ALERT_WINDOW allow"
 & adb shell "appops set $pkg GET_USAGE_STATS allow"
 & adb shell "dumpsys deviceidle whitelist +$pkg" | Out-Null
-# runtime perm so the wifi settings section gets scan results
-& adb shell "pm grant $pkg android.permission.ACCESS_FINE_LOCATION"
+# same list as post_install_commands in the home assistant integration
+$sdk = 0
+[void][int]::TryParse(((& adb shell getprop ro.build.version.sdk) -join "").Trim(), [ref]$sdk)
+if ($sdk -lt 31) {
+    # runtime perm so the wifi settings section gets scan results
+    & adb shell "pm grant $pkg android.permission.ACCESS_FINE_LOCATION"
+    # ble scans on api 23 to 30 also need location on. the wall display runs api 24
+    & adb shell "settings put secure location_mode 3"
+    $permCheck = "ACCESS_FINE_LOCATION: granted=true"
+} else {
+    # ble scans on api 31 and up need these instead of location
+    & adb shell "pm grant $pkg android.permission.BLUETOOTH_SCAN"
+    & adb shell "pm grant $pkg android.permission.BLUETOOTH_CONNECT"
+    $permCheck = "BLUETOOTH_SCAN: granted=true"
+}
 # runtime perm for the wake word and voice over the home assistant integration
 & adb shell "pm grant $pkg android.permission.RECORD_AUDIO"
 $opsOut = (& adb shell "appops get $pkg WRITE_SETTINGS") -join ""
 $idleOut = (& adb shell "dumpsys deviceidle whitelist") -join "`n"
 $locOut = (& adb shell "dumpsys package $pkg") -join "`n"
-if ($opsOut -notmatch "allow" -or $idleOut -notmatch [regex]::Escape($pkg) -or $locOut -notmatch "ACCESS_FINE_LOCATION: granted=true") {
+if ($opsOut -notmatch "allow" -or $idleOut -notmatch [regex]::Escape($pkg) -or $locOut -notmatch $permCheck -or $locOut -notmatch "RECORD_AUDIO: granted=true") {
     Write-Error "permissions did not apply. appops: $opsOut"
     exit 1
 }

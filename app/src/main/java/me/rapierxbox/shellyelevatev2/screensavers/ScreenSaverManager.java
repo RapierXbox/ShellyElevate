@@ -213,9 +213,14 @@ public class ScreenSaverManager extends BroadcastReceiver {
         }
     }
 
+    public void startScreenSaver() {
+        startScreenSaver(false);
+    }
+
     // synchronized because paho scheduler and main threads all call this
-    public synchronized void startScreenSaver() {
-        if (screenSaverRunning || !isScreenSaverEnabled()) return;
+    // force starts it even with the screensaver setting off
+    public synchronized void startScreenSaver(boolean force) {
+        if (screenSaverRunning || (!force && !isScreenSaverEnabled())) return;
 
         screenSaverRunning = true;
 
@@ -308,8 +313,7 @@ public class ScreenSaverManager extends BroadcastReceiver {
         boolean wakeOnProximity = prefs.getBoolean(SP_WAKE_ON_PROXIMITY, true);
         int configuredKeepAwakeSeconds = Math.max(0, prefs.getInt(SP_PROXIMITY_KEEP_AWAKE_SECONDS, 30));
         long keepAwakeMs = configuredKeepAwakeSeconds * 1000L;
-        float threshold = maxProximitySensorValue <= 1.5f ? 0.5f : Math.max(0.5f, maxProximitySensorValue * 0.1f);
-        boolean isNear = proximity < maxProximitySensorValue - threshold;
+        boolean isNear = isNear(proximity, maxProximitySensorValue);
 
         // only act on near/far transitions not on each repeated event
         if (lastNearState != null && lastNearState == isNear) {
@@ -323,6 +327,12 @@ public class ScreenSaverManager extends BroadcastReceiver {
             if (screenSaverRunning) stopScreenSaver();
             keepAwakeAfterProximity(now, keepAwakeMs);
         }
+    }
+
+    // near means clearly below the far reading of the sensor
+    public static boolean isNear(float proximity, float maxProximitySensorValue) {
+        float threshold = maxProximitySensorValue <= 1.5f ? 0.5f : Math.max(0.5f, maxProximitySensorValue * 0.1f);
+        return proximity < maxProximitySensorValue - threshold;
     }
 
     private void keepAwakeAfterProximity(long now, long keepAwakeMs) {

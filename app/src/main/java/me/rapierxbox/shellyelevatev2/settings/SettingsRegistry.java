@@ -6,6 +6,18 @@ import static me.rapierxbox.shellyelevatev2.settings.SettingDef.TYPE_FLOAT;
 import static me.rapierxbox.shellyelevatev2.settings.SettingDef.TYPE_INT;
 import static me.rapierxbox.shellyelevatev2.settings.SettingDef.TYPE_STRING;
 import static me.rapierxbox.shellyelevatev2.settings.SettingDef.TYPE_STRING_LIST;
+import static me.rapierxbox.shellyelevatev2.settings.SettingDef.Condition.eq;
+import static me.rapierxbox.shellyelevatev2.settings.SettingDef.Condition.in;
+import static me.rapierxbox.shellyelevatev2.settings.SettingDef.Condition.ne;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.BLUETOOTH;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.BUTTONS;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.INPUTS;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.LUX;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.MICROPHONE;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.POWER_BUTTON;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.PROXIMITY;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.RELAYS;
+import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.TEMPERATURE;
 
 import android.content.SharedPreferences;
 
@@ -55,6 +67,7 @@ public final class SettingsRegistry {
     // bookkeeping the app writes for itself. never in the schema and never writable over the api
     private static final Set<String> INTERNAL_KEYS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
             Constants.SP_DEPRECATED_HA_IP,
+            Constants.SP_API_DEVICE_ID,
             Constants.SP_WEBVIEW_UPDATE_PROMPTED,
             Constants.SP_WEBVIEW_UPDATE_PENDING_FROM,
             Constants.SP_DIMMER_LAST_BRIGHTNESS,
@@ -97,96 +110,129 @@ public final class SettingsRegistry {
                 CATEGORY_INPUTS, "App switcher gesture").options(switcherGestureOptions())
                 .description("Multi finger swipe that opens the app switcher"));
         add(m, bool(Constants.SP_APP_SWITCHER_PREVIEWS, true, CATEGORY_GENERAL, "App switcher previews")
-                .description("Show screenshots of the apps in the switcher"));
+                .description("Show screenshots of the apps in the switcher")
+                .visibleIf(ne(Constants.SP_APP_SWITCHER_GESTURE, Constants.APP_SWITCHER_GESTURE_OFF)));
         add(m, bool(Constants.SP_SETTINGS_EVER_SHOWN, false, CATEGORY_ADVANCED, "Settings shown once")
-                .description("The first start already opened the settings").perDevice());
+                .description("The first start already opened the settings").perDevice().hidden());
 
         // display
-        add(m, bool(Constants.SP_AUTOMATIC_BRIGHTNESS, true, CATEGORY_DISPLAY, "Automatic brightness"));
+        add(m, bool(Constants.SP_AUTOMATIC_BRIGHTNESS, true, CATEGORY_DISPLAY, "Automatic brightness").requires(LUX));
+        // without a light sensor automatic brightness counts as off so the fixed level applies
         add(m, integer(Constants.SP_BRIGHTNESS, 255, CATEGORY_DISPLAY, "Brightness").range(0, 255)
-                .description("Fixed brightness while automatic brightness is off"));
+                .description("Fixed brightness while automatic brightness is off")
+                .visibleIf(eq(Constants.SP_AUTOMATIC_BRIGHTNESS, false)));
         add(m, integer(Constants.SP_MIN_BRIGHTNESS, 48, CATEGORY_DISPLAY, "Minimum brightness").range(0, 255)
-                .description("Lowest brightness automatic brightness goes down to"));
+                .description("Lowest brightness automatic brightness goes down to")
+                .visibleIf(eq(Constants.SP_AUTOMATIC_BRIGHTNESS, true)).requires(LUX));
         add(m, bool(Constants.SP_NIGHT_MODE_ENABLED, false, CATEGORY_DISPLAY, "Night mode")
                 .description("Dims the screen below the backlight minimum"));
 
         // screensaver
         add(m, bool(Constants.SP_SCREEN_SAVER_ENABLED, true, CATEGORY_SCREENSAVER, "Screensaver"));
+        SettingDef.Condition saverOn = eq(Constants.SP_SCREEN_SAVER_ENABLED, true);
         add(m, integer(Constants.SP_SCREEN_SAVER_DELAY, 45, CATEGORY_SCREENSAVER, "Screensaver delay")
-                .range(5, 86400).unit("s").description("Seconds of inactivity before the screensaver starts"));
+                .range(5, 86400).unit("s").description("Seconds of inactivity before the screensaver starts")
+                .visibleIf(saverOn));
         add(m, new SettingDef.Builder(Constants.SP_SCREEN_SAVER_ID, TYPE_ENUM, 0, CATEGORY_SCREENSAVER, "Screensaver type")
                 .options(Arrays.asList(
                         new SettingDef.Option(0, "Screen off"),
                         new SettingDef.Option(1, "Clock"),
                         new SettingDef.Option(2, "Clock and date"),
-                        new SettingDef.Option(3, "Always-on display"))));
+                        new SettingDef.Option(3, "Always-on display")))
+                .visibleIf(saverOn));
+        // screen off and aod pin the backlight so only the clocks follow the light sensor
         add(m, integer(Constants.SP_SCREEN_SAVER_MIN_BRIGHTNESS, 48, CATEGORY_SCREENSAVER, "Screensaver brightness")
-                .range(0, 255));
-        add(m, bool(Constants.SP_WAKE_ON_PROXIMITY, true, CATEGORY_SCREENSAVER, "Wake on proximity"));
+                .range(0, 255)
+                .visibleIf(saverOn, in(Constants.SP_SCREEN_SAVER_ID, 1, 2), eq(Constants.SP_AUTOMATIC_BRIGHTNESS, true))
+                .requires(LUX));
+        add(m, bool(Constants.SP_WAKE_ON_PROXIMITY, true, CATEGORY_SCREENSAVER, "Wake on proximity")
+                .visibleIf(saverOn).requires(PROXIMITY));
+        // only pushes the idle deadline back so it needs the automatic screensaver
         add(m, integer(Constants.SP_PROXIMITY_KEEP_AWAKE_SECONDS, 30, CATEGORY_SCREENSAVER, "Keep awake after proximity")
-                .range(0, 86400).unit("s"));
-        add(m, bool(Constants.SP_TOUCH_TO_WAKE, true, CATEGORY_SCREENSAVER, "Touch to wake"));
+                .range(0, 86400).unit("s")
+                .visibleIf(saverOn, eq(Constants.SP_WAKE_ON_PROXIMITY, true))
+                .requires(PROXIMITY));
+        add(m, bool(Constants.SP_TOUCH_TO_WAKE, true, CATEGORY_SCREENSAVER, "Touch to wake").visibleIf(saverOn));
         add(m, new SettingDef.Builder(Constants.SP_SLEEP_OPTIMIZATION_LEVEL, TYPE_ENUM, Constants.SLEEP_OPT_NONE,
                 CATEGORY_SCREENSAVER, "Sleep optimization").options(Arrays.asList(
                         new SettingDef.Option(Constants.SLEEP_OPT_NONE, "None"),
                         new SettingDef.Option(Constants.SLEEP_OPT_STANDARD, "Standard"),
                         new SettingDef.Option(Constants.SLEEP_OPT_AGGRESSIVE, "Aggressive")))
-                .description("How much the app throttles itself while the screensaver runs"));
+                .description("How much the app throttles itself while the screensaver runs")
+                .visibleIf(saverOn));
 
         // inputs
-        add(m, bool(Constants.SP_SWITCH_ON_SWIPE, true, CATEGORY_INPUTS, "Toggle relay on swipe"));
+        add(m, bool(Constants.SP_SWITCH_ON_SWIPE, true, CATEGORY_INPUTS, "Toggle relay on swipe").requires(RELAYS, 1));
         add(m, bool(Constants.SP_PUBLISH_SWIPE_EVENTS, true, CATEGORY_INPUTS, "Publish swipe events"));
-        add(m, bool(Constants.SP_POWER_BUTTON_AUTO_REBOOT, true, CATEGORY_INPUTS, "Power button reboots"));
-        add(m, bool(Constants.SP_BUTTON_RELAY_ENABLED, false, CATEGORY_INPUTS, "Buttons switch relays"));
+        add(m, bool(Constants.SP_POWER_BUTTON_AUTO_REBOOT, true, CATEGORY_INPUTS, "Power button reboots")
+                .requires(POWER_BUTTON));
+        add(m, bool(Constants.SP_BUTTON_RELAY_ENABLED, false, CATEGORY_INPUTS, "Buttons switch relays")
+                .requires(BUTTONS, 1).requires(RELAYS, 1));
         for (int i = 0; i < MAX_BUTTONS; i++) {
             add(m, integer(format(Constants.SP_BUTTON_RELAY_MAP_FORMAT, i), -1, CATEGORY_INPUTS,
                     "Button " + (i + 1) + " relay").range(-1, MAX_RELAY_INDEX)
-                    .description("Relay the button toggles or -1 for none"));
+                    .description("Relay the button toggles or -1 for none")
+                    .visibleIf(eq(Constants.SP_BUTTON_RELAY_ENABLED, true))
+                    .requires(BUTTONS, i + 1).requires(RELAYS, 1));
         }
         for (int i = 0; i < MAX_INPUTS; i++) {
             String n = String.valueOf(i + 1);
-            add(m, new SettingDef.Builder(format(Constants.SP_SW_INPUT_MODE_FORMAT, i), TYPE_ENUM,
+            String modeKey = format(Constants.SP_SW_INPUT_MODE_FORMAT, i);
+            add(m, new SettingDef.Builder(modeKey, TYPE_ENUM,
                     Constants.SW_INPUT_MODE_BUTTON, CATEGORY_INPUTS, "Input " + n + " mode").options(Arrays.asList(
                             new SettingDef.Option(Constants.SW_INPUT_MODE_DETACHED, "Detached (report only)"),
                             new SettingDef.Option(Constants.SW_INPUT_MODE_BUTTON, "Button: press toggles relay"),
                             new SettingDef.Option(Constants.SW_INPUT_MODE_SWITCH_EDGE, "Switch: every flip toggles relay"),
-                            new SettingDef.Option(Constants.SW_INPUT_MODE_SWITCH_FOLLOW, "Switch: relay follows position"))));
+                            new SettingDef.Option(Constants.SW_INPUT_MODE_SWITCH_FOLLOW, "Switch: relay follows position")))
+                    .requires(INPUTS, i + 1));
+            // a detached input only reports so it drives no relay
             add(m, integer(format(Constants.SP_SW_INPUT_RELAY_MAP_FORMAT, i), 0, CATEGORY_INPUTS, "Input " + n + " relay")
-                    .range(-1, MAX_RELAY_INDEX).description("Relay the input drives or -1 for none"));
-            add(m, bool(format(Constants.SP_SW_INPUT_INVERT_FORMAT, i), false, CATEGORY_INPUTS, "Invert input " + n));
+                    .range(-1, MAX_RELAY_INDEX).description("Relay the input drives or -1 for none")
+                    .visibleIf(ne(modeKey, Constants.SW_INPUT_MODE_DETACHED))
+                    .requires(INPUTS, i + 1).requires(RELAYS, 1));
+            add(m, bool(format(Constants.SP_SW_INPUT_INVERT_FORMAT, i), false, CATEGORY_INPUTS, "Invert input " + n)
+                    .requires(INPUTS, i + 1));
         }
 
         // mqtt
         add(m, bool(Constants.SP_MQTT_ENABLED, false, CATEGORY_MQTT, "MQTT"));
-        add(m, string(Constants.SP_MQTT_BROKER, "", CATEGORY_MQTT, "MQTT broker"));
-        add(m, integer(Constants.SP_MQTT_PORT, 1883, CATEGORY_MQTT, "MQTT port").range(1, 65535));
-        add(m, string(Constants.SP_MQTT_USERNAME, "", CATEGORY_MQTT, "MQTT username"));
-        add(m, string(Constants.SP_MQTT_PASSWORD, "", CATEGORY_MQTT, "MQTT password").secret());
-        add(m, string(Constants.SP_MQTT_CLIENTID, "", CATEGORY_MQTT, "MQTT device id").perDevice()
-                .description("Also the stable id of the display. generated on first start"));
-        add(m, bool(Constants.SP_MQTT_HA_DISCOVERY, true, CATEGORY_MQTT, "MQTT Home Assistant discovery"));
-        add(m, bool(Constants.SP_MQTT_RETAIN_STATE, true, CATEGORY_MQTT, "Retain MQTT state"));
+        SettingDef.Condition mqttOn = eq(Constants.SP_MQTT_ENABLED, true);
+        add(m, string(Constants.SP_MQTT_BROKER, "", CATEGORY_MQTT, "MQTT broker").visibleIf(mqttOn));
+        add(m, integer(Constants.SP_MQTT_PORT, 1883, CATEGORY_MQTT, "MQTT port").range(1, 65535).visibleIf(mqttOn));
+        add(m, string(Constants.SP_MQTT_USERNAME, "", CATEGORY_MQTT, "MQTT username").visibleIf(mqttOn));
+        add(m, string(Constants.SP_MQTT_PASSWORD, "", CATEGORY_MQTT, "MQTT password").secret().visibleIf(mqttOn));
+        add(m, string(Constants.SP_MQTT_CLIENTID, "", CATEGORY_MQTT, "MQTT device id").perDevice().visibleIf(mqttOn)
+                .description("Id used for mqtt topics. generated on first start"));
+        add(m, bool(Constants.SP_MQTT_HA_DISCOVERY, true, CATEGORY_MQTT, "MQTT Home Assistant discovery").visibleIf(mqttOn));
+        add(m, bool(Constants.SP_MQTT_RETAIN_STATE, true, CATEGORY_MQTT, "Retain MQTT state").visibleIf(mqttOn));
 
         // voice engine
         add(m, bool(Constants.SP_HA_VOICE_ENABLED, false, CATEGORY_VOICE, "Voice assistant via Home Assistant integration")
-                .description("Stream the microphone to the paired Home Assistant after the wake word"));
+                .description("Stream the microphone to the paired Home Assistant after the wake word")
+                .visibleIf(eq(Constants.SP_INTEGRATION_API_ENABLED, true)).requires(MICROPHONE));
+        SettingDef.Condition voiceOn = eq(Constants.SP_HA_VOICE_ENABLED, true);
+        SettingDef.Condition wakeOn = eq(Constants.SP_VOICE_WAKE_ENABLED, true);
         add(m, integer(Constants.SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, CATEGORY_VOICE, "Max recording")
-                .range(1, 60).unit("s"));
-        add(m, bool(Constants.SP_VOICE_ASSISTANT_MUTED, false, CATEGORY_VOICE, "Microphone muted"));
-        add(m, bool(Constants.SP_VOICE_WAKE_ENABLED, true, CATEGORY_VOICE, "Wake word"));
+                .range(1, 60).unit("s").visibleIf(voiceOn));
+        add(m, bool(Constants.SP_VOICE_ASSISTANT_MUTED, false, CATEGORY_VOICE, "Microphone muted").visibleIf(voiceOn));
+        add(m, bool(Constants.SP_VOICE_WAKE_ENABLED, true, CATEGORY_VOICE, "Wake word").visibleIf(voiceOn));
         add(m, string(Constants.SP_VOICE_WAKE_MODEL_NAME, "", CATEGORY_VOICE, "Wake word model")
-                .description("File name of the wake word model without extension"));
+                .description("File name of the wake word model without extension").visibleIf(voiceOn, wakeOn));
         add(m, integer(Constants.SP_VOICE_WAKE_SENSITIVITY, 50, CATEGORY_VOICE, "Wake word sensitivity")
-                .range(0, 100).description("50 is the published model cutoff"));
+                .range(0, 100).description("50 is the published model cutoff").visibleIf(voiceOn, wakeOn));
         add(m, integer(Constants.SP_VOICE_WAKE_COOLDOWN_SEC, 5, CATEGORY_VOICE, "Wake word cooldown")
-                .range(1, 10).unit("s"));
-        add(m, bool(Constants.SP_VOICE_WAKE_SOUND_ENABLED, true, CATEGORY_VOICE, "Wake sound"));
-        add(m, bool(Constants.SP_VOICE_SCORE_BAR_ENABLED, false, CATEGORY_VOICE, "Show wake score bar"));
-        add(m, bool(Constants.SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false, CATEGORY_VOICE, "Experimental wake words"));
+                .range(1, 10).unit("s").visibleIf(voiceOn, wakeOn));
+        // a session the controller starts plays it too so it does not need the wake word
+        add(m, bool(Constants.SP_VOICE_WAKE_SOUND_ENABLED, true, CATEGORY_VOICE, "Wake sound").visibleIf(voiceOn));
+        add(m, bool(Constants.SP_VOICE_SCORE_BAR_ENABLED, false, CATEGORY_VOICE, "Show wake score bar")
+                .visibleIf(voiceOn, wakeOn));
+        add(m, bool(Constants.SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false, CATEGORY_VOICE, "Experimental wake words")
+                .visibleIf(voiceOn, wakeOn));
 
         // bluetooth
         add(m, bool(Constants.SP_BLE_SCANNER_ENABLED, false, CATEGORY_BLUETOOTH, "Bluetooth proxy via Home Assistant integration")
-                .description("Forward Bluetooth advertisements to the paired Home Assistant"));
+                .description("Forward Bluetooth advertisements to the paired Home Assistant")
+                .visibleIf(eq(Constants.SP_INTEGRATION_API_ENABLED, true)).requires(BLUETOOTH));
 
         // media
         add(m, bool(Constants.SP_MEDIA_ENABLED, false, CATEGORY_MEDIA, "Media playback"));
@@ -199,13 +245,19 @@ public final class SettingsRegistry {
         add(m, bool(Constants.SP_ADB_WIFI_ENABLED, false, CATEGORY_ADVANCED, "ADB over Wi-Fi"));
         add(m, bool(Constants.SP_UPDATE_PRERELEASE, false, CATEGORY_ADVANCED, "Include pre-releases")
                 .description("The in-app updater also offers pre-releases"));
-        add(m, bool(Constants.SP_PUBLISH_THERMAL_SENSORS, false, CATEGORY_ADVANCED, "Publish thermal sensors"));
-        add(m, bool(Constants.SP_DYNAMIC_TEMP_OFFSET_ENABLED, false, CATEGORY_ADVANCED, "Dynamic temperature offset"));
-        add(m, string(Constants.SP_DYNAMIC_TEMP_OFFSET_ZONE, "", CATEGORY_ADVANCED, "Thermal zone for offset"));
+        // only the mqtt server publishes the zones
+        add(m, bool(Constants.SP_PUBLISH_THERMAL_SENSORS, false, CATEGORY_ADVANCED, "Publish thermal sensors").visibleIf(mqttOn));
+        add(m, bool(Constants.SP_DYNAMIC_TEMP_OFFSET_ENABLED, false, CATEGORY_ADVANCED, "Dynamic temperature offset")
+                .requires(TEMPERATURE));
+        SettingDef.Condition offsetOn = eq(Constants.SP_DYNAMIC_TEMP_OFFSET_ENABLED, true);
+        add(m, string(Constants.SP_DYNAMIC_TEMP_OFFSET_ZONE, "", CATEGORY_ADVANCED, "Thermal zone for offset")
+                .visibleIf(offsetOn).requires(TEMPERATURE));
         add(m, floating(Constants.SP_DYNAMIC_TEMP_OFFSET_BASELINE, 40.0, CATEGORY_ADVANCED, "Offset baseline")
-                .unit("°C").description("Zone temperature at which no correction applies"));
+                .unit("°C").description("Zone temperature at which no correction applies")
+                .visibleIf(offsetOn).requires(TEMPERATURE));
         add(m, floating(Constants.SP_DYNAMIC_TEMP_OFFSET_K, 0.3, CATEGORY_ADVANCED, "Offset factor")
-                .description("Degrees subtracted per degree the zone is above the baseline"));
+                .description("Degrees subtracted per degree the zone is above the baseline")
+                .visibleIf(offsetOn).requires(TEMPERATURE));
 
 
         return Collections.unmodifiableMap(m);
@@ -270,47 +322,50 @@ public final class SettingsRegistry {
     }
 
     // module options join automatically so a new module needs no change here
+    // each one only applies while its module is the one on screen
     private static void addDisplayModuleOptions(Map<String, SettingDef> m) {
         for (DisplayModule module : DisplayModuleRegistry.getModules()) {
+            SettingDef.Condition shown = eq(Constants.SP_DISPLAY_MODULE, module.getId());
             for (ModuleOption option : module.getOptions()) {
                 String key = option.getKey();
                 String category = optionCategory(key);
                 String label = optionLabel(key);
+                SettingDef.Builder b = null;
                 if (option instanceof ModuleOption.Toggle) {
-                    add(m, bool(key, ((ModuleOption.Toggle) option).getDefault(), category, label));
+                    b = bool(key, ((ModuleOption.Toggle) option).getDefault(), category, label);
                 } else if (option instanceof ModuleOption.Text) {
-                    add(m, string(key, ((ModuleOption.Text) option).getDefault(), category, label));
+                    b = string(key, ((ModuleOption.Text) option).getDefault(), category, label);
                 } else if (option instanceof ModuleOption.Url) {
-                    add(m, string(key, ((ModuleOption.Url) option).getDefault(), category, label));
+                    b = string(key, ((ModuleOption.Url) option).getDefault(), category, label);
                 } else if (option instanceof ModuleOption.IntNumber) {
                     ModuleOption.IntNumber o = (ModuleOption.IntNumber) option;
-                    SettingDef.Builder b = integer(key, o.getDefault(), category, label);
+                    b = integer(key, o.getDefault(), category, label);
                     if (o.getMin() != Integer.MIN_VALUE) b.min(o.getMin());
                     if (o.getMax() != Integer.MAX_VALUE) b.max(o.getMax());
-                    add(m, b);
                 } else if (option instanceof ModuleOption.FloatNumber) {
                     ModuleOption.FloatNumber o = (ModuleOption.FloatNumber) option;
-                    SettingDef.Builder b = floating(key, o.getDefault(), category, label);
+                    b = floating(key, o.getDefault(), category, label);
                     if (o.getMin() != -Float.MAX_VALUE) b.min(o.getMin());
                     if (o.getMax() != Float.MAX_VALUE) b.max(o.getMax());
-                    add(m, b);
                 } else if (option instanceof ModuleOption.Slider) {
                     ModuleOption.Slider o = (ModuleOption.Slider) option;
-                    add(m, integer(key, o.getDefault(), category, label).range(o.getMin(), o.getMax()).step(o.getStep()));
+                    b = integer(key, o.getDefault(), category, label).range(o.getMin(), o.getMax()).step(o.getStep());
                 } else if (option instanceof ModuleOption.Choice) {
                     ModuleOption.Choice o = (ModuleOption.Choice) option;
                     List<SettingDef.Option> options = new ArrayList<>();
                     for (ModuleOption.Choice.Entry entry : o.getEntries()) {
                         options.add(new SettingDef.Option(entry.getId(), entry.getId()));
                     }
-                    add(m, new SettingDef.Builder(key, TYPE_ENUM, o.getDefault(), category, label).options(options));
+                    b = new SettingDef.Builder(key, TYPE_ENUM, o.getDefault(), category, label).options(options);
                 } else if (option instanceof ModuleOption.AppPicker) {
-                    add(m, string(key, "", category, label).description("Package name of the app"));
+                    b = string(key, "", category, label).description("Package name of the app");
+                    // follows the picked app so a ui shows it but never edits it
                     String componentKey = ((ModuleOption.AppPicker) option).getComponentKey();
                     add(m, string(componentKey, "", category, optionLabel(componentKey))
-                            .description("Launcher activity of the app as package/class"));
+                            .description("Launcher activity of the app as package/class").visibleIf(shown).readOnly());
                 }
                 // actions store nothing
+                if (b != null) add(m, b.visibleIf(shown));
             }
         }
     }
@@ -547,6 +602,32 @@ public final class SettingsRegistry {
                 .put("requires_restart", def.requiresRestart)
                 .put("deprecated", def.deprecated);
         if (def.replacedBy != null) json.put("replaced_by", def.replacedBy);
+        if (!def.visibleIf.isEmpty()) {
+            JSONArray conditions = new JSONArray();
+            for (SettingDef.Condition condition : def.visibleIf) {
+                JSONObject c = new JSONObject().put("key", condition.key);
+                if (condition.op.equals(SettingDef.Condition.IN)) {
+                    JSONArray values = new JSONArray();
+                    for (Object value : condition.values) values.put(value);
+                    c.put(condition.op, values);
+                } else {
+                    c.put(condition.op, condition.values.get(0));
+                }
+                conditions.put(c);
+            }
+            json.put("visible_if", conditions);
+        }
+        if (!def.requires.isEmpty()) {
+            JSONArray requires = new JSONArray();
+            for (SettingDef.Requirement requirement : def.requires) {
+                JSONObject r = new JSONObject().put("cap", requirement.cap);
+                if (requirement.min != null) r.put("min", (int) requirement.min);
+                requires.put(r);
+            }
+            json.put("requires", requires);
+        }
+        if (def.hidden) json.put("hidden", true);
+        if (def.readOnly) json.put("read_only", true);
         return json;
     }
 

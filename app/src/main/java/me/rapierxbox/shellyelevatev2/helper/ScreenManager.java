@@ -32,6 +32,7 @@ import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.screensavers.AODScreenSaver;
 import me.rapierxbox.shellyelevatev2.screensavers.ScreenOffScreenSaver;
+import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities;
 
 public class ScreenManager extends BroadcastReceiver {
 
@@ -64,6 +65,8 @@ public class ScreenManager extends BroadcastReceiver {
     private volatile boolean cachedTouchToWake = true;
 
     private final Context context;
+    // without a light sensor the lux ramp would sit at the minimum so the fixed level applies
+    private final boolean hasLightSensor;
     private final BrightnessAnimator brightnessAnimator = new BrightnessAnimator();
 
     private final SharedPreferences.OnSharedPreferenceChangeListener prefsListener =
@@ -83,6 +86,7 @@ public class ScreenManager extends BroadcastReceiver {
 
     public ScreenManager(Context ctx) {
         this.context = ctx.getApplicationContext();
+        hasLightSensor = DeviceCapabilities.hasLightSensor(context);
         prefs = context.getSharedPreferences(SHARED_PREFERENCES_NAME, MODE_PRIVATE);
         loadPrefsToCache();
         Log.i(TAG, "ScreenManager initialized: cachedTouchToWake=" + cachedTouchToWake + ", cachedAutomaticBrightness=" + cachedAutomaticBrightness);
@@ -156,7 +160,7 @@ public class ScreenManager extends BroadcastReceiver {
     }
 
     private boolean automaticBrightness() {
-        return cachedAutomaticBrightness;
+        return cachedAutomaticBrightness && hasLightSensor;
     }
 
     private int fixedBrightness() {

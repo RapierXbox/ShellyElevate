@@ -1,14 +1,10 @@
 package me.rapierxbox.shellyelevatev2.api;
 
+import static me.rapierxbox.shellyelevatev2.Constants.SP_API_DEVICE_ID;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_CLIENTID;
-import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mDeviceHelper;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
-import android.bluetooth.BluetoothAdapter;
 import android.content.Context;
-import android.content.pm.PackageManager;
-import android.hardware.Sensor;
-import android.hardware.SensorManager;
 import android.os.Build;
 
 import org.json.JSONArray;
@@ -22,8 +18,8 @@ import java.util.UUID;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
-import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.PrivAppInstaller;
+import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities;
 
 // identity and capabilities of this display for hello info and mdns
 public final class ApiInfo {
@@ -34,13 +30,23 @@ public final class ApiInfo {
 
     private ApiInfo() {}
 
-    // the stable id equals the mqtt device id so an mqtt and a v1 entry describe the same display
-    // MQTTServer replaces the shared legacy defaults the same way on its first start
-    public static synchronized String deviceId() {
+    // the mqtt client id. the shared legacy defaults are replaced with a random one
+    public static synchronized String mqttClientId() {
         String id = mSharedPreferences.getString(SP_MQTT_CLIENTID, "");
         if (id.equals("shellyelevate") || id.equals("shellywalldisplay") || id.length() <= 2) {
             id = "shellyelevate-" + UUID.randomUUID().toString().replace("-", "").substring(2, 6);
             mSharedPreferences.edit().putString(SP_MQTT_CLIENTID, id).apply();
+        }
+        return id;
+    }
+
+    // the v1 api id starts as the mqtt id so an mqtt and a v1 entry describe the same display
+    // it is stored on its own so renaming the mqtt id does not break existing pairings
+    public static synchronized String deviceId() {
+        String id = mSharedPreferences.getString(SP_API_DEVICE_ID, "");
+        if (id.isEmpty()) {
+            id = mqttClientId();
+            mSharedPreferences.edit().putString(SP_API_DEVICE_ID, id).apply();
         }
         return id;
     }
@@ -50,7 +56,7 @@ public final class ApiInfo {
     }
 
     public static String codename() {
-        return DeviceModel.getReportedDevice().name();
+        return DeviceModel.apiCodename();
     }
 
     public static String mac() {
@@ -79,7 +85,7 @@ public final class ApiInfo {
         JSONObject json = new JSONObject();
         json.put("id", deviceId());
         json.put("mac", mac());
-        json.put("model", DeviceModel.getReportedDevice().sku);
+        json.put("model", DeviceModel.apiModel());
         json.put("codename", codename());
         json.put("name", name());
         json.put("fw", BuildConfig.VERSION_NAME);
@@ -97,31 +103,12 @@ public final class ApiInfo {
         return json;
     }
 
+    // shared with the settings ui so both agree on what the unit has
     static JSONObject capabilities(Context context) throws JSONException {
-        DeviceModel device = DeviceModel.getReportedDevice();
-        PackageManager pm = context.getPackageManager();
-        SensorManager sensors = (SensorManager) context.getSystemService(Context.SENSOR_SERVICE);
-        JSONObject caps = new JSONObject();
-        caps.put("relays", device.relays);
-        // the second relay of these models only exists with the power base which the app cannot detect
-        if (device.relays > 1) caps.put("optional_relays_from", 1);
-        caps.put("inputs", device.inputs);
-        caps.put("buttons", device.buttons);
-        caps.put("proximity", device.hasProximitySensor);
-        caps.put("power_button", device.hasPowerButton);
-        caps.put("dimmer", mDeviceHelper != null && mDeviceHelper.isDimmerAttached());
-        caps.put("temperature", DeviceHelper.hasTempAndHumSensor());
-        caps.put("humidity", DeviceHelper.hasTempAndHumSensor());
-        caps.put("lux", sensors != null && sensors.getDefaultSensor(Sensor.TYPE_LIGHT) != null);
-        caps.put("speaker", true);
-        caps.put("microphone", pm.hasSystemFeature(PackageManager.FEATURE_MICROPHONE));
-        caps.put("bluetooth", BluetoothAdapter.getDefaultAdapter() != null);
-        caps.put("screenshot", true);
-        caps.put("self_update", canSelfUpdate(context));
-        return caps;
+        return new JSONObject(DeviceCapabilities.snapshot(context));
     }
 
     static boolean canSelfUpdate(Context context) {
-        return PrivAppInstaller.isPrivApp(context) && PrivAppInstaller.canInstallPackages(context);
+        return DeviceCapabilities.canSelfUpdate(context);
     }
 }

@@ -18,6 +18,12 @@ import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 object WebViewDisplayModule : DisplayModule {
 
     override val id = DISPLAY_MODULE_WEBVIEW
+
+    // the url the dashboard webview last finished loading or navigated to in page
+    @JvmStatic
+    @Volatile
+    var shownUrl: String? = null
+        internal set
     override val titleRes = R.string.display_module_webview
 
     // keys predate the module system so they keep their old names
