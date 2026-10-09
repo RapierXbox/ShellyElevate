@@ -19,7 +19,7 @@ import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
 
-// one streaming microwakeword style tflite model fed a mel frame at a time
+// one streaming microwakeword style tflite model fed a feature row at a time
 // shared by the wake word detector and both vad paths
 // input shape [1 n 40] or [1 n 40 1] as f32 or i8 and output [1 k] as f32 or i8
 // not thread safe so callers serialize access
@@ -48,6 +48,12 @@ final class StreamingModel {
 
     // only the byte buffers or the float arrays are allocated depending on dtype
     private final ByteBuffer inputBytes;
+    // model input byte for every feature byte
+    private final byte[] inputLut;
+    // mww models take the frontend bytes unchanged so rows are copied as they are
+    private final boolean inputLutIsIdentity;
+    // a window is built here and copied into the input in one put
+    private final byte[] inputWindow;
     private final ByteBuffer outputBytes;
     private final float[][][] input3d;
     private final float[][][][] input4d;
@@ -57,7 +63,7 @@ final class StreamingModel {
     // low power keeps them while the room is quiet and replays them on the next sound
     static final int PRE_ROLL_FRAMES = 30;
     private final int ringWindows;
-    private final float[][] frameRing;
+    private final byte[][] frameRing;
     // long so ring index math never overflows on long uptimes
     private long frameRingPos;
     private long framesCollected;
@@ -72,16 +78,21 @@ final class StreamingModel {
 
     // builds the model or throws with the interpreter already closed
     static StreamingModel load(File file, boolean fallbackMissingInputQuant) throws IOException {
+        return load(file, fallbackMissingInputQuant, PRE_ROLL_FRAMES);
+    }
+
+    // pre roll is how many frames the ring keeps for windows that were put off
+    static StreamingModel load(File file, boolean fallbackMissingInputQuant, int preRollFrames) throws IOException {
         Interpreter interp = buildInterpreter(file);
         try {
-            return new StreamingModel(file, interp, fallbackMissingInputQuant);
+            return new StreamingModel(file, interp, fallbackMissingInputQuant, preRollFrames);
         } catch (RuntimeException e) {
             interp.close();
             throw e;
         }
     }
 
-    private StreamingModel(File file, Interpreter interp, boolean fallbackMissingInputQuant) {
+    private StreamingModel(File file, Interpreter interp, boolean fallbackMissingInputQuant, int preRollFrames) {
         this.file = file;
         this.interpreter = interp;
 
@@ -122,10 +133,16 @@ final class StreamingModel {
 
         if (inputIs8bit) {
             inputBytes = ByteBuffer.allocateDirect(nFrames * N_MELS).order(ByteOrder.nativeOrder());
+            inputLut = inputLut(inputZeroPoint, inputIsUnsigned);
+            inputLutIsIdentity = isIdentity(inputLut);
+            inputWindow = new byte[nFrames * N_MELS];
             input3d = null;
             input4d = null;
         } else {
             inputBytes = null;
+            inputLut = null;
+            inputLutIsIdentity = false;
+            inputWindow = null;
             input3d = hasChannelDim ? null : new float[1][nFrames][N_MELS];
             input4d = hasChannelDim ? new float[1][nFrames][N_MELS][1] : null;
         }
@@ -136,8 +153,8 @@ final class StreamingModel {
             outputBytes = null;
             outputFloats = new float[1][outputCols];
         }
-        ringWindows = ringWindows(nFrames);
-        frameRing = new float[nFrames * ringWindows][N_MELS];
+        ringWindows = ringWindows(nFrames, preRollFrames);
+        frameRing = new byte[nFrames * ringWindows][N_MELS];
 
         description = "input=" + Arrays.toString(shape)
                 + " inType=" + inType + " outType=" + outType
@@ -201,8 +218,8 @@ final class StreamingModel {
     // a full fresh window is ready. esphome fills a whole stride before invoking
     // and overlapping windows would corrupt the lstm state for any n above one
     // a caller may put runs off and the next run catches up on the newest windows
-    boolean pushFrame(float[] mel) {
-        System.arraycopy(mel, 0, frameRing[(int) (frameRingPos % frameRing.length)], 0, N_MELS);
+    boolean pushFrame(byte[] row) {
+        System.arraycopy(row, 0, frameRing[(int) (frameRingPos % frameRing.length)], 0, N_MELS);
         frameRingPos++;
         framesCollected++;
         newFramesSinceInfer++;
@@ -212,12 +229,16 @@ final class StreamingModel {
         return true;
     }
 
-    float[] latestFrame() {
+    byte[] latestFrame() {
         return frameRing[(int) ((frameRingPos - 1 + frameRing.length) % frameRing.length)];
     }
 
     static int ringWindows(int nFrames) {
-        return Math.max(2, (PRE_ROLL_FRAMES + nFrames - 1) / nFrames);
+        return ringWindows(nFrames, PRE_ROLL_FRAMES);
+    }
+
+    static int ringWindows(int nFrames, int preRollFrames) {
+        return Math.max(2, (preRollFrames + nFrames - 1) / nFrames);
     }
 
     // runs every pending window oldest first so the streaming state sees each frame
@@ -245,23 +266,31 @@ final class StreamingModel {
         int base = (int) (start % frameRing.length);
         Object out = outputIs8bit ? rewound(outputBytes) : outputFloats;
         if (inputIs8bit) {
-            inputBytes.rewind();
+            int i = 0;
             for (int t = 0; t < nFrames; t++) {
-                float[] row = frameRing[(base + t) % frameRing.length];
-                for (int f = 0; f < N_MELS; f++)
-                    inputBytes.put(quantizeMel(row[f], inputZeroPoint, inputIsUnsigned));
+                byte[] row = frameRing[(base + t) % frameRing.length];
+                if (inputLutIsIdentity) {
+                    System.arraycopy(row, 0, inputWindow, i, N_MELS);
+                    i += N_MELS;
+                } else {
+                    for (int f = 0; f < N_MELS; f++) inputWindow[i++] = inputLut[row[f] + 128];
+                }
             }
+            inputBytes.rewind();
+            inputBytes.put(inputWindow);
             inputBytes.rewind();
             interpreter.run(inputBytes, out);
         } else if (hasChannelDim) {
             for (int t = 0; t < nFrames; t++) {
-                float[] row = frameRing[(base + t) % frameRing.length];
-                for (int f = 0; f < N_MELS; f++) input4d[0][t][f][0] = row[f];
+                byte[] row = frameRing[(base + t) % frameRing.length];
+                for (int f = 0; f < N_MELS; f++) input4d[0][t][f][0] = FeatureFrontend.mel(row[f]);
             }
             interpreter.run(input4d, out);
         } else {
-            for (int t = 0; t < nFrames; t++)
-                System.arraycopy(frameRing[(base + t) % frameRing.length], 0, input3d[0][t], 0, N_MELS);
+            for (int t = 0; t < nFrames; t++) {
+                byte[] row = frameRing[(base + t) % frameRing.length];
+                for (int f = 0; f < N_MELS; f++) input3d[0][t][f] = FeatureFrontend.mel(row[f]);
+            }
             interpreter.run(input3d, out);
         }
     }
@@ -317,6 +346,18 @@ final class StreamingModel {
         int q = Math.round(val * range / NativeMelExtractor.OUT_MAX) + zeroPoint;
         return unsigned ? (byte) Math.max(0, Math.min(255, q))
                         : (byte) Math.max(-128, Math.min(127, q));
+    }
+
+    // quantizeMel for every feature byte so a window costs one lookup per bin
+    static byte[] inputLut(int zeroPoint, boolean unsigned) {
+        byte[] lut = new byte[256];
+        for (int b = -128; b < 128; b++) lut[b + 128] = quantizeMel(FeatureFrontend.mel((byte) b), zeroPoint, unsigned);
+        return lut;
+    }
+
+    static boolean isIdentity(byte[] lut) {
+        for (int b = -128; b < 128; b++) if (lut[b + 128] != b) return false;
+        return true;
     }
 
     static Interpreter buildInterpreter(File file) throws IOException {

@@ -1,5 +1,5 @@
 # pushes the apk into /system/priv-app then reboots and grants the manual perms
-# also disables cloud.shelly.stargate,
+# also disables cloud.shelly.stargate or denies its overlay where it is protected,
 # enables adb over wifi and optionally joins a wifi network
 # the ssid can also come from SHELLY_WIFI_SSID and the password from
 # SHELLY_WIFI_PASSWORD or a prompt. without an ssid wifi is skipped
@@ -96,11 +96,59 @@ if ($rootOut -match "cannot run as root") {
 }
 & adb wait-for-device
 
-Write-Host "disabling cloud.shelly.stargate"
-if ((Get-Shell "pm path cloud.shelly.stargate") -match "package:") {
-    & adb shell "pm disable cloud.shelly.stargate"
-} else {
+$sdk = 0
+[void][int]::TryParse((Get-Shell "getprop ro.build.version.sdk"), [ref]$sdk)
+
+# the app is no home app on purpose since lite mode keeps the stock ui
+# it starts on boot and its kiosk watchdog brings it back over the home app so set-home-activity is not needed
+$stock = "cloud.shelly.stargate"
+
+# whole line matches so a package that only starts with the name does not count
+function Test-PackageListed([string]$listCmd) {
+    [bool](((Get-Shell $listCmd) -split "`n") | Where-Object { $_.Trim() -eq "package:$stock" })
+}
+function Test-StockInstalled { Test-PackageListed "pm list packages $stock" }
+function Test-StockDisabled { Test-PackageListed "pm list packages -d $stock" }
+function Test-StockOverlayDenied {
+    (Get-Shell "appops get $stock SYSTEM_ALERT_WINDOW") -match "SYSTEM_ALERT_WINDOW: deny"
+}
+
+function Deny-StockOverlay {
+    Write-Host "    denying its overlay and stopping it instead"
+    & adb shell "appops set $stock SYSTEM_ALERT_WINDOW deny"
+    & adb shell "am force-stop $stock"
+    if (Test-StockOverlayDenied) {
+        Write-Host "    overlay denied"
+    } else {
+        Write-Warning "$stock could not be disabled and its overlay could not be denied"
+    }
+    # android lets the system uid draw on top whatever the app op says
+    if ((Get-Shell "dumpsys package $stock") -match "userId=1000(\D|$)") {
+        Write-Warning "$stock runs as the system uid so the overlay deny does not keep it from drawing on top"
+    }
+}
+
+Write-Host "disabling $stock"
+if (-not (Test-StockInstalled)) {
     Write-Host "    not installed"
+} elseif (Test-StockDisabled) {
+    Write-Host "    already disabled"
+} elseif ($sdk -ge 30) {
+    # on android 11 models the stock app is the only home app so disabling it could leave none
+    Write-Host "    android 11 or newer keeps it enabled"
+    Deny-StockOverlay
+} else {
+    # disable-user also works without root and can be undone by the shell user
+    $disableOut = Get-Shell "pm disable-user --user 0 $stock 2>&1"
+    if (Test-StockDisabled) {
+        Write-Host "    disabled"
+    } else {
+        # protected packages refuse any disable so the stock app keeps running without its overlays
+        $reason = $disableOut -split "`n" | Where-Object { $_ -match "Exception:" } | Select-Object -First 1
+        if (-not $reason) { $reason = ($disableOut -split "`n")[0] }
+        Write-Host "    disable refused: $reason"
+        Deny-StockOverlay
+    }
 }
 
 # adbd falls back to the persist port on boot so this survives the reboot below
@@ -220,13 +268,17 @@ Write-Host "applying permissions"
 & adb shell "appops set $pkg GET_USAGE_STATS allow"
 & adb shell "dumpsys deviceidle whitelist +$pkg" | Out-Null
 # same list as post_install_commands in the home assistant integration
-$sdk = 0
-[void][int]::TryParse(((& adb shell getprop ro.build.version.sdk) -join "").Trim(), [ref]$sdk)
 if ($sdk -lt 31) {
     # runtime perm so the wifi settings section gets scan results
     & adb shell "pm grant $pkg android.permission.ACCESS_FINE_LOCATION"
     # ble scans on api 23 to 30 also need location on. the wall display runs api 24
-    & adb shell "settings put secure location_mode 3"
+    if ($sdk -lt 28) {
+        # location_mode is only derived from the providers there so setting it does nothing
+        & adb shell "settings put secure location_providers_allowed +gps"
+        & adb shell "settings put secure location_providers_allowed +network"
+    } else {
+        & adb shell "settings put secure location_mode 3"
+    }
     $permCheck = "ACCESS_FINE_LOCATION: granted=true"
 } else {
     # ble scans on api 31 and up need these instead of location
@@ -236,6 +288,8 @@ if ($sdk -lt 31) {
 }
 # runtime perm for the wake word and voice over the home assistant integration
 & adb shell "pm grant $pkg android.permission.RECORD_AUDIO"
+# lets the adb over wifi toggle restart adbd. older apks do not request it
+& adb shell "pm grant $pkg android.permission.WRITE_SECURE_SETTINGS >/dev/null 2>&1"
 $opsOut = (& adb shell "appops get $pkg WRITE_SETTINGS") -join ""
 $idleOut = (& adb shell "dumpsys deviceidle whitelist") -join "`n"
 $locOut = (& adb shell "dumpsys package $pkg") -join "`n"
@@ -261,7 +315,17 @@ if ($wifiPending) {
 
 $ip = ""
 if ((Get-Shell "ip -4 addr show wlan0") -match "inet (\d+\.\d+\.\d+\.\d+)") { $ip = $Matches[1] }
-$stargate = if ((Get-Shell "pm list packages -d") -match "cloud\.shelly\.stargate") { "disabled" } else { "not disabled" }
+# either outcome of the disable step keeps the stock app from covering the app
+$stargate = if (-not (Test-StockInstalled)) {
+    "not installed"
+} elseif (Test-StockDisabled) {
+    "disabled"
+} elseif (Test-StockOverlayDenied) {
+    "enabled with its overlay denied"
+} else {
+    Write-Warning "$stock is neither disabled nor kept from drawing on top"
+    "not disabled"
+}
 Write-Host "done. installed at $pmOut with WRITE_SETTINGS, location and battery whitelist"
 Write-Host "    stargate: $stargate"
 Write-Host "    adb wifi: persist.adb.tcp.port=$(Get-Shell 'getprop persist.adb.tcp.port')"

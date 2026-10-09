@@ -120,6 +120,8 @@ public class ShellyElevateApplication extends Application {
                 applyHttpServerSetting();
                 applyApiSetting();
                 applyMediaSetting();
+                // the api can switch adb over wifi too and not only the settings page
+                AdbHelper.syncFromPrefs();
                 DisplayController.onSettingsChanged(context);
             }
         };
@@ -251,10 +253,15 @@ public class ShellyElevateApplication extends Application {
         new Thread(() -> {
             try {
                 PrivAppInstaller.autoGrantPermissions(this);
-                // the adb tcp port property resets on reboot so restore the saved state
-                AdbHelper.applyFromPrefs();
             } catch (Throwable t) {
                 Log.e(TAG, "First run privilege setup failed", t);
+            }
+            // runs after the grants but even when they failed or adb changes over the api would be ignored
+            try {
+                // the service port prop resets on reboot so restore the saved state or adopt the real one
+                AdbHelper.applyFromPrefs();
+            } catch (Throwable t) {
+                Log.e(TAG, "ADB over Wi-Fi boot sync failed", t);
             }
         }, "PrivilegeSetup").start();
     }

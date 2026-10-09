@@ -35,8 +35,11 @@ public final class WakeWordModelManager {
 
     // official esphome vad model that gates wake detections on voice activity
     // stored next to the wake word models as wakewords/vad.tflite and vad.json
-    private static final String VAD_TFLITE_URL = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.tflite";
-    private static final String VAD_JSON_URL = "https://raw.githubusercontent.com/esphome/micro-wake-word-models/main/models/v2/vad.json";
+    // pinned and hash checked like the default wake word model
+    private static final String VAD_TFLITE_URL = WakeWordModelDownloader.MODELS_BASE + "vad.tflite";
+    private static final String VAD_TFLITE_SHA256 = "7aa4db6d5fb7c5358609f6931e7847d303c16a43d178638bc14104f50d7eff5f";
+    private static final String VAD_JSON_URL = WakeWordModelDownloader.MODELS_BASE + "vad.json";
+    private static final String VAD_JSON_SHA256 = "bd8c9cd4350814f761e651685ae5196e2a56521aaf5670071ba742927de58ed7";
     private static final String VAD_STEM = WakeWordDetector.VAD_MODEL_NAME;
 
     private static final String TFLITE_EXT = ".tflite";
@@ -70,8 +73,8 @@ public final class WakeWordModelManager {
         if (tflite.exists() && json.exists()) return VadResult.ALREADY_PRESENT;
 
         try {
-            if (!tflite.exists()) downloadFile(client, VAD_TFLITE_URL, tflite, p -> {});
-            if (!json.exists()) downloadFile(client, VAD_JSON_URL, json, p -> {});
+            if (!tflite.exists()) downloadFile(client, VAD_TFLITE_URL, tflite, VAD_TFLITE_SHA256);
+            if (!json.exists()) downloadFile(client, VAD_JSON_URL, json, VAD_JSON_SHA256);
             return VadResult.DOWNLOADED;
         } catch (Exception e) {
             Log.w(TAG, "VAD download failed: " + e.getMessage());
@@ -179,11 +182,12 @@ public final class WakeWordModelManager {
         }
     }
 
-    public static void downloadFile(OkHttpClient client, String url, File destFile, ProgressCallback onProgress) throws IOException {
+    private static void downloadFile(OkHttpClient client, String url, File destFile, String sha256) throws IOException {
         // download to a temp file so an interrupted transfer never leaves a corrupt model
-        File tmp = new File(destFile.getParentFile(), destFile.getName() + ".part");
+        File tmp = WakeWordModelDownloader.partFile(destFile.getParentFile(), destFile.getName());
         try {
-            HttpDownloader.download(client, url, tmp, onProgress::onProgress);
+            HttpDownloader.download(client, url, tmp, null);
+            HttpDownloader.requireSha256(tmp, sha256);
             if (!tmp.renameTo(destFile))
                 throw new IOException("could not rename " + tmp + " to " + destFile);
         } catch (IOException | RuntimeException e) {

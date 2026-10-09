@@ -30,6 +30,7 @@ import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 import me.rapierxbox.shellyelevatev2.switcher.AppSwitcher;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -131,9 +132,11 @@ public class HttpServer extends NanoHTTPD {
                                 "{\"success\":false,\"error\":\"secret_over_http\"}");
                     }
 
-                    mSettingsParser.setSettings(jsonObject);
+                    // adb over wifi stays with the paired api and the settings screen
+                    JSONArray refused = mSettingsParser.setSettings(jsonObject);
 
                     jsonResponse.put("success", true);
+                    if (refused.length() > 0) jsonResponse.put("refused", refused);
                     jsonResponse.put("settings", withoutSecrets(mSettingsParser.getSettings(), hideSecrets));
                 } else {
                     jsonResponse.put("success", false);

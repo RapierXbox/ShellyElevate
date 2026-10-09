@@ -315,4 +315,14 @@
             tools:text="192.168.1.50:5555" />
     </LinearLayout>
 
+    <!-- the real state of adbd and why a change did not apply -->
+    <TextView
+        android:id="@+id/adbWifiStatus"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="12dp"
+        android:textSize="16sp"
+        tools:text="@string/adb_wifi_status_on" />
+
 </LinearLayout>

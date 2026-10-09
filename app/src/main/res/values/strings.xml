@@ -21,9 +21,16 @@
     <string name="http_server_enabled">HTTP Server enabled:</string>
     <string name="http_server_address">Address:</string>
     <string name="extended_js_interface">Extended JS Interface</string>
+    <string name="webview_modern_frontend">Modern Home Assistant frontend</string>
+    <string name="webview_modern_frontend_summary">Loads the faster modern dashboard code that Home Assistant only offers to newer browsers. Experimental, turn it off if a card looks broken</string>
+    <string name="webview_reduce_motion">Reduce animations</string>
+    <string name="webview_reduce_motion_summary">Asks the dashboard to skip most animations like a phone with animations turned off. Feels snappier on this hardware</string>
     <string name="adb_wifi_enabled">ADB over WiFi</string>
     <string name="adb_wifi_address">Connect:</string>
     <string name="adb_wifi_url">%1$s:5555</string>
+    <string name="adb_wifi_status_on">ADB listens on port 5555</string>
+    <string name="adb_wifi_status_off">ADB does not listen on port 5555</string>
+    <string name="adb_wifi_status_applying">Restarting ADB…</string>
     <string name="wifi_ip_title">Wi-Fi IP settings</string>
     <string name="wifi_ip_ssid">Network: %1$s</string>
     <string name="wifi_ip_address">IP address: %1$s</string>

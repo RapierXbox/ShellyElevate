@@ -35,6 +35,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
@@ -88,10 +89,12 @@ class SettingsFragment : Fragment() {
     private var savedBrightness = DEFAULT_BRIGHTNESS
     private val device by lazy { DeviceModel.getReportedDevice() }
 
-    // shared trust-all client see HttpDownloader for the rationale
+    // shared validating client with the bundled roots see HttpDownloader
     private val okHttpClient by lazy { HttpDownloader.defaultClient() }
     private var modelList: MutableList<WakeWordModel> = mutableListOf()
     private var selectedModelName: String = ""
+    // the stored model name the page knows so a save only writes a pick the user made
+    private var storedModelName: String = ""
     private var downloadJob: Job? = null
 
     // pages are inflated on first open and stay null until then
@@ -115,6 +118,8 @@ class SettingsFragment : Fragment() {
     private var menuScrollY = 0
     // what the requires rules of the settings are checked against
     private var caps: Map<String, Any> = emptyMap()
+    // set while the adb switch follows the real state so that does not count as a user toggle
+    private var adbWifiSyncing = false
 
     override fun onDestroyView() {
         super.onDestroyView()
@@ -412,9 +417,10 @@ class SettingsFragment : Fragment() {
         val b = SettingsPageNetworkBinding.inflate(layoutInflater, parent, true)
         networkPage = b
         bindPage {
-            +SwitchPref(b.adbWifiEnabled, SP_ADB_WIFI_ENABLED, false)
-            // both go through the binder so visibleWhen doesnt clobber the toggle action
-            onToggle(b.adbWifiEnabled) { enabled -> AdbHelper.setAdbWifiEnabled(enabled) }
+            // live only runs on a flip so opening the page never bounces adbd
+            +SwitchPref(b.adbWifiEnabled, SP_ADB_WIFI_ENABLED, false) { enabled ->
+                if (!adbWifiSyncing) applyAdbWifi(enabled)
+            }
             visibleWhen(b.adbWifiEnabled, b.adbWifiAddressLayout)
 
             +SwitchPref(b.httpServerEnabled, SP_HTTP_SERVER_ENABLED, true)
@@ -441,6 +447,13 @@ class SettingsFragment : Fragment() {
             page.adbWifiAddress.text = getString(R.string.adb_wifi_url, ip)
         }
 
+        // the stored value can lag behind what the install script or the integration did over adb
+        viewLifecycleOwner.lifecycleScope.launch {
+            val state = withContext(Dispatchers.IO) { AdbHelper.readState() }
+            // a toggle that started meanwhile reports its own result
+            if (networkPage?.adbWifiEnabled?.isEnabled == true) showAdbWifi(state)
+        }
+
         // the wifi list inflates a row per network so let the page show first
         afterNextFrame {
             val page = networkPage ?: return@afterNextFrame
@@ -449,6 +462,30 @@ class SettingsFragment : Fragment() {
             setupWifiIpSection(page)
         }
         return b.root
+    }
+
+    private fun applyAdbWifi(enabled: Boolean) {
+        val b = networkPage ?: return
+        b.adbWifiEnabled.isEnabled = false
+        b.adbWifiStatus.setText(R.string.adb_wifi_status_applying)
+        viewLifecycleOwner.lifecycleScope.launch {
+            val state = withContext(Dispatchers.IO) { AdbHelper.apply(enabled) }
+            networkPage?.adbWifiEnabled?.isEnabled = true
+            showAdbWifi(state)
+            state.error?.let { Toast.makeText(requireContext(), it, Toast.LENGTH_LONG).show() }
+        }
+    }
+
+    // the switch always shows what adbd really does
+    private fun showAdbWifi(state: AdbHelper.State) {
+        val b = networkPage ?: return
+        if (b.adbWifiEnabled.isChecked != state.enabled) {
+            adbWifiSyncing = true
+            b.adbWifiEnabled.isChecked = state.enabled
+            adbWifiSyncing = false
+        }
+        b.adbWifiStatus.text = state.error
+            ?: getString(if (state.enabled) R.string.adb_wifi_status_on else R.string.adb_wifi_status_off)
     }
 
     private fun createControlsPage(parent: ViewGroup): View {
@@ -595,6 +632,7 @@ class SettingsFragment : Fragment() {
         b.volumeSetting.value = (curVol.toFloat() / maxVol * 100f).coerceIn(0f, 100f).roundToInt().toFloat()
 
         selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
+        storedModelName = selectedModelName
         updateWakeModelStatus()
 
         var lastAppliedVol = -1
@@ -1125,18 +1163,19 @@ class SettingsFragment : Fragment() {
         b.voiceWakeProgressText.text = "0%"
 
         downloadJob = viewLifecycleOwner.lifecycleScope.launch {
-            val destTflite = File(wakewordsDir, "$name.tflite")
-            val destJson   = File(wakewordsDir, "$name.json")
             try {
                 withContext(Dispatchers.IO) {
-                    WakeWordModelDownloader.download(okHttpClient, wakewordsDir, name, tfliteUrl, jsonUrl) { overall ->
+                    // the downloader keeps an installed model until the new one is complete
+                    // and stops between chunks once this job is cancelled
+                    WakeWordModelDownloader.download(okHttpClient, wakewordsDir, name, tfliteUrl, jsonUrl, { overall ->
                         mainHandler.post { audioPage?.let {
                             it.voiceWakeProgressBar.progress = overall
                             it.voiceWakeProgressText.text = "$overall%"
                         }}
-                    }
+                    }, { !isActive })
                 }
                 selectedModelName = name
+                storedModelName = name
                 mSharedPreferences.edit { putString(SP_VOICE_WAKE_MODEL_NAME, name) }
                 val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
                 rebuildModelList(installed,
@@ -1147,11 +1186,11 @@ class SettingsFragment : Fragment() {
                 updateWakeModelStatus()
                 Toast.makeText(requireContext(), getString(R.string.voice_wake_model_downloaded, name), Toast.LENGTH_SHORT).show()
             } catch (e: kotlinx.coroutines.CancellationException) {
-                destTflite.delete(); destJson.delete()
                 throw e
             } catch (e: Exception) {
+                // a cancelled transfer ends with an io error and is no failure to report
+                if (!isActive) return@launch
                 Log.e("SettingsFragment", "Download failed for $name", e)
-                destTflite.delete(); destJson.delete()
                 if (isAdded) Toast.makeText(requireContext(), getString(R.string.voice_wake_model_download_failed), Toast.LENGTH_SHORT).show()
             } finally {
                 audioPage?.voiceWakeDownloadProgress?.visibility = View.GONE
@@ -1237,7 +1276,11 @@ class SettingsFragment : Fragment() {
             // only pages that were opened write anything so unopened ones keep their stored values
             binders.forEach { it.saveTo(this) }
 
-            if (audioPage != null) putString(SP_VOICE_WAKE_MODEL_NAME, selectedModelName)
+            // home assistant may have set a model meanwhile so only a pick made here is written
+            if (audioPage != null && selectedModelName != storedModelName) {
+                putString(SP_VOICE_WAKE_MODEL_NAME, selectedModelName)
+                storedModelName = selectedModelName
+            }
 
             val sensors = sensorsPage
             if (sensors != null && zonesLoaded) {

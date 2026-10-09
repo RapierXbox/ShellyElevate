@@ -67,7 +67,19 @@ public class SettingsParser {
         return settings;
     }
 
-    public void setSettings(JSONObject settings) throws JSONException {
+    // keys only the paired tls api and the settings screen may change
+    // adb over wifi would otherwise be one unauthenticated request away for anyone on the lan
+    private static final Set<String> TRUSTED_ONLY_KEYS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+            Constants.SP_ADB_WIFI_ENABLED
+    )));
+
+    public static boolean isTrustedOnly(String key) {
+        return TRUSTED_ONLY_KEYS.contains(key);
+    }
+
+    // the unauthenticated write path. returns the keys it refused to write
+    public JSONArray setSettings(JSONObject settings) throws JSONException {
+        JSONArray refused = new JSONArray();
         SharedPreferences.Editor editor = mSharedPreferences.edit();
         // snapshot once so number writes can preserve the stored type of each key
         Map<String, ?> existingPrefs = mSharedPreferences.getAll();
@@ -76,6 +88,10 @@ public class SettingsParser {
             Object value = settings.get(key);
             // the v1 api id never changes once set
             if (Constants.SP_API_DEVICE_ID.equals(key)) continue;
+            if (isTrustedOnly(key)) {
+                refused.put(key);
+                continue;
+            }
 
             // explicit json null removes the key
             if (value == JSONObject.NULL) {
@@ -135,6 +151,7 @@ public class SettingsParser {
 
         LocalBroadcastManager.getInstance(mApplicationContext)
                 .sendBroadcast(new Intent(Constants.INTENT_SETTINGS_CHANGED));
+        return refused;
     }
 
     // ---- v1 api ----

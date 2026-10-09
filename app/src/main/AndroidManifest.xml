@@ -26,6 +26,10 @@
         tools:ignore="HighSamplingRate" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
+    <!-- lets the adb over wifi switch restart adbd through adb_enabled. granted to the /system copy
+         and by pm grant from install-privapp or the home assistant installer -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
     <!-- appop granted at start so the app display module can see which app is in front -->
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />

@@ -31,7 +31,9 @@ import android.webkit.WebViewClient
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import androidx.webkit.ScriptHandler
 import androidx.webkit.WebSettingsCompat
+import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -55,6 +57,8 @@ import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_NONE
 import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_MODERN_FRONTEND
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_REDUCE_MOTION
 import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
@@ -72,6 +76,15 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     // pre raster keeps the whole page rastered which only pays off with memory to spare
     // declared before the webview since createWebView reads it
     private val preRaster = !isLowMemoryDevice(activity)
+
+    // the modern frontend relies on the polyfills of the document start script
+    private val documentStartScriptSupported = WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)
+
+    // null while the webview runs with its own user agent
+    private var appliedUserAgent: String? = null
+
+    // set while the reduced motion script is registered on the current webview
+    private var reduceMotionScript: ScriptHandler? = null
 
     // replaced wholesale after a render process crash so never cache it elsewhere
     // added straight to the module container so the busiest view has no extra layout level
@@ -136,7 +149,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
                 // only reload when the url changed or we sit on the offline page
                 // so saving unrelated settings does not restart the dashboard
                 val webviewUrl = ServiceHelper.getWebviewUrl()
-                if (webviewUrl != lastRequestedUrl || isOfflineUrl(webView.url)) {
+                // a new user agent or start script only applies to the next page load
+                val pageSetupChanged = applyUserAgent(webView.settings) or applyReduceMotion(webView)
+                if (pageSetupChanged || webviewUrl != lastRequestedUrl || isOfflineUrl(webView.url)) {
                     Log.d(TAG, "Reloading WebView due to settings change: $webviewUrl")
                     loadDashboard(webviewUrl)
                 }
@@ -454,6 +469,13 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
                 setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true)
             }
 
+            if (documentStartScriptSupported) {
+                WebViewCompat.addDocumentStartJavaScript(this, HaFrontend.DOCUMENT_START_SCRIPT, setOf("*"))
+            }
+            // a handler of a crashed webview means nothing for this one
+            reduceMotionScript = null
+            applyReduceMotion(this)
+
             webViewClient = DashboardWebViewClient()
             webChromeClient = DashboardChromeClient()
             addJavascriptInterface(mShellyElevateJavascriptInterface, "ShellyElevate")
@@ -478,6 +500,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         settings.offscreenPreRaster = preRaster
         // no prompt handler grants location so fail requests at once instead of leaving them pending
         settings.setGeolocationEnabled(false)
+        applyUserAgent(settings)
 
         // the dashboard does its own theming and chromium auto darken washes out colors on this panel
         if (WebViewFeature.isFeatureSupported(WebViewFeature.FORCE_DARK)) {
@@ -486,6 +509,35 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         if (WebViewFeature.isFeatureSupported(WebViewFeature.ALGORITHMIC_DARKENING)) {
             WebSettingsCompat.setAlgorithmicDarkeningAllowed(settings, false)
         }
+    }
+
+    // returns true when the user agent changed
+    private fun applyUserAgent(settings: WebSettings): Boolean {
+        val wanted = if (documentStartScriptSupported && mSharedPreferences.getBoolean(SP_WEBVIEW_MODERN_FRONTEND, false)) {
+            HaFrontend.modernUserAgent(WebSettings.getDefaultUserAgent(activity))
+        } else {
+            null
+        }
+        // always set since a webview rebuilt after a crash starts with the default
+        // null restores the default user agent
+        settings.userAgentString = wanted
+        val changed = wanted != appliedUserAgent
+        appliedUserAgent = wanted
+        return changed
+    }
+
+    // returns true when the script was added or removed
+    private fun applyReduceMotion(target: WebView): Boolean {
+        val wanted = documentStartScriptSupported && mSharedPreferences.getBoolean(SP_WEBVIEW_REDUCE_MOTION, false)
+        val current = reduceMotionScript
+        if (wanted == (current != null)) return false
+        if (wanted) {
+            reduceMotionScript = WebViewCompat.addDocumentStartJavaScript(target, HaFrontend.REDUCED_MOTION_SCRIPT, setOf("*"))
+        } else {
+            current?.remove()
+            reduceMotionScript = null
+        }
+        return true
     }
 
     // swaps in a fresh webview at the same spot after the renderer died
@@ -655,6 +707,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             // webview 128 and newer probes android.webkit.PacProcessor which does not exist on api 24
             // the resulting class not found spam is harmless
             if (consoleMessage.message().contains("PacProcessor")) return true
+            // release builds only pass warnings and errors on to logcat
+            if (!BuildConfig.DEBUG && consoleMessage.messageLevel() in QUIET_CONSOLE_LEVELS) return true
             return super.onConsoleMessage(consoleMessage)
         }
     }
@@ -678,6 +732,12 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         const val APP_URL_SCHEME = "shellyelevate:"
 
         const val MAX_PENDING_JS = 50
+
+        val QUIET_CONSOLE_LEVELS = setOf(
+            ConsoleMessage.MessageLevel.LOG,
+            ConsoleMessage.MessageLevel.DEBUG,
+            ConsoleMessage.MessageLevel.TIP,
+        )
 
         const val AOD_TICK_PERIOD_MS = 1000L
         const val AOD_TICK_WINDOW_MS = 200L

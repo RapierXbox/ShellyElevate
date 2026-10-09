@@ -215,10 +215,12 @@ public class VoiceEngine {
         // between the checks below (this runs on the settings executor and the transport thread)
         synchronized (wakeLock) {
             boolean wakeEnabled = mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true);
+            boolean controller = controllerKnown();
             // checked whenever voice is on since voice.start records as well
-            boolean micAllowed = mode == Mode.OFF || checkMicPermission();
+            // but only once a controller exists so an unpaired display shows no dialog at boot
+            boolean micAllowed = mode == Mode.OFF || !controller || checkMicPermission();
 
-            if (!wakeEnabled || muted || mode == Mode.OFF || !controllerKnown()) {
+            if (!wakeEnabled || muted || mode == Mode.OFF || !controller) {
                 if (wakeDetector != null) {
                     wakeDetector.onDestroy();
                     wakeDetector = null; loadedModelName = "";
@@ -324,12 +326,17 @@ public class VoiceEngine {
                     if (mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "").trim().isEmpty()) {
                         mSharedPreferences.edit().putString(SP_VOICE_WAKE_MODEL_NAME, WakeWordModelDownloader.DEFAULT_MODEL).apply();
                     }
-                } else if (WakeWordModelManager.ensureVadDownloaded(HttpDownloader.defaultClient(), dir)
-                        == WakeWordModelManager.VadResult.DOWNLOADED) {
-                    // reload so the detector picks up the fresh vad
-                    loadedModelName = "";
                 } else {
-                    apply = false;
+                    WakeWordModelManager.VadResult vad =
+                            WakeWordModelManager.ensureVadDownloaded(HttpDownloader.defaultClient(), dir);
+                    if (vad == WakeWordModelManager.VadResult.DOWNLOADED) {
+                        // reload so the detector picks up the fresh vad
+                        loadedModelName = "";
+                    } else {
+                        apply = false;
+                        // the next settings pass sees the vad still missing and tries again
+                        retry = vad == WakeWordModelManager.VadResult.FAILED;
+                    }
                 }
             } catch (Exception e) {
                 Log.w(TAG, "wake model download failed: " + e.getMessage());

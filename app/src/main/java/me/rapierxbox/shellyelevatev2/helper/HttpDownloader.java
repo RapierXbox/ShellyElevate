@@ -4,24 +4,24 @@ import android.util.Log;
 
 import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
 import java.io.OutputStream;
-import java.security.SecureRandom;
-import java.security.cert.X509Certificate;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.function.BooleanSupplier;
 
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
-import javax.net.ssl.X509TrustManager;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
 import okhttp3.ResponseBody;
+import okio.ByteString;
 
 public final class HttpDownloader {
     private static final String TAG = "HttpDownloader";
@@ -36,37 +36,43 @@ public final class HttpDownloader {
 
     private HttpDownloader() {}
 
-    // android 7 ca store is missing modern roots like sectigo and the lets
-    // encrypt cross-signs and rejects fine hosts like github.com and
-    // repo.shelly.cloud. the payloads here arent authenticated beyond the byte
-    // stream anyway so trust-all is the pragmatic choice
+    // validates certificates and host names. some android 7 firmwares miss the roots
+    // github and repo.shelly.cloud chain to so those are bundled next to the system store
+    // models updates and the webview ota all come through here so nothing may trust all
     public static OkHttpClient defaultClient() {
         OkHttpClient c = sharedClient;
         if (c != null) return c;
         synchronized (HttpDownloader.class) {
-            if (sharedClient == null) sharedClient = buildTrustAllClient();
+            if (sharedClient == null) sharedClient = buildClient();
             return sharedClient;
         }
     }
 
-    private static OkHttpClient buildTrustAllClient() {
+    private static OkHttpClient buildClient() {
+        OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS);
         try {
-            TrustManager[] trustAll = new TrustManager[]{ new X509TrustManager() {
-                @Override public void checkClientTrusted(X509Certificate[] chain, String authType) {}
-                @Override public void checkServerTrusted(X509Certificate[] chain, String authType) {}
-                @Override public X509Certificate[] getAcceptedIssuers() { return new X509Certificate[0]; }
-            }};
-            SSLContext ctx = SSLContext.getInstance("SSL");
-            ctx.init(null, trustAll, new SecureRandom());
-            return new OkHttpClient.Builder()
-                    .sslSocketFactory(ctx.getSocketFactory(), (X509TrustManager) trustAll[0])
-                    .hostnameVerifier((h, s) -> true)
-                    .connectTimeout(15, TimeUnit.SECONDS)
-                    .readTimeout(60, TimeUnit.SECONDS)
-                    .build();
+            BundledTrustManager trust = BundledTrustManager.create();
+            SSLContext ctx = SSLContext.getInstance("TLS");
+            ctx.init(null, new TrustManager[]{trust}, null);
+            builder.sslSocketFactory(ctx.getSocketFactory(), trust);
         } catch (Exception e) {
-            Log.e(TAG, "Failed to build trust-all client", e);
-            return new OkHttpClient();
+            // still validating with the system store only
+            Log.e(TAG, "Bundled roots unavailable", e);
+        }
+        return builder.build();
+    }
+
+    // throws when the file does not have the expected sha256. a null hash checks nothing
+    public static void requireSha256(File file, String expectedHex) throws IOException {
+        if (expectedHex == null) return;
+        String actual;
+        try (InputStream in = new FileInputStream(file)) {
+            actual = ByteString.read(in, (int) file.length()).sha256().hex();
+        }
+        if (!actual.equalsIgnoreCase(expectedHex)) {
+            throw new IOException("sha256 mismatch for " + file.getName() + ": " + actual);
         }
     }
 
@@ -84,12 +90,17 @@ public final class HttpDownloader {
     }
 
     public static void download(OkHttpClient client, String url, File dest, ProgressCallback progress) throws IOException {
-        download(client, url, dest, progress, null);
+        download(client, url, dest, progress, (BooleanSupplier) null);
     }
 
     // a set cancel flag stops the transfer between chunks with an InterruptedIOException
     public static void download(OkHttpClient client, String url, File dest, ProgressCallback progress,
                                 AtomicBoolean cancel) throws IOException {
+        download(client, url, dest, progress, cancel != null ? (BooleanSupplier) cancel::get : null);
+    }
+
+    public static void download(OkHttpClient client, String url, File dest, ProgressCallback progress,
+                                BooleanSupplier cancelled) throws IOException {
         Request req = new Request.Builder().url(url).header("User-Agent", "ShellyElevateV2").build();
         try (Response res = client.newCall(req).execute()) {
             if (!res.isSuccessful()) throw new IOException("HTTP " + res.code() + " for " + url);
@@ -107,7 +118,7 @@ public final class HttpDownloader {
                 byte[] buf = new byte[16 * 1024];
                 int n;
                 while ((n = in.read(buf)) != -1) {
-                    if (cancel != null && cancel.get()) throw new InterruptedIOException("Cancelled");
+                    if (cancelled != null && cancelled.getAsBoolean()) throw new InterruptedIOException("Cancelled");
                     out.write(buf, 0, n);
                     read += n;
                     // only whole percent steps so the ui thread is not flooded with posts

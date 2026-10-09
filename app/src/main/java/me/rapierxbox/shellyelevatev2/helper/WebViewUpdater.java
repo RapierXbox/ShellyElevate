@@ -80,6 +80,8 @@ public final class WebViewUpdater {
     private WebViewUpdater() {}
 
     public static String getUpdateUrl() {
+        // unknown hardware only reports as stargate by default so never offer it a system ota
+        if (!DeviceModel.isKnownHardware()) return "";
         String url = UPDATE_URLS.get(DeviceModel.getReportedDevice().sku);
         return url == null ? "" : url;
     }

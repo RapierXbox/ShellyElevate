@@ -5,6 +5,8 @@ import android.view.ViewGroup
 import me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW
 import me.rapierxbox.shellyelevatev2.Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_MODERN_FRONTEND
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_REDUCE_MOTION
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
 import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.display.DisplayContent
@@ -36,6 +38,10 @@ object WebViewDisplayModule : DisplayModule {
         ModuleOption.Url(SP_WEBVIEW_URL, R.string.display_webview_url, hintRes = R.string.homeAssistantIpEditTextPreviewIp),
         ModuleOption.Toggle(SP_IGNORE_SSL_ERRORS, R.string.ignore_ssl_errors, false),
         ModuleOption.Toggle(SP_EXTENDED_JAVASCRIPT_INTERFACE, R.string.extended_js_interface, false),
+        ModuleOption.Toggle(SP_WEBVIEW_MODERN_FRONTEND, R.string.webview_modern_frontend, false,
+            summaryRes = R.string.webview_modern_frontend_summary),
+        ModuleOption.Toggle(SP_WEBVIEW_REDUCE_MOTION, R.string.webview_reduce_motion, false,
+            summaryRes = R.string.webview_reduce_motion_summary),
     )
 
     override fun createContent(host: DisplayHost, parent: ViewGroup): DisplayContent = WebViewContent(host)

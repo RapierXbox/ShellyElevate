@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # pushes the apk into /system/priv-app then reboots and grants the manual perms
-# also disables cloud.shelly.stargate,
+# also disables cloud.shelly.stargate or denies its overlay where it is protected,
 # enables adb over wifi and optionally joins a wifi network
 #
 # usage: install-privapp.sh [options] <apk>
@@ -177,11 +177,59 @@ if contains "$ROOT_OUT" "cannot run as root"; then
 fi
 try_adb wait-for-device
 
-echo "disabling cloud.shelly.stargate"
-if contains "$(get_shell "pm path cloud.shelly.stargate")" "package:"; then
-    try_adb shell "pm disable cloud.shelly.stargate"
-else
+SDK=$(get_shell "getprop ro.build.version.sdk")
+[[ $SDK =~ ^[0-9]+$ ]] || SDK=0
+
+# the app is no home app on purpose since lite mode keeps the stock ui
+# it starts on boot and its kiosk watchdog brings it back over the home app so set-home-activity is not needed
+STOCK="cloud.shelly.stargate"
+
+# whole line matches so a package that only starts with the name does not count
+stock_installed() {
+    get_shell "pm list packages $STOCK" | grep -qxF "package:$STOCK"
+}
+stock_disabled() {
+    get_shell "pm list packages -d $STOCK" | grep -qxF "package:$STOCK"
+}
+stock_overlay_denied() {
+    contains "$(get_shell "appops get $STOCK SYSTEM_ALERT_WINDOW")" "SYSTEM_ALERT_WINDOW: deny"
+}
+
+deny_stock_overlay() {
+    echo "    denying its overlay and stopping it instead"
+    try_adb shell "appops set $STOCK SYSTEM_ALERT_WINDOW deny"
+    try_adb shell "am force-stop $STOCK"
+    if stock_overlay_denied; then
+        echo "    overlay denied"
+    else
+        warn "$STOCK could not be disabled and its overlay could not be denied"
+    fi
+    # android lets the system uid draw on top whatever the app op says
+    if get_shell "dumpsys package $STOCK" | grep -qE "userId=1000([^0-9]|$)"; then
+        warn "$STOCK runs as the system uid so the overlay deny does not keep it from drawing on top"
+    fi
+}
+
+echo "disabling $STOCK"
+if ! stock_installed; then
     echo "    not installed"
+elif stock_disabled; then
+    echo "    already disabled"
+elif [ "$SDK" -ge 30 ]; then
+    # on android 11 models the stock app is the only home app so disabling it could leave none
+    echo "    android 11 or newer keeps it enabled"
+    deny_stock_overlay
+else
+    # disable-user also works without root and can be undone by the shell user
+    DISABLE_OUT=$(get_shell "pm disable-user --user 0 $STOCK 2>&1")
+    if stock_disabled; then
+        echo "    disabled"
+    else
+        # protected packages refuse any disable so the stock app keeps running without its overlays
+        REASON=$(printf '%s\n' "$DISABLE_OUT" | grep -m 1 "Exception:" || printf '%s\n' "$DISABLE_OUT" | head -n 1)
+        echo "    disable refused: $REASON"
+        deny_stock_overlay
+    fi
 fi
 
 # adbd falls back to the persist port on boot so this survives the reboot below
@@ -293,13 +341,17 @@ try_adb shell "appops set $PKG SYSTEM_ALERT_WINDOW allow"
 try_adb shell "appops set $PKG GET_USAGE_STATS allow"
 try_adb shell "dumpsys deviceidle whitelist +$PKG" >/dev/null
 # same list as post_install_commands in the home assistant integration
-SDK=$(get_shell "getprop ro.build.version.sdk")
-[[ $SDK =~ ^[0-9]+$ ]] || SDK=0
 if [ "$SDK" -lt 31 ]; then
     # runtime perm so the wifi settings section gets scan results
     try_adb shell "pm grant $PKG android.permission.ACCESS_FINE_LOCATION"
     # ble scans on api 23 to 30 also need location on. the wall display runs api 24
-    try_adb shell "settings put secure location_mode 3"
+    if [ "$SDK" -lt 28 ]; then
+        # location_mode is only derived from the providers there so setting it does nothing
+        try_adb shell "settings put secure location_providers_allowed +gps"
+        try_adb shell "settings put secure location_providers_allowed +network"
+    else
+        try_adb shell "settings put secure location_mode 3"
+    fi
     PERM_CHECK="ACCESS_FINE_LOCATION: granted=true"
 else
     # ble scans on api 31 and up need these instead of location
@@ -309,6 +361,8 @@ else
 fi
 # runtime perm for the wake word and voice over the home assistant integration
 try_adb shell "pm grant $PKG android.permission.RECORD_AUDIO"
+# lets the adb over wifi toggle restart adbd. older apks do not request it
+try_adb shell "pm grant $PKG android.permission.WRITE_SECURE_SETTINGS >/dev/null 2>&1"
 OPS_OUT=$(adb shell "appops get $PKG WRITE_SETTINGS" | tr -d '\r\n') || true
 IDLE_OUT=$(adb shell "dumpsys deviceidle whitelist" | tr -d '\r') || true
 LOC_OUT=$(adb shell "dumpsys package $PKG" | tr -d '\r') || true
@@ -337,10 +391,16 @@ IP_RE='inet ([0-9]+\.[0-9]+\.[0-9]+\.[0-9]+)'
 if [[ $(get_shell "ip -4 addr show wlan0") =~ $IP_RE ]]; then
     IP="${BASH_REMATCH[1]}"
 fi
-if contains "$(get_shell "pm list packages -d")" "cloud.shelly.stargate"; then
+# either outcome of the disable step keeps the stock app from covering the app
+if ! stock_installed; then
+    STARGATE="not installed"
+elif stock_disabled; then
     STARGATE="disabled"
+elif stock_overlay_denied; then
+    STARGATE="enabled with its overlay denied"
 else
     STARGATE="not disabled"
+    warn "$STOCK is neither disabled nor kept from drawing on top"
 fi
 echo "done. installed at $PM_OUT with WRITE_SETTINGS, location and battery whitelist"
 echo "    stargate: $STARGATE"

@@ -13,6 +13,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SHARED_PREFERENCES_NAME
 import me.rapierxbox.shellyelevatev2.Constants.SP_LITE_MODE
 import me.rapierxbox.shellyelevatev2.MainActivity
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
+import me.rapierxbox.shellyelevatev2.api.PairingActivity
 import me.rapierxbox.shellyelevatev2.display.app.AppDisplayModule
 import me.rapierxbox.shellyelevatev2.display.webview.WebViewDisplayModule
 import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities
@@ -38,6 +39,8 @@ object DisplayController {
     private val HOST_CLASS = MainActivity::class.java.name
     private val SWITCHER_CLASS = AppSwitcherActivity::class.java.name
     private val SAVER_CLASSES = setOf(DigitalClockAndDateScreenSaverActivity::class.java.name)
+    // own transient screens that are opened on purpose and stay over the module
+    private val STAY_CLASSES = setOf(SWITCHER_CLASS, PairingActivity::class.java.name)
 
     // the dumpsys fallback spawns a shell so it is polled this many times less often
     private const val SLOW_DETECTOR_FACTOR = 3
@@ -117,13 +120,22 @@ object DisplayController {
     @JvmStatic
     fun bringActiveToFront(context: Context) {
         userAway = false
+        if (pairingShowing("bringing the module to the front")) return
         activeModule(context).bringToFront(context.applicationContext)
+    }
+
+    // the pairing code shares our task so a reordered host or a launched app would hide it
+    private fun pairingShowing(what: String): Boolean {
+        if (!PairingActivity.isShowing) return false
+        Log.i(TAG, "pairing code on screen, skipped $what")
+        return true
     }
 
     // starts MainActivity which then shows whatever module is active
     // new task works from any context and reorder lifts the existing host above settings in our task
     @JvmStatic
     fun launchHost(context: Context) {
+        if (pairingShowing("launching the host")) return
         val intent = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         try {
@@ -179,7 +191,7 @@ object DisplayController {
             startClass = startClass,
             hostClass = HOST_CLASS,
             saverClasses = SAVER_CLASSES,
-            switcherClass = SWITCHER_CLASS,
+            stayClasses = STAY_CLASSES,
             screenUsable = usable,
             externalForMs = if (since < 0) 0L else now - since,
             waitedMs = now - stoppedAt,
@@ -257,6 +269,7 @@ object DisplayController {
 
     // for callers off the main thread while some other app or nothing is in front
     private fun bringBackFromBackground(app: Context, module: DisplayModule) {
+        if (pairingShowing("bringing ${module.id} back")) return
         allowBackgroundStarts(app)
         module.bringToFront(app)
     }

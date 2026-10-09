@@ -242,7 +242,9 @@ public final class SettingsRegistry {
                 .description("Pairing and the encrypted API the Shelly Elevate integration uses. Turning it off disconnects the integration"));
         add(m, bool(Constants.SP_HTTP_SERVER_ENABLED, true, CATEGORY_ADVANCED, "Legacy HTTP API (port 8080)")
                 .description("Unauthenticated HTTP API of older app versions"));
-        add(m, bool(Constants.SP_ADB_WIFI_ENABLED, false, CATEGORY_ADVANCED, "ADB over Wi-Fi"));
+        // the app writes the real state back when a change did not apply
+        add(m, bool(Constants.SP_ADB_WIFI_ENABLED, false, CATEGORY_ADVANCED, "ADB over Wi-Fi")
+                .description("ADB on port 5555. Shows whether ADB really listens and turns back if a change did not apply"));
         add(m, bool(Constants.SP_UPDATE_PRERELEASE, false, CATEGORY_ADVANCED, "Include pre-releases")
                 .description("The in-app updater also offers pre-releases"));
         // only the mqtt server publishes the zones
@@ -310,6 +312,8 @@ public final class SettingsRegistry {
             case Constants.SP_WEBVIEW_URL: return "Dashboard URL";
             case Constants.SP_IGNORE_SSL_ERRORS: return "Ignore SSL errors";
             case Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE: return "Extended JavaScript interface";
+            case Constants.SP_WEBVIEW_MODERN_FRONTEND: return "Modern Home Assistant frontend";
+            case Constants.SP_WEBVIEW_REDUCE_MOTION: return "Reduce animations";
             case "app.package": return "App to show";
             case "app.component": return "App activity";
             case "app.keepInFront": return "Bring the app back when it closes";
@@ -317,8 +321,20 @@ public final class SettingsRegistry {
         }
     }
 
+    private static String optionDescription(String key) {
+        switch (key) {
+            case Constants.SP_WEBVIEW_MODERN_FRONTEND:
+                return "Loads the faster modern Home Assistant code that is only offered to newer browsers. Experimental";
+            case Constants.SP_WEBVIEW_REDUCE_MOTION:
+                return "Asks the dashboard to skip most animations";
+            default: return null;
+        }
+    }
+
     private static String optionCategory(String key) {
-        return Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE.equals(key) ? CATEGORY_ADVANCED : CATEGORY_GENERAL;
+        return Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE.equals(key) || Constants.SP_WEBVIEW_MODERN_FRONTEND.equals(key)
+                || Constants.SP_WEBVIEW_REDUCE_MOTION.equals(key)
+                ? CATEGORY_ADVANCED : CATEGORY_GENERAL;
     }
 
     // module options join automatically so a new module needs no change here
@@ -365,7 +381,10 @@ public final class SettingsRegistry {
                             .description("Launcher activity of the app as package/class").visibleIf(shown).readOnly());
                 }
                 // actions store nothing
-                if (b != null) add(m, b.visibleIf(shown));
+                if (b == null) continue;
+                String description = optionDescription(key);
+                if (description != null) b.description(description);
+                add(m, b.visibleIf(shown));
             }
         }
     }

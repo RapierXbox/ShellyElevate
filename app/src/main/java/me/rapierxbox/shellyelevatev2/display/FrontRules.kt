@@ -39,6 +39,8 @@ object ScreenSaverReturn {
     const val MAX_WAIT_MS = 10_000L
 
     // resumedClass is our resumed activity now and startClass the one when the saver started
+    // stayClasses are our own transient screens like the switcher and the pairing dialog
+    // which are opened on purpose and must never be covered by the module
     // externalForMs is how long nothing of ours has been resumed on a usable screen
     // moduleInFront is only asked for an external front and answers null when nothing can tell
     fun decide(
@@ -46,7 +48,7 @@ object ScreenSaverReturn {
         startClass: String?,
         hostClass: String,
         saverClasses: Set<String>,
-        switcherClass: String,
+        stayClasses: Set<String>,
         screenUsable: Boolean,
         externalForMs: Long,
         waitedMs: Long,
@@ -60,8 +62,10 @@ object ScreenSaverReturn {
             Front.OWN_UI -> when (resumedClass) {
                 // the saver activity is still finishing
                 in saverClasses -> Action.WAIT
-                // settings the user was in before the saver or a switcher opened after wake stay
-                startClass, switcherClass -> Action.DONE
+                // settings the user was in before the saver stay
+                startClass -> Action.DONE
+                // a switcher opened after wake or a pairing code shown as the saver ended stays
+                in stayClasses -> Action.DONE
                 // a clock saver brought our task back with settings the user had left for another app
                 else -> Action.BRING_BACK
             }

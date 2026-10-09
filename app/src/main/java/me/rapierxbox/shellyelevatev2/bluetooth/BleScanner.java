@@ -44,8 +44,12 @@ public final class BleScanner {
     private static final String TAG = "BleScanner";
 
     private static final long SCAN_WATCHDOG_PERIOD_MS    = 15_000;
-    // no ads for this long means the scan is dead
+    // no ads for this long at low latency means the scan is dead
+    // lower duty cycles wait longer so a quiet room does not look like a dead scan
     private static final long SCAN_SILENT_RESTART_MS     = 45_000;
+    // low latency right after a listener arrives so home assistant fills up fast
+    // then balanced which still scans actively with scan responses at a fraction of the radio time
+    static final long SCAN_BURST_MS = 10_000;
     // cycle long running scans before the os silently throttles them
     private static final long SCAN_PREEMPTIVE_RESTART_MS = 15 * 60 * 1000;
     // android throttles at 5 scan starts per 30s so stay one under
@@ -104,7 +108,11 @@ public final class BleScanner {
     private BroadcastReceiver btStateReceiver;
     private BluetoothLeScanner bleScanner;
     private ScanCallback activeScanCb;
-    private int activeScanMode = ScanSettings.SCAN_MODE_LOW_LATENCY;
+    // the mode the running scan was started with
+    private int activeScanMode = ScanSettings.SCAN_MODE_BALANCED;
+    private boolean lowPower;
+    private long burstUntilMs;
+    private ScheduledFuture<?> burstEndTask;
     // ring of recent scan start times to stay under the os throttle
     private final long[] recentScanStarts = new long[SCAN_START_BUDGET + 1];
     private int recentScanStartsIdx = 0;
@@ -139,7 +147,12 @@ public final class BleScanner {
             if (!listeners.addIfAbsent(listener)) return;
             cancelIdleStopLocked();
             ensureRunningLocked();
-            startBleScanningLocked();
+            startBurstLocked();
+            if (activeScanCb != null) {
+                applyScanModeLocked();
+            } else {
+                startBleScanningLocked();
+            }
         }
     }
 
@@ -166,12 +179,70 @@ public final class BleScanner {
     }
 
     public void setLowPowerMode(boolean low) {
-        int target = low ? ScanSettings.SCAN_MODE_LOW_POWER : ScanSettings.SCAN_MODE_LOW_LATENCY;
         synchronized (scanLock) {
-            if (target == activeScanMode) return;
+            if (low == lowPower) return;
+            lowPower = low;
+            applyScanModeLocked();
+        }
+    }
+
+    // low power wins over the burst and balanced is the steady state
+    static int scanModeFor(boolean lowPower, boolean burst) {
+        if (lowPower) return ScanSettings.SCAN_MODE_LOW_POWER;
+        return burst ? ScanSettings.SCAN_MODE_LOW_LATENCY : ScanSettings.SCAN_MODE_BALANCED;
+    }
+
+    // the silence a scan in this mode may show before the watchdog restarts it
+    static long silentRestartMs(int scanMode) {
+        switch (scanMode) {
+            case ScanSettings.SCAN_MODE_LOW_LATENCY: return SCAN_SILENT_RESTART_MS;
+            case ScanSettings.SCAN_MODE_BALANCED: return SCAN_SILENT_RESTART_MS * 2;
+            default: return SCAN_SILENT_RESTART_MS * 4;
+        }
+    }
+
+    private static String modeName(int scanMode) {
+        switch (scanMode) {
+            case ScanSettings.SCAN_MODE_LOW_LATENCY: return "LOW_LATENCY";
+            case ScanSettings.SCAN_MODE_BALANCED: return "BALANCED";
+            default: return "LOW_POWER";
+        }
+    }
+
+    // must hold scanLock
+    private int desiredScanModeLocked() {
+        return scanModeFor(lowPower, System.currentTimeMillis() < burstUntilMs);
+    }
+
+    // must hold scanLock. restarts a running scan whose mode no longer fits
+    // a restart the start budget cannot afford is left to the watchdog so the scan never stops for it
+    private void applyScanModeLocked() {
+        int target = desiredScanModeLocked();
+        if (target == activeScanMode) return;
+        if (listeners.isEmpty() || activeScanCb == null) {
             activeScanMode = target;
-            Log.i(TAG, "Scan mode -> " + (low ? "LOW_POWER" : "LOW_LATENCY"));
-            if (!listeners.isEmpty() && activeScanCb != null) restartScanLocked();
+            return;
+        }
+        if (!canStartScanNowLocked()) return;
+        Log.i(TAG, "Scan mode -> " + modeName(target));
+        restartScanLocked();
+    }
+
+    // must hold scanLock
+    private void startBurstLocked() {
+        if (scheduler == null) return;
+        burstUntilMs = System.currentTimeMillis() + SCAN_BURST_MS;
+        if (burstEndTask != null) burstEndTask.cancel(false);
+        try {
+            burstEndTask = scheduler.schedule(() -> {
+                synchronized (scanLock) {
+                    burstEndTask = null;
+                    applyScanModeLocked();
+                }
+            }, SCAN_BURST_MS, TimeUnit.MILLISECONDS);
+        } catch (RejectedExecutionException e) {
+            burstEndTask = null;
+            burstUntilMs = 0;
         }
     }
 
@@ -209,6 +280,8 @@ public final class BleScanner {
     // must hold scanLock. ends the scan and every thread and receiver it owned
     private void stopAllLocked() {
         cancelIdleStopLocked();
+        if (burstEndTask != null) { burstEndTask.cancel(false); burstEndTask = null; }
+        burstUntilMs = 0;
         boolean wasScanning = activeScanCb != null;
         stopScanLocked();
         if (wasScanning) Log.i(TAG, "BLE scan stopped");
@@ -267,7 +340,7 @@ public final class BleScanner {
         scanBlockedReason = reason;
         if (reason != null) {
             Log.w(TAG, "BLE scan will find nothing: " + reason
-                    + ". grant ACCESS_FINE_LOCATION and set location_mode 3 (tools/install-privapp does both)");
+                    + ". grant ACCESS_FINE_LOCATION and turn location on (tools/install-privapp does both)");
         }
         return true;
     }
@@ -301,7 +374,7 @@ public final class BleScanner {
 
     // ---- scanning ----
 
-    // low latency scans silently die on some devices so restart when quiet or running too long
+    // scans silently die on some devices so restart when quiet or running too long
     private void runScanWatchdog() {
         // an escaping exception would cancel the periodic task for good
         try {
@@ -327,13 +400,16 @@ public final class BleScanner {
         long now = System.currentTimeMillis();
         long lastResult = lastScanResultMs.get();
         long started    = lastScanStartedMs.get();
-        boolean silent  = lastResult > 0 && (now - lastResult) > SCAN_SILENT_RESTART_MS;
+        boolean silent  = lastResult > 0 && (now - lastResult) > silentRestartMs(activeScanMode);
         boolean stale   = started > 0    && (now - started)    > SCAN_PREEMPTIVE_RESTART_MS;
         if (silent || stale) {
             Log.w(TAG, "watchdog: " + (silent ? "scan silent for " + (now - lastResult) + "ms"
                                               : "scan running " + (now - started) + "ms, preemptive cycle"));
             restartScanLocked();
+            return;
         }
+        // a mode change the start budget held back earlier
+        applyScanModeLocked();
     }
 
     // must hold scanLock
@@ -361,6 +437,8 @@ public final class BleScanner {
             return;
         }
 
+        // android scans actively in every mode so scan responses arrive too
+        activeScanMode = desiredScanModeLocked();
         ScanSettings settings = new ScanSettings.Builder()
                 .setScanMode(activeScanMode)
                 .setReportDelay(0)
@@ -385,7 +463,7 @@ public final class BleScanner {
         lastScanStartedMs.set(now);
         // grace period before the watchdog flags silence
         lastScanResultMs.set(now);
-        Log.i(TAG, "BLE scan started");
+        Log.i(TAG, "BLE scan started in " + modeName(activeScanMode));
     }
 
     private ScanCallback newScanCallback() {

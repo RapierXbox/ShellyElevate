@@ -11,6 +11,7 @@ class FrontRulesTest {
     private val settings = "app.SettingsActivity"
     private val clock = "app.ClockActivity"
     private val switcher = "app.SwitcherActivity"
+    private val pairing = "app.PairingActivity"
 
     private fun decide(
         resumed: String?,
@@ -25,7 +26,7 @@ class FrontRulesTest {
         startClass = start,
         hostClass = host,
         saverClasses = setOf(clock),
-        switcherClass = switcher,
+        stayClasses = setOf(switcher, pairing),
         screenUsable = usable,
         externalForMs = externalForMs,
         waitedMs = waitedMs,
@@ -90,6 +91,28 @@ class FrontRulesTest {
         assertEquals(Action.DONE, decide(resumed = switcher, start = null))
     }
 
+    // issue 116. pairing started during the screensaver and the host covered the code
+    @Test
+    fun pairingCodeShownAsTheSaverEndsStays() {
+        assertEquals(Action.DONE, decide(resumed = pairing, start = null))
+        assertEquals(Action.DONE, decide(resumed = pairing, start = host))
+        assertEquals(Action.DONE, decide(resumed = pairing, start = settings))
+        // also when the wait for the saver ran long
+        assertEquals(Action.DONE, decide(resumed = pairing, waitedMs = ScreenSaverReturn.MAX_WAIT_MS))
+    }
+
+    @Test
+    fun saverStillFinishingUnderThePairingCodeIsWaitedForThenLeft() {
+        // the clock activity can still be resumed for a moment while the dialog starts
+        assertEquals(Action.WAIT, decide(resumed = clock, start = null))
+        assertEquals(Action.DONE, decide(resumed = pairing, start = null))
+    }
+
+    @Test
+    fun onlyListedOwnScreensStay() {
+        assertEquals(Action.BRING_BACK, decide(resumed = "app.OtherActivity", start = null))
+    }
+
     @Test
     fun finishingSaverActivityIsWaitedFor() {
         assertEquals(Action.WAIT, decide(resumed = clock))
@@ -109,7 +132,7 @@ class FrontRulesTest {
             startClass = null,
             hostClass = host,
             saverClasses = setOf(clock),
-            switcherClass = switcher,
+            stayClasses = setOf(switcher, pairing),
             screenUsable = true,
             externalForMs = 0L,
             waitedMs = 0L,

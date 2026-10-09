@@ -51,6 +51,10 @@ public final class Constants {
     public static final String SP_WEBVIEW_URL = "webviewUrl";
     public static final String SP_DEPRECATED_HA_IP = "homeAssistantIp";
     public static final String SP_IGNORE_SSL_ERRORS = "ignoreSslErrors";
+    // asks home assistant for its modern frontend bundle instead of the es5 one
+    public static final String SP_WEBVIEW_MODERN_FRONTEND = "webview.modernFrontend";
+    // tells pages that reduced motion is preferred so home assistant skips most animations
+    public static final String SP_WEBVIEW_REDUCE_MOTION = "webview.reduceMotion";
 
     // webview ota prefs
     public static final String SP_WEBVIEW_UPDATE_PROMPTED = "webviewUpdatePrompted";

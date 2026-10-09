@@ -44,17 +44,14 @@ private fun SharedPreferences.floatOr(key: String, default: Float): Float = try 
     (all[key] as? Number)?.toFloat()?.also { edit { putFloat(key, it) } } ?: default
 }
 
+// live runs only on a flip after loadAll and never while load sets the stored value
+// so it needs a SettingsBinder to be installed
 class SwitchPref(
     internal val view: MaterialSwitch,
     private val key: String,
     private val default: Boolean,
     internal val live: ((Boolean) -> Unit)? = null
 ) : ValueBinding {
-    init {
-        if (live != null) {
-            view.setOnCheckedChangeListener { _, checked -> live(checked) }
-        }
-    }
     override fun value(): Boolean = view.isChecked
     override fun setValue(value: Any?) {
         view.isChecked = value == true
@@ -268,6 +265,8 @@ class SettingsBinder(private val prefs: SharedPreferences, private val onParentC
     private var loaded: Map<String, Any?> = emptyMap()
 
     fun loadAll() {
+        // no change action may see the values load sets
+        (toggleActions.keys + changeActions.keys).forEach { it.setOnCheckedChangeListener(null) }
         bindings.forEach { it.load(prefs) }
         for (switch in toggleActions.keys + changeActions.keys) {
             val actions = toggleActions[switch].orEmpty()

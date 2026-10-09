@@ -1,8 +1,10 @@
 package me.rapierxbox.shellyelevatev2.voice;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
 import org.tensorflow.lite.DataType;
@@ -35,6 +37,32 @@ public class StreamingModelTest {
         assertEquals(-128, StreamingModel.quantizeMel(-100f, -128, false));
         assertEquals((byte) 255, StreamingModel.quantizeMel(100f, 0, true));
         assertEquals(0, StreamingModel.quantizeMel(-100f, 0, true));
+    }
+
+    @Test
+    public void melSpansTheFeatureRange() {
+        assertEquals(0f, FeatureFrontend.mel((byte) -128), EPS);
+        assertEquals(NativeMelExtractor.OUT_MAX, FeatureFrontend.mel((byte) 127), EPS);
+    }
+
+    @Test
+    public void inputLutMatchesQuantizeMel() {
+        int[][] params = {{-128, 0}, {0, 0}, {-3, 0}, {0, 1}};
+        for (int[] p : params) {
+            byte[] lut = StreamingModel.inputLut(p[0], p[1] == 1);
+            for (int b = -128; b < 128; b++) {
+                assertEquals(StreamingModel.quantizeMel(FeatureFrontend.mel((byte) b), p[0], p[1] == 1), lut[b + 128]);
+            }
+        }
+    }
+
+    @Test
+    public void inputLutIsIdentityForMicroWakeWordModels() {
+        // the mww int8 input with zero point -128 gets the frontend bytes back unchanged
+        byte[] lut = StreamingModel.inputLut(-128, false);
+        for (int b = -128; b < 128; b++) assertEquals((byte) b, lut[b + 128]);
+        assertTrue(StreamingModel.isIdentity(lut));
+        assertFalse(StreamingModel.isIdentity(StreamingModel.inputLut(0, false)));
     }
 
     @Test

@@ -49,6 +49,10 @@ public class WakeWordDetector {
     private static final float DEFAULT_CUTOFF = 0.5f;
 
     public static final String VAD_MODEL_NAME = "vad";
+    // the vad only runs for a wake candidate and then replays its ring
+    // it looks back about 24 windows and averages 5 so 40 windows give
+    // the same verdict as a vad that ran on every window
+    static final int VAD_PRE_ROLL_FRAMES = 120;
 
     public enum ModelStatus { NOT_LOADED, LOADED, FILE_NOT_FOUND, LOAD_ERROR }
 
@@ -151,7 +155,7 @@ public class WakeWordDetector {
             return;
         }
         try {
-            vadModel = StreamingModel.load(file, false);
+            vadModel = StreamingModel.load(file, false, VAD_PRE_ROLL_FRAMES);
             StreamingModel.Config cfg = StreamingModel.Config.read(
                     new File(dir, VAD_MODEL_NAME + ".json"), vadModel.outputCols, DEFAULT_VAD_WINDOW, DEFAULT_CUTOFF);
             vadThreshold = cfg.cutoff;
@@ -415,7 +419,7 @@ public class WakeWordDetector {
     }
 
     // runs on the loop thread with the lock held
-    private void processFrame(float[] melFrame) {
+    private void processFrame(byte[] melFrame) {
         if (wakeModel == null || !wakeModel.hasInterpreter()) return;
 
         processVadFrame(melFrame);
@@ -450,7 +454,7 @@ public class WakeWordDetector {
         maybeBroadcastScore(avgScore);
 
         if (avgScore < scoreThreshold || wakeIgnoreWindows < 0) return false;
-        if (vadModel != null && vadModel.hasInterpreter() && !vadDetected) {
+        if (vadModel != null && vadModel.hasInterpreter() && !catchUpVad()) {
             if (BuildConfig.DEBUG) {
                 Log.d(TAG, "wake candidate blocked by VAD (score=" + String.format("%.3f", avgScore) + ")");
             }
@@ -477,7 +481,8 @@ public class WakeWordDetector {
 
         float melMin = Float.MAX_VALUE;
         float melMax = -Float.MAX_VALUE;
-        for (float v : wakeModel.latestFrame()) {
+        for (byte bin : wakeModel.latestFrame()) {
+            float v = FeatureFrontend.mel(bin);
             if (v < melMin) melMin = v;
             if (v > melMax) melMax = v;
         }
@@ -511,17 +516,22 @@ public class WakeWordDetector {
         lastRawScore = 0f;
     }
 
-    private void processVadFrame(float[] melFrame) {
+    // only buffers the frame since the vad runs on demand in catchUpVad
+    private void processVadFrame(byte[] melFrame) {
         if (vadModel == null || !vadModel.hasInterpreter()) return;
-        if (!vadModel.pushFrame(melFrame)) return;
-        if (!chunkActive) return;
+        vadModel.pushFrame(melFrame);
+    }
+
+    // runs every window the vad buffered and returns whether it hears a voice
+    private boolean catchUpVad() {
         try {
-            vadModel.run();
+            while (vadModel.runNext()) {
+                vadDetected = vadScoreWindow.add(vadModel.readScore(vadPositiveOutputIdx)) >= vadThreshold;
+            }
         } catch (Exception e) {
             Log.e(TAG, "VAD inference error", e);
-            return;
         }
-        vadDetected = vadScoreWindow.add(vadModel.readScore(vadPositiveOutputIdx)) >= vadThreshold;
+        return vadDetected;
     }
 
     static float calculateRms(byte[] buf, int length) {

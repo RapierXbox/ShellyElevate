@@ -63,4 +63,11 @@ public class QuietGateTest {
         assertEquals(2, StreamingModel.ringWindows(40));
         assertTrue(StreamingModel.ringWindows(1) * 1 >= StreamingModel.PRE_ROLL_FRAMES);
     }
+
+    @Test
+    public void vadRingCoversItsLookBack() {
+        // the esphome vad sees about 24 windows back and its mean spans 5 more
+        assertEquals(40, StreamingModel.ringWindows(3, WakeWordDetector.VAD_PRE_ROLL_FRAMES));
+        assertTrue(StreamingModel.ringWindows(3, WakeWordDetector.VAD_PRE_ROLL_FRAMES) >= 24 + 5);
+    }
 }

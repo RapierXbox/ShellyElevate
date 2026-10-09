@@ -75,8 +75,8 @@ public class StreamingVad implements AutoCloseable {
         frontend.feed(pcm, length, this::onMelFrame);
     }
 
-    private void onMelFrame(float[] mel) {
-        if (!model.pushFrame(mel)) return;
+    private void onMelFrame(byte[] row) {
+        if (!model.pushFrame(row)) return;
         try {
             model.run();
         } catch (Exception e) {
