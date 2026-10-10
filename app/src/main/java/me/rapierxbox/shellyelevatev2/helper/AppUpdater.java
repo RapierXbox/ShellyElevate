@@ -139,6 +139,7 @@ public final class AppUpdater {
         CANCEL.set(false);
         POOL.execute(() -> {
             boolean committed = false;
+            BroadcastReceiver statusReceiver = null;
             try {
                 HttpDownloader.download(HttpDownloader.defaultClient(), apkUrl, staging,
                         pct -> main.post(() -> listener.onProgress(pct)), CANCEL);
@@ -151,7 +152,7 @@ public final class AppUpdater {
                     Log.e(TAG, "apk signature mismatch, refusing to install");
                     throw new IOException("APK signature mismatch");
                 }
-                registerStatusReceiver(app, main, listener);
+                statusReceiver = registerStatusReceiver(app, main, listener);
                 commitSession(app, staging);
                 committed = true;
                 main.post(listener::onInstalling);
@@ -169,7 +170,11 @@ public final class AppUpdater {
                 //noinspection ResultOfMethodCallIgnored
                 staging.delete();
                 // after a commit the status receiver clears the flag
-                if (!committed) IN_PROGRESS.set(false);
+                // without one no status ever arrives so the receiver goes now
+                if (!committed) {
+                    if (statusReceiver != null) finish(app, statusReceiver);
+                    IN_PROGRESS.set(false);
+                }
             }
         });
     }
@@ -218,7 +223,7 @@ public final class AppUpdater {
     }
 
     // only failures arrive in practice since a successful self update kills this process
-    private static void registerStatusReceiver(Context ctx, Handler main, InstallListener listener) {
+    private static BroadcastReceiver registerStatusReceiver(Context ctx, Handler main, InstallListener listener) {
         BroadcastReceiver receiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -239,6 +244,7 @@ public final class AppUpdater {
         };
         ContextCompat.registerReceiver(ctx, receiver, new IntentFilter(ACTION_INSTALL_STATUS),
                 ContextCompat.RECEIVER_NOT_EXPORTED);
+        return receiver;
     }
 
     private static void finish(Context ctx, BroadcastReceiver receiver) {

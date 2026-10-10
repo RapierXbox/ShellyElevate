@@ -22,6 +22,7 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.api.ApiInfo;
 import me.rapierxbox.shellyelevatev2.api.ClientTokenStore;
+import me.rapierxbox.shellyelevatev2.api.HaLoginStore;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.settings.SettingDef;
 import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
@@ -199,6 +200,12 @@ public class HttpServer extends NanoHTTPD {
                 }
                 break;
             case "inject":
+                // the page can hold the home assistant login so anyone on the lan could read it through here
+                if (ClientTokenStore.get(mApplicationContext).hasClients()
+                        || HaLoginStore.get(mApplicationContext).hasLogin()) {
+                    return newFixedLengthResponse(Response.Status.FORBIDDEN, "application/json",
+                            "{\"success\":false,\"error\":\"inject_after_pairing\"}");
+                }
                 if (method.equals(Method.POST)) {
                     JSONObject jsonObject = readJsonBody(session);
                     if (jsonObject == null) return badRequest("Missing or invalid JSON body");

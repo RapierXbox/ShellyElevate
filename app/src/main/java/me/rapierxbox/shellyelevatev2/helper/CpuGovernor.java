@@ -24,6 +24,11 @@ public final class CpuGovernor {
             "powersave", "conservative", "ondemand", "schedutil"
     );
 
+    // usual defaults of android kernels in order of preference
+    private static final List<String> NORMAL = Arrays.asList(
+            "interactive", "schedutil", "ondemand"
+    );
+
     private static volatile List<String> cachedCpuPaths = null;
     private final Map<String, String> savedGovernors = new HashMap<>();
     // set after the first failed write so a locked down kernel is not hammered on every sleep
@@ -65,6 +70,14 @@ public final class CpuGovernor {
         return available.get(0);
     }
 
+    // what the kernel would normally run with or the current one when none is offered
+    private static String pickNormal(List<String> available, String current) {
+        for (String normal : NORMAL) {
+            if (available.contains(normal)) return normal;
+        }
+        return current;
+    }
+
     public synchronized void applyLowPower() {
         if (denied) return;
         List<String> paths = discover();
@@ -78,11 +91,13 @@ public final class CpuGovernor {
             String current = SysFs.readLine(path);
             if (current == null) continue;
             current = current.trim();
+            List<String> available = readAvailable(path);
+            String target = pickLowPower(available);
             // keep the first saved value so a second apply cant record the low power governor as the original
+            // a process that died asleep left the low power one behind so a normal governor is saved instead
             if (!savedGovernors.containsKey(path)) {
-                savedGovernors.put(path, current);
+                savedGovernors.put(path, current.equals(target) ? pickNormal(available, current) : current);
             }
-            String target = pickLowPower(readAvailable(path));
             if (target.equals(current) || SysFs.write(path, target)) {
                 applied++;
             } else {

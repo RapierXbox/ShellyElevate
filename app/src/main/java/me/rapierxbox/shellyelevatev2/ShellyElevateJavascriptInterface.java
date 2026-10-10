@@ -14,12 +14,19 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Pattern;
+
+import me.rapierxbox.shellyelevatev2.screensavers.ScreenSaverManager;
 
 public class ShellyElevateJavascriptInterface {
     private static final String TAG = "ShellyElevateV2";
+    // a plain or dotted function name like onPress or window.app.onPress
+    private static final Pattern FUNCTION_NAME = Pattern.compile("[A-Za-z_$][\\w$]*(\\.[A-Za-z_$][\\w$]*)*");
 
     // written from the webview js bridge thread and read from the main thread
     private final Map<String, String> bindings = new ConcurrentHashMap<>();
+    // only a keep alive the page asked for ends with the page
+    private volatile boolean pageKeptAlive = false;
 
     public ShellyElevateJavascriptInterface() {
         if (eJSaEnabled()) {
@@ -103,15 +110,32 @@ public class ShellyElevateJavascriptInterface {
     }
 
     @JavascriptInterface public void setScreenSaverId(int id) {
-        mSharedPreferences.edit().putInt(SP_SCREEN_SAVER_ID, id).apply();
+        // an id past the list would crash the screensaver spinner in the settings
+        int last = ScreenSaverManager.getAvailableScreenSavers().length - 1;
+        mSharedPreferences.edit().putInt(SP_SCREEN_SAVER_ID, Math.max(0, Math.min(id, last))).apply();
     }
 
     @JavascriptInterface public void keepScreenAlive(boolean keepAlive) {
+        pageKeptAlive = keepAlive;
         mScreenSaverManager.keepAlive(keepAlive);
+    }
+
+    // a new page starts without what the old one asked for
+    public void onPageStarted() {
+        bindings.clear();
+        if (pageKeptAlive) {
+            pageKeptAlive = false;
+            mScreenSaverManager.keepAlive(false);
+        }
     }
 
     @JavascriptInterface
     public void bind(String eventName, String jsFunctionName) {
+        // the name runs later in the main frame so any frame could otherwise bind a whole script
+        if (jsFunctionName == null || !FUNCTION_NAME.matcher(jsFunctionName).matches()) {
+            Log.w(TAG, "JS binding refused for " + eventName);
+            return;
+        }
         Log.d(TAG, "JS EventName binding - " + eventName + " => " + jsFunctionName);
         bindings.put(eventName, jsFunctionName);
     }

@@ -316,6 +316,7 @@ public final class SettingsRegistry {
             case Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE: return "Extended JavaScript interface";
             case Constants.SP_WEBVIEW_MODERN_FRONTEND: return "Modern Home Assistant frontend";
             case Constants.SP_WEBVIEW_REDUCE_MOTION: return "Reduce animations";
+            case Constants.SP_WEBVIEW_BATCH_UPDATES: return "Batch dashboard updates";
             case "app.package": return "App to show";
             case "app.component": return "App activity";
             case "app.keepInFront": return "Bring the app back when it closes";
@@ -329,13 +330,15 @@ public final class SettingsRegistry {
                 return "Loads the faster modern Home Assistant code that is only offered to newer browsers. Experimental";
             case Constants.SP_WEBVIEW_REDUCE_MOTION:
                 return "Asks the dashboard to skip most animations";
+            case Constants.SP_WEBVIEW_BATCH_UPDATES:
+                return "Redraws the dashboard at most once a second for sensor updates while nobody touches it";
             default: return null;
         }
     }
 
     private static String optionCategory(String key) {
         return Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE.equals(key) || Constants.SP_WEBVIEW_MODERN_FRONTEND.equals(key)
-                || Constants.SP_WEBVIEW_REDUCE_MOTION.equals(key)
+                || Constants.SP_WEBVIEW_REDUCE_MOTION.equals(key) || Constants.SP_WEBVIEW_BATCH_UPDATES.equals(key)
                 ? CATEGORY_ADVANCED : CATEGORY_GENERAL;
     }
 

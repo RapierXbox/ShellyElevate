@@ -45,6 +45,7 @@ import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.api.ControllerVoiceTransport;
 import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities;
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader;
+import me.rapierxbox.shellyelevatev2.helper.MediaUrls;
 import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities;
 
 // mic wake word vad and playback for voice sessions. the transport decides where a session goes
@@ -72,6 +73,9 @@ public class VoiceEngine {
     // a session that never gets an answer frees the wake word again
     private static final long PROCESSING_TIMEOUT_SEC = 60;
     private static final long ERROR_SHOW_MS = 3_000L;
+    private static final long TTS_PREPARE_TIMEOUT_MS = 15_000L;
+    // the wake tone is 0.8 s plus room echo and the speaker sits next to the mic
+    private static final long WAKE_TONE_GUARD_MS = 1_000L;
     private static final int MIC_PERMISSION_REQUEST = 4712;
     // a failed default model download is tried again after this
     private static final long MODEL_DOWNLOAD_RETRY_SEC = 120;
@@ -86,6 +90,8 @@ public class VoiceEngine {
     private volatile VoiceTransport transport;
     private volatile boolean muted = false;
     private volatile long errorUntil = 0L;
+    // the vad ignores capture until then so the wake tone does not count as the start of speech
+    private volatile long wakeToneEndsAt = 0L;
     // voice is on but the app may not record so nothing would ever be heard
     private volatile boolean micPermissionMissing = false;
     // main thread only. the dialog is shown once per switch on so a denial does not loop it
@@ -96,6 +102,8 @@ public class VoiceEngine {
     // executor and a mute toggle cant interleave and null it mid check-then-act
     private volatile WakeWordDetector wakeDetector;
     private final Object wakeLock = new Object();
+    // guards the idle check and the switch to listening in startSession
+    private final Object sessionLock = new Object();
     private volatile String loadedModelName = "";
     // kept so a detector created later starts in the same mode
     private volatile boolean lowPowerMode = false;
@@ -373,7 +381,10 @@ public class VoiceEngine {
         WakeWordDetector det = wakeDetector;
         if (det != null) det.stop();
         mainHandler.post(() -> mScreenSaverManager.stopScreenSaver());
-        if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) tonePlayer.playWake();
+        if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) {
+            wakeToneEndsAt = SystemClock.elapsedRealtime() + WAKE_TONE_GUARD_MS;
+            tonePlayer.playWake();
+        }
         if (mode != Mode.OFF && state == State.IDLE) trigger();
     }
 
@@ -448,22 +459,29 @@ public class VoiceEngine {
     private boolean startSession(boolean remoteInitiated) {
         if (mode == Mode.OFF)                      { Log.d(TAG, "trigger ignored: disabled");       return false; }
         if (muted)                                 { Log.d(TAG, "trigger ignored: muted");          return false; }
-        if (state != State.IDLE)                   { Log.d(TAG, "trigger ignored: state=" + state); return false; }
-        VoiceTransport t = transport;
-        if (t == null) return false;
-        if (!t.isReady()) {
-            String message = t.unavailableMessage();
-            if (message != null) {
-                broadcastText(message);
-                mainHandler.postDelayed(() -> broadcastText(""), 3_000);
-                if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) tonePlayer.playEnd();
+        VoiceTransport t;
+        long session;
+        // a wake word and a voice.start arriving together would otherwise open two sessions
+        synchronized (sessionLock) {
+            if (state != State.IDLE)               { Log.d(TAG, "trigger ignored: state=" + state); return false; }
+            t = transport;
+            if (t == null) {
+                restartDetectorLater();
+                return false;
             }
-            restartDetectorLater();
-            return false;
+            if (!t.isReady()) {
+                String message = t.unavailableMessage();
+                if (message != null) {
+                    broadcastText(message);
+                    mainHandler.postDelayed(() -> broadcastText(""), 3_000);
+                    if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) tonePlayer.playEnd();
+                }
+                restartDetectorLater();
+                return false;
+            }
+            session = sessionId.incrementAndGet();
+            state = State.LISTENING;
         }
-
-        long session = sessionId.incrementAndGet();
-        state = State.LISTENING;
         broadcastState(State.LISTENING);
         broadcastText(mApplicationContext.getString(R.string.voice_listening));
         speechEnded.set(false);
@@ -706,6 +724,9 @@ public class VoiceEngine {
         Intent intent = new Intent(INTENT_VOICE_STATE_CHANGED).putExtra(INTENT_VOICE_STATE_KEY, s.name());
         LocalBroadcastManager.getInstance(mApplicationContext).sendBroadcast(intent);
         ApiHub.stateChanged();
+        // the controller sends no transcript so the bubble would keep saying listening
+        if (s == State.PROCESSING) broadcastText(mApplicationContext.getString(R.string.voice_thinking));
+        else if (s == State.SPEAKING) broadcastText("");
     }
 
     private void broadcastText(String text) {
@@ -718,8 +739,9 @@ public class VoiceEngine {
     @RequiresPermission(Manifest.permission.RECORD_AUDIO)
     private void captureAndStream(long session) {
         // the mic is exclusive so the detector has to let go first
+        // a wake already called stop so isRunning is false while its loop still holds the recorder
         WakeWordDetector det = wakeDetector;
-        if (det != null && det.isRunning()) det.stopAndWait();
+        if (det != null) det.stopAndWait();
 
         int minBuf  = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CFG, AUDIO_FMT);
         int bufSize = Math.max(minBuf > 0 ? minBuf : CHUNK_BYTES, CHUNK_BYTES * 4);
@@ -749,7 +771,8 @@ public class VoiceEngine {
 
             try (StreamingVad mlVad = new StreamingVad(mApplicationContext)) {
                 final boolean mlVadActive = mlVad.hasModel();
-                while (audioStreaming.get() && state == State.LISTENING && !speechEnded.get()) {
+                while (audioStreaming.get() && state == State.LISTENING && !speechEnded.get()
+                        && sessionId.get() == session) {
                     int read;
                     try { read = recorder.read(buf, 0, CHUNK_BYTES); }
                     catch (IllegalStateException e) { Log.d(TAG, "read interrupted"); break; }
@@ -757,6 +780,9 @@ public class VoiceEngine {
                     if (read > 0) {
                         VoiceTransport t = transport;
                         if (t != null) t.sendAudio(buf, read);
+
+                        // home assistant still gets the audio in case speech starts during the tone
+                        if (SystemClock.elapsedRealtime() < wakeToneEndsAt) continue;
 
                         mlVad.feed(buf, read);
 
@@ -853,16 +879,27 @@ public class VoiceEngine {
         MediaPlayer player = new MediaPlayer();
         ttsPlayer = player;
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        // stagefright retries an unreachable url for half a minute while the wake word stays off
+        Runnable giveUp = () -> {
+            if (ttsPlayer != player) return;
+            Log.w(TAG, "TTS did not load in time");
+            next.run();
+        };
         try {
-            player.setDataSource(url);
-            player.setOnPreparedListener(MediaPlayer::start);
+            player.setDataSource(MediaUrls.forPlayback(url));
+            player.setOnPreparedListener(mp -> {
+                mainHandler.removeCallbacks(giveUp);
+                mp.start();
+            });
             player.setOnCompletionListener(mp -> { if (ttsPlayer == mp) next.run(); });
             player.setOnErrorListener((mp, what, extra) -> {
+                mainHandler.removeCallbacks(giveUp);
                 Log.e(TAG, "TTS error " + what + "/" + extra);
                 if (ttsPlayer == mp) next.run();
                 return true;
             });
             player.prepareAsync();
+            mainHandler.postDelayed(giveUp, TTS_PREPARE_TIMEOUT_MS);
         } catch (Exception e) {
             Log.e(TAG, "TTS start failed", e);
             next.run();

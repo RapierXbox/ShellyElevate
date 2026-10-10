@@ -283,8 +283,12 @@ class SettingsBinder(private val prefs: SharedPreferences, private val onParentC
 
     // lets several binders share one editor and one disk write
     fun saveTo(editor: SharedPreferences.Editor) {
-        for ((key, value) in record()) {
-            if (loaded.containsKey(key) && loaded[key] == value) continue
+        val current = record()
+        val before = loaded
+        // the page saves on every pause so the next save compares against what this one wrote
+        loaded = current
+        for ((key, value) in current) {
+            if (before.containsKey(key) && before[key] == value) continue
             when (value) {
                 RecordingEditor.REMOVED -> editor.remove(key)
                 is Boolean -> editor.putBoolean(key, value)

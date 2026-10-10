@@ -28,6 +28,14 @@ public class ShellyElevateMQTTCallback {
         this.server = server;
     }
 
+    // only the id segment becomes %s since an id like shelly or relay also appears in the fixed parts
+    static String topicPattern(String topic, String clientId) {
+        String[] parts = topic.split("/", -1);
+        if (parts.length < 2 || !parts[1].equals(clientId)) return topic;
+        parts[1] = "%s";
+        return String.join("/", parts);
+    }
+
     public void messageArrived(String topic, MqttMessage message) {
         if (MQTT_TOPIC_UPDATE_GENERIC.equals(topic)) {
             server.publishStatus();
@@ -35,7 +43,7 @@ public class ShellyElevateMQTTCallback {
         }
 
         String payload = new String(message.getPayload(), StandardCharsets.UTF_8);
-        switch (topic.replace(server.getClientId(), "%s")) {
+        switch (topicPattern(topic, server.getClientId())) {
             case MQTT_TOPIC_UPDATE:
                 server.publishStatus();
                 break;

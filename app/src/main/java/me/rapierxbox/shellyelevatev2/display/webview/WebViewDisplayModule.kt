@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW
 import me.rapierxbox.shellyelevatev2.Constants.SP_EXTENDED_JAVASCRIPT_INTERFACE
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_BATCH_UPDATES
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_MODERN_FRONTEND
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_REDUCE_MOTION
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_URL
@@ -42,6 +43,8 @@ object WebViewDisplayModule : DisplayModule {
             summaryRes = R.string.webview_modern_frontend_summary),
         ModuleOption.Toggle(SP_WEBVIEW_REDUCE_MOTION, R.string.webview_reduce_motion, false,
             summaryRes = R.string.webview_reduce_motion_summary),
+        ModuleOption.Toggle(SP_WEBVIEW_BATCH_UPDATES, R.string.webview_batch_updates, true,
+            summaryRes = R.string.webview_batch_updates_summary),
     )
 
     override fun createContent(host: DisplayHost, parent: ViewGroup): DisplayContent = WebViewContent(host)

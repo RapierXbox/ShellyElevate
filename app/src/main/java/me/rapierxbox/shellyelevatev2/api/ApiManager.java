@@ -40,6 +40,8 @@ public final class ApiManager {
     private final ClientTokenStore.Listener clientsListener = this::onClientsChanged;
     private final SettingsParser.ChangeListener settingsListener = this::onSettingsChanged;
     private volatile ApiServer server;
+    // set once by stop so a queued start or watchdog run does nothing
+    private boolean stopped = false;
     private long retryDelayS = 5;
 
     private ApiManager(Context context) {
@@ -101,18 +103,23 @@ public final class ApiManager {
         tokens.removeListener(clientsListener);
         SettingsParser.removeChangeListener(settingsListener);
         executor.shutdownNow();
-        discovery.unregister();
-        ApiHub.setSink(null);
-        ApiServer s = server;
-        server = null;
-        if (s != null) {
-            s.closeAllSockets();
-            s.stop();
+        // under the lock so a start that is still running cannot set up a server after this
+        synchronized (this) {
+            stopped = true;
+            discovery.unregister();
+            ApiHub.setSink(null);
+            ApiServer s = server;
+            server = null;
+            if (s != null) {
+                s.closeAllSockets();
+                s.stop();
+            }
         }
         stateHub.stop();
     }
 
     private synchronized void startServer() {
+        if (stopped) return;
         ApiServer old = server;
         if (old != null && old.isAlive()) return;
         if (old != null) {

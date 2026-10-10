@@ -13,6 +13,7 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper;
 
@@ -20,6 +21,7 @@ import me.rapierxbox.shellyelevatev2.helper.ServiceHelper;
 // the token is only accepted for the origin of the configured dashboard url
 final class HaLoginCommands {
     private static final String TAG = "HaLoginCommands";
+    private static final AtomicBoolean stateProviderAdded = new AtomicBoolean(false);
 
     private HaLoginCommands() {}
 
@@ -33,6 +35,8 @@ final class HaLoginCommands {
             changed(app);
             return status(store);
         });
+        // a new lambda per api start would pile up providers since addIfAbsent never matches it
+        if (stateProviderAdded.getAndSet(true)) return;
         ApiHub.addStateProvider(state -> {
             String dashboard = ServiceHelper.getWebviewUrl();
             state.put("ha_login.state", store.state(dashboard));

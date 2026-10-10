@@ -99,6 +99,21 @@ public class SettingsParser {
                 continue;
             }
 
+            // known keys follow the schema so a wrong type can never crash a later get at startup
+            SettingDef def = SettingsRegistry.get(key);
+            if (def != null) {
+                if (Constants.SP_MQTT_CLIENTID.equals(key) && String.valueOf(value).matches(".*[/+#].*")) {
+                    refused.put(key);
+                    continue;
+                }
+                try {
+                    write(editor, def, SettingsRegistry.coerce(def, value));
+                } catch (IllegalArgumentException | ClassCastException e) {
+                    refused.put(key);
+                }
+                continue;
+            }
+
             if (value instanceof String) {
                 editor.putString(key, (String) value);
             } else if (value instanceof Boolean) {
@@ -214,6 +229,10 @@ public class SettingsParser {
             if (Constants.SP_MQTT_CLIENTID.equals(key) && (value == null || value == JSONObject.NULL
                     || String.valueOf(value).trim().length() <= 2)) {
                 throw new IllegalArgumentException(key + " must be longer than 2 characters");
+            }
+            // the id is a topic segment so a separator or wildcard would break every subscribe
+            if (Constants.SP_MQTT_CLIENTID.equals(key) && String.valueOf(value).matches(".*[/+#].*")) {
+                throw new IllegalArgumentException(key + " must not contain / + or #");
             }
             writes.put(key, value == null || value == JSONObject.NULL ? null : SettingsRegistry.coerce(def, value));
         }

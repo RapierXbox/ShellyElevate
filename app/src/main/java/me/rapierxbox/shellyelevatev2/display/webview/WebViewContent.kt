@@ -59,6 +59,7 @@ import me.rapierxbox.shellyelevatev2.Constants.SLEEP_OPT_STANDARD
 import me.rapierxbox.shellyelevatev2.Constants.SP_IGNORE_SSL_ERRORS
 import me.rapierxbox.shellyelevatev2.Constants.SP_SLEEP_OPTIMIZATION_LEVEL
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_MODERN_FRONTEND
+import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_BATCH_UPDATES
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_REDUCE_MOTION
 import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
@@ -68,6 +69,7 @@ import me.rapierxbox.shellyelevatev2.api.HaLoginRules
 import me.rapierxbox.shellyelevatev2.api.HaLoginStore
 import me.rapierxbox.shellyelevatev2.display.DisplayContent
 import me.rapierxbox.shellyelevatev2.display.DisplayHost
+import me.rapierxbox.shellyelevatev2.helper.RendererPriority
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 
 // the dashboard webview with offline fallback crash recovery and sleep handling
@@ -88,6 +90,21 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
     // set while the reduced motion script is registered on the current webview
     private var reduceMotionScript: ScriptHandler? = null
+
+    // set while the update batching script is registered on the current webview
+    private var batchUpdatesScript: ScriptHandler? = null
+
+    // a plain handler since pauseTimers stops every js timer of the page
+    private val sleepHandler = Handler(Looper.getMainLooper())
+
+    private val suspendHaRunnable = Runnable {
+        if (!webViewPausedForSleep || destroyed) return@Runnable
+        try {
+            webView.evaluateJavascript(HaFrontend.SUSPEND_WHEN_HIDDEN_SCRIPT, null)
+        } catch (e: Exception) {
+            Log.w(TAG, "suspending the dashboard connection failed: ${e.message}")
+        }
+    }
 
     // replaced wholesale after a render process crash so never cache it elsewhere
     // added straight to the module container so the busiest view has no extra layout level
@@ -153,7 +170,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
                 // so saving unrelated settings does not restart the dashboard
                 val webviewUrl = ServiceHelper.getWebviewUrl()
                 // a new user agent or start script only applies to the next page load
-                val pageSetupChanged = applyUserAgent(webView.settings) or applyReduceMotion(webView)
+                val pageSetupChanged = applyUserAgent(webView.settings) or applyReduceMotion(webView) or
+                    applyBatchUpdates(webView)
                 if (pageSetupChanged || webviewUrl != lastRequestedUrl || isOfflineUrl(webView.url)) {
                     Log.d(TAG, "Reloading WebView due to settings change: $webviewUrl")
                     loadDashboard(webviewUrl)
@@ -283,6 +301,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         initialLoadJob = null
         cancelRetry()
         aodTickHandler.removeCallbacksAndMessages(null)
+        sleepHandler.removeCallbacksAndMessages(null)
         pendingJs.clear()
         // destroy the webview or every crash relaunch leaks a full renderer
         try {
@@ -338,6 +357,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             webView.onPause()
             webView.pauseTimers()
             webView.visibility = View.INVISIBLE
+            sleepHandler.removeCallbacks(suspendHaRunnable)
+            sleepHandler.postDelayed(suspendHaRunnable, HaFrontend.HIDDEN_SUSPEND_MS)
             Log.i(TAG, "webview paused for sleep")
         } catch (e: Exception) {
             Log.w(TAG, "pauseWebViewForSleep failed: ${e.message}")
@@ -347,6 +368,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private fun resumeWebViewFromSleep() {
         if (!webViewPausedForSleep) return
         webViewPausedForSleep = false
+        sleepHandler.removeCallbacks(suspendHaRunnable)
         try {
             webView.visibility = View.VISIBLE
             webView.resumeTimers()
@@ -521,6 +543,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             // a handler of a crashed webview means nothing for this one
             reduceMotionScript = null
             applyReduceMotion(this)
+            batchUpdatesScript = null
+            applyBatchUpdates(this)
 
             webViewClient = DashboardWebViewClient()
             webChromeClient = DashboardChromeClient()
@@ -586,6 +610,20 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         return true
     }
 
+    // returns true when the script was added or removed
+    private fun applyBatchUpdates(target: WebView): Boolean {
+        val wanted = documentStartScriptSupported && mSharedPreferences.getBoolean(SP_WEBVIEW_BATCH_UPDATES, true)
+        val current = batchUpdatesScript
+        if (wanted == (current != null)) return false
+        if (wanted) {
+            batchUpdatesScript = WebViewCompat.addDocumentStartJavaScript(target, HaFrontend.BATCH_UPDATES_SCRIPT, setOf("*"))
+        } else {
+            current?.remove()
+            batchUpdatesScript = null
+        }
+        return true
+    }
+
     // swaps in a fresh webview at the same spot after the renderer died
     private fun recoverWebView(crashed: WebView, didCrash: Boolean) {
         val parent = crashed.parent as? ViewGroup ?: return
@@ -637,11 +675,13 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
             super.onPageStarted(view, url, favicon)
             firstPaintDone = false
+            mShellyElevateJavascriptInterface.onPageStarted()
         }
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
             reportShownUrl(url)
+            RendererPriority.boostAsync()
         }
 
         // single page dashboards switch views through the history api without a new page load

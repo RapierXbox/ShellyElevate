@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.PowerManager
+import android.os.Process
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
@@ -54,7 +55,13 @@ object DisplayController {
     @Volatile
     private var homeLoadedAt = 0L
 
-    private val worker = Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "DisplayController") }
+    // created from the main thread it would inherit display priority and compete with the dashboard
+    private val worker = Executors.newSingleThreadScheduledExecutor { r ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            r.run()
+        }, "DisplayController")
+    }
 
     // our activity in front when the screensaver started so settings the user was in stays after wake
     @Volatile

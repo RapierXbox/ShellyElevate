@@ -73,6 +73,8 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
         // local broadcast so other apps cannot spoof the end intent
         LocalBroadcastManager.getInstance(this)
             .registerReceiver(endScreenSaverReceiver, IntentFilter(INTENT_END_SCREENSAVER))
+        // a proximity wake right after the start can send the end before the receiver existed
+        if (!mScreenSaverManager.isScreenSaverRunning) finish()
     }
 
     override fun onDestroy() {

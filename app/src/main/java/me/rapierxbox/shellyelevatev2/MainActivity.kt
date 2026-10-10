@@ -79,6 +79,7 @@ class MainActivity : ComponentActivity(), DisplayHost {
     private var lastSettingsTapAtMs = 0L
 
     private var scoreBarRegistered = false
+    private var shownScoreColor = 0
     private val colorGreen by lazy { ContextCompat.getColor(this, R.color.voice_score_green) }
     private val colorAmber by lazy { ContextCompat.getColor(this, R.color.voice_score_amber) }
     private val colorRed by lazy { ContextCompat.getColor(this, R.color.voice_score_red) }
@@ -107,11 +108,15 @@ class MainActivity : ComponentActivity(), DisplayHost {
             val threshold = intent?.getFloatExtra(INTENT_VOICE_THRESHOLD_KEY, 0.5f) ?: 0.5f
             val barHeight = binding.voiceScoreBarContainer.height.takeIf { it > 0 } ?: return
 
-            binding.voiceScoreBar.updateLayoutParams {
-                height = (barHeight * score.coerceIn(0f, 1f)).toInt()
+            // up to 20 updates a second arrive and each layout pass redraws the dashboard under the bar
+            // so only values that changed are applied which leaves a quiet room with no redraws at all
+            val height = (barHeight * score.coerceIn(0f, 1f)).toInt()
+            if (binding.voiceScoreBar.layoutParams.height != height) {
+                binding.voiceScoreBar.updateLayoutParams { this.height = height }
             }
-            binding.voiceThresholdLine.updateLayoutParams<FrameLayout.LayoutParams> {
-                bottomMargin = (barHeight * threshold.coerceIn(0f, 1f)).toInt()
+            val margin = (barHeight * threshold.coerceIn(0f, 1f)).toInt()
+            if ((binding.voiceThresholdLine.layoutParams as FrameLayout.LayoutParams).bottomMargin != margin) {
+                binding.voiceThresholdLine.updateLayoutParams<FrameLayout.LayoutParams> { bottomMargin = margin }
             }
 
             val barColor = when {
@@ -119,8 +124,12 @@ class MainActivity : ComponentActivity(), DisplayHost {
                 score >= threshold * 0.5f -> colorAmber
                 else -> colorGreen
             }
-            binding.voiceScoreBar.setBackgroundColor(barColor)
-            binding.voiceScoreValue.text = String.format("%.2f", score)
+            if (barColor != shownScoreColor) {
+                shownScoreColor = barColor
+                binding.voiceScoreBar.setBackgroundColor(barColor)
+            }
+            val text = String.format("%.2f", score)
+            if (text != binding.voiceScoreValue.text.toString()) binding.voiceScoreValue.text = text
         }
     }
 
@@ -138,6 +147,7 @@ class MainActivity : ComponentActivity(), DisplayHost {
 
     // lifecycle
 
+    @SuppressLint("ClickableViewAccessibility")
     @RequiresPermission(Manifest.permission.ACCESS_NETWORK_STATE)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -151,6 +161,8 @@ class MainActivity : ComponentActivity(), DisplayHost {
         window.setBackgroundDrawable(null)
 
         showActiveModule()
+        // a webview paused for sleep is invisible and gets no touches so the container takes the wake tap
+        binding.moduleContainer.setOnTouchListener { _, event -> onContentTouch(event) }
         setupSettingsButtons()
         (binding.root as GestureInterceptLayout).apply {
             swipeHelper = mSwipeHelper
@@ -282,6 +294,7 @@ class MainActivity : ComponentActivity(), DisplayHost {
         binding.voiceScoreBar.updateLayoutParams { height = 0 }
         binding.voiceScoreValue.text = ".00"
         binding.voiceScoreBar.setBackgroundColor(colorGreen)
+        shownScoreColor = colorGreen
     }
 
     // settings entry

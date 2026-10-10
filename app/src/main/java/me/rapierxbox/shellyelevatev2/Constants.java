@@ -55,6 +55,7 @@ public final class Constants {
     public static final String SP_WEBVIEW_MODERN_FRONTEND = "webview.modernFrontend";
     // tells pages that reduced motion is preferred so home assistant skips most animations
     public static final String SP_WEBVIEW_REDUCE_MOTION = "webview.reduceMotion";
+    public static final String SP_WEBVIEW_BATCH_UPDATES = "webview.batchUpdates";
 
     // webview ota prefs
     public static final String SP_WEBVIEW_UPDATE_PROMPTED = "webviewUpdatePrompted";

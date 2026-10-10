@@ -25,6 +25,8 @@
     <string name="webview_modern_frontend_summary">Loads the faster modern dashboard code that Home Assistant only offers to newer browsers. Experimental, turn it off if a card looks broken</string>
     <string name="webview_reduce_motion">Reduce animations</string>
     <string name="webview_reduce_motion_summary">Asks the dashboard to skip most animations like a phone with animations turned off. Feels snappier on this hardware</string>
+    <string name="webview_batch_updates">Batch dashboard updates</string>
+    <string name="webview_batch_updates_summary">Busy sensors make Home Assistant redraw the whole dashboard several times a second. This redraws at most once a second while nobody touches the screen and leaves more speed for taps and scrolling</string>
     <string name="adb_wifi_enabled">ADB over WiFi</string>
     <string name="adb_wifi_address">Connect:</string>
     <string name="adb_wifi_url">%1$s:5555</string>
@@ -223,6 +225,7 @@
     <string name="voice_wake_model_custom_message">Enter the full path to the .tflite file on this device. A .json with the same name in the same folder will also be copied.</string>
     <string name="voice_wake_model_custom_hint">/sdcard/Download/my_model.tflite</string>
     <string name="voice_listening">Listening…</string>
+    <string name="voice_thinking">Thinking…</string>
     <string name="voice_error">Voice error: %1$s</string>
     <string name="publish_thermal_sensors">Publish device thermal sensors to HA</string>
     <string name="dynamic_temp_offset">Dynamic temperature offset (deviceheat correction)</string>

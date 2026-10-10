@@ -28,6 +28,8 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
     private static final String JSON = "application/json";
     private static final String PREFIX = "/api/v1";
     private static final int MAX_BODY = 1024 * 1024;
+    // hello and the pairing requests are small json objects
+    private static final int MAX_OPEN_BODY = 4 * 1024;
 
     private final Context context;
     private final ClientTokenStore tokens;
@@ -68,9 +70,26 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
         String uri = session.getUri();
         Method method = session.getMethod();
         try {
+            boolean open = ((PREFIX + "/hello").equals(uri) && method == Method.GET)
+                    || ((PREFIX + "/pair").equals(uri) || (PREFIX + "/pair/confirm").equals(uri)) && method == Method.POST;
+            ClientTokenStore.Client client = open ? null : authenticate(session);
+            // a stranger never makes us allocate more than a pairing request needs
+            if (!open && client == null) {
+                Response denied = uri.startsWith(PREFIX + "/")
+                        ? error(Status.UNAUTHORIZED, "unauthorized", "token rejected")
+                        : error(Status.NOT_FOUND, "unknown_action", "not found");
+                // the unread body would otherwise be parsed as the next request
+                denied.closeConnection(true);
+                return denied;
+            }
+
             // read the body up front so a keep alive connection never sees leftovers
-            byte[] body = readBody(session);
-            if (body == null) return error(Status.PAYLOAD_TOO_LARGE, "invalid_params", "body too large");
+            byte[] body = readBody(session, open ? MAX_OPEN_BODY : MAX_BODY);
+            if (body == null) {
+                Response tooLarge = error(Status.PAYLOAD_TOO_LARGE, "invalid_params", "body too large");
+                tooLarge.closeConnection(true);
+                return tooLarge;
+            }
 
             if ((PREFIX + "/hello").equals(uri) && method == Method.GET) {
                 return json(Status.OK, ApiInfo.hello(tokens.hasClients()));
@@ -78,9 +97,7 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
             if ((PREFIX + "/pair").equals(uri) && method == Method.POST) return pairStart(body);
             if ((PREFIX + "/pair/confirm").equals(uri) && method == Method.POST) return pairConfirm(body);
 
-            ClientTokenStore.Client client = authenticate(session);
             if (!uri.startsWith(PREFIX + "/")) return error(Status.NOT_FOUND, "unknown_action", "not found");
-            if (client == null) return error(Status.UNAUTHORIZED, "unauthorized", "token rejected");
 
             switch (uri.substring(PREFIX.length())) {
                 case "/pair":
@@ -533,7 +550,7 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
 
     // ------------------------------------------------------------------ helpers
 
-    private static byte[] readBody(IHTTPSession session) throws IOException {
+    private static byte[] readBody(IHTTPSession session, int maxBody) throws IOException {
         String length = session.getHeaders().get("content-length");
         if (length == null) return new byte[0];
         int size;
@@ -542,7 +559,7 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
         } catch (NumberFormatException e) {
             return new byte[0];
         }
-        if (size > MAX_BODY) return null;
+        if (size > maxBody) return null;
         byte[] body = new byte[Math.max(0, size)];
         InputStream in = session.getInputStream();
         int read = 0;

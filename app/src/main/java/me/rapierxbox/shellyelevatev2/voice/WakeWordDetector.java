@@ -100,6 +100,8 @@ public class WakeWordDetector {
     private int debugInferCount = 0;
     private float debugMaxScore = 0f;
     private long lastScoreBroadcastMs = 0;
+    private float lastBroadcastScore = -1f;
+    private float lastBroadcastThreshold = -1f;
 
     public WakeWordDetector(Context context, Callback callback) {
         this.context = context;
@@ -501,9 +503,13 @@ public class WakeWordDetector {
         if (!scoreBroadcastEnabled) return;
         long nowMs = System.currentTimeMillis();
         if (nowMs - lastScoreBroadcastMs < SCORE_BROADCAST_INTERVAL_MS) return;
-        lastScoreBroadcastMs = nowMs;
         final float score = avgScore;
         final float threshold = scoreThreshold;
+        // a quiet room repeats the same score so the main thread gets nothing new to draw
+        if (Math.abs(score - lastBroadcastScore) < 0.005f && threshold == lastBroadcastThreshold) return;
+        lastScoreBroadcastMs = nowMs;
+        lastBroadcastScore = score;
+        lastBroadcastThreshold = threshold;
         mainHandler.post(() -> LocalBroadcastManager.getInstance(context).sendBroadcast(
                 new Intent(Constants.INTENT_VOICE_SCORE)
                         .putExtra(Constants.INTENT_VOICE_SCORE_KEY, score)
