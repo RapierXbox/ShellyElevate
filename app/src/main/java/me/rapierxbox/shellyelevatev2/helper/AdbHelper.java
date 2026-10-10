@@ -22,6 +22,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 import me.rapierxbox.shellyelevatev2.Constants;
@@ -52,6 +54,10 @@ public final class AdbHelper {
     // shell work must stay off the main thread
     private static final ExecutorService EXEC = Executors.newSingleThreadExecutor();
 
+    // self heal so an external adb root or an adbd crash cannot strand wifi adb until a reboot
+    private static final long WATCHDOG_PERIOD_S = 60L;
+    private static ScheduledExecutorService watchdog;
+
     // what was last asked for. null until the boot sync ran
     private static volatile Boolean lastRequested;
     private static volatile Boolean rootAvailable;
@@ -73,6 +79,7 @@ public final class AdbHelper {
     // the boot sync. never turns adb off since the install script and the integration
     // enable it over adb without touching the setting
     public static void applyFromPrefs() {
+        startWatchdog();
         EXEC.execute(() -> {
             try {
                 if (mSharedPreferences.getBoolean(Constants.SP_ADB_WIFI_ENABLED, false)) {
@@ -91,6 +98,35 @@ public final class AdbHelper {
                 }
             }
         });
+    }
+
+    // starts the self heal watchdog once. idempotent
+    public static synchronized void startWatchdog() {
+        if (watchdog != null) return;
+        watchdog = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "adb-watchdog");
+            t.setDaemon(true);
+            return t;
+        });
+        watchdog.scheduleWithFixedDelay(AdbHelper::watchdogTick,
+                WATCHDOG_PERIOD_S, WATCHDOG_PERIOD_S, TimeUnit.SECONDS);
+    }
+
+    // brings wifi adb back when it was wanted but the listener went away
+    private static void watchdogTick() {
+        try {
+            // boot sync not done yet or wifi adb not wanted
+            if (lastRequested == null
+                    || !mSharedPreferences.getBoolean(Constants.SP_ADB_WIFI_ENABLED, false)) {
+                return;
+            }
+            // only act when the listener is actually gone so it never thrashes adbd
+            if (isListening()) return;
+            Log.w(TAG, "wifi adb listener gone - re-asserting");
+            apply(true);
+        } catch (RuntimeException e) {
+            Log.e(TAG, "adb watchdog tick failed", e);
+        }
     }
 
     // runs after settings were saved or patched over the api
