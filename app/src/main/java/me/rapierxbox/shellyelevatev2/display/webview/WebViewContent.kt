@@ -100,9 +100,23 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private val suspendHaRunnable = Runnable {
         if (!webViewPausedForSleep || destroyed) return@Runnable
         try {
+            // pauseTimers also holds back evaluateJavascript so the timers run for a moment
+            // the page stays paused and hidden so ha keeps its guard and reconnects only on wake
+            webView.resumeTimers()
             webView.evaluateJavascript(HaFrontend.SUSPEND_WHEN_HIDDEN_SCRIPT, null)
+            sleepHandler.postDelayed(repauseRunnable, HA_SUSPEND_RUN_MS)
+            Log.i(TAG, "suspending the dashboard connection while asleep")
         } catch (e: Exception) {
             Log.w(TAG, "suspending the dashboard connection failed: ${e.message}")
+        }
+    }
+
+    private val repauseRunnable = Runnable {
+        if (!webViewPausedForSleep || destroyed) return@Runnable
+        try {
+            webView.pauseTimers()
+        } catch (e: Exception) {
+            Log.w(TAG, "pausing the webview again failed: ${e.message}")
         }
     }
 
@@ -368,7 +382,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private fun resumeWebViewFromSleep() {
         if (!webViewPausedForSleep) return
         webViewPausedForSleep = false
-        sleepHandler.removeCallbacks(suspendHaRunnable)
+        // the suspend and its repause both belong to the sleep that just ended
+        sleepHandler.removeCallbacksAndMessages(null)
         try {
             webView.visibility = View.VISIBLE
             webView.resumeTimers()
@@ -829,6 +844,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
         const val AOD_TICK_PERIOD_MS = 1000L
         const val AOD_TICK_WINDOW_MS = 200L
+
+        // long enough for the suspend script and the socket close to run before timers pause again
+        const val HA_SUSPEND_RUN_MS = 2_000L
 
         val RETRY_BACKOFF_MS = listOf(2000L, 4000L, 8000L, 16000L)
         const val RETRY_POLL_MS = 30_000L
