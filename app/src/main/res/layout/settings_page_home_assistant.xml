@@ -39,6 +39,16 @@
         android:layout_marginTop="8dp"
         android:orientation="vertical" />
 
+    <!-- the dashboard login home assistant handed over -->
+    <TextView
+        android:id="@+id/integrationHaLogin"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:textSize="14sp"
+        android:visibility="gone"
+        tools:text="Dashboard logged in by Home Assistant as Shelly Elevate" />
+
     <TextView
         android:id="@+id/integrationFingerprint"
         android:layout_width="match_parent"

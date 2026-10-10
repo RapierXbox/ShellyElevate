@@ -1,7 +1,12 @@
 package me.rapierxbox.shellyelevatev2.api;
 
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_HA_LOGIN_CHANGED;
+
 import android.content.Context;
+import android.content.Intent;
 import android.util.Log;
+
+import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -73,6 +78,7 @@ public final class ApiManager {
 
     private void startInternal() {
         CoreCommands.register();
+        HaLoginCommands.register(context);
         stateHub.start();
         tokens.addListener(clientsListener);
         SettingsParser.addChangeListener(settingsListener);
@@ -144,7 +150,13 @@ public final class ApiManager {
     }
 
     private void onClientsChanged() {
-        discovery.register(tokens.hasClients());
+        boolean paired = tokens.hasClients();
+        // the login belongs to a controller so it goes once none is paired anymore
+        if (!paired && HaLoginStore.get(context).hasLogin()) {
+            HaLoginStore.get(context).clear();
+            LocalBroadcastManager.getInstance(context).sendBroadcast(new Intent(INTENT_HA_LOGIN_CHANGED));
+        }
+        discovery.register(paired);
         ApiServer s = server;
         if (s != null) s.dropStaleSockets();
     }

@@ -38,6 +38,8 @@ public final class DeviceCapabilities {
     public static final String BLUETOOTH = "bluetooth";
     public static final String SCREENSHOT = "screenshot";
     public static final String SELF_UPDATE = "self_update";
+    // the dashboard takes a home assistant login over ha_login.set
+    public static final String HA_LOGIN = "ha_login";
 
     // integers and booleans by capability name
     public static Map<String, Object> snapshot(Context context) {
@@ -61,6 +63,7 @@ public final class DeviceCapabilities {
         caps.put(BLUETOOTH, BluetoothAdapter.getDefaultAdapter() != null);
         caps.put(SCREENSHOT, true);
         caps.put(SELF_UPDATE, canSelfUpdate(context));
+        caps.put(HA_LOGIN, true);
         return Collections.unmodifiableMap(caps);
     }
 

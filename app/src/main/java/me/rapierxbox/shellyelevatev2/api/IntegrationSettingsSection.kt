@@ -15,6 +15,7 @@ import androidx.lifecycle.LifecycleOwner
 import com.google.android.material.button.MaterialButton
 import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageHomeAssistantBinding
+import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import java.util.concurrent.Executors
 
 // pairing status and the paired controllers with a remove button on the home assistant page
@@ -67,6 +68,7 @@ class IntegrationSettingsSection(
             clients.isEmpty() -> fragment.getString(R.string.integration_not_paired)
             else -> fragment.getString(R.string.integration_paired)
         }
+        renderHaLogin()
         val container = b.integrationClients
         container.removeAllViews()
         val context = fragment.requireContext()
@@ -90,6 +92,19 @@ class IntegrationSettingsSection(
                 setOnClickListener { confirmRevoke(client) }
             })
             container.addView(row)
+        }
+    }
+
+    // read only since logging out here would only make home assistant send a new login
+    private fun renderHaLogin() {
+        val login = HaLoginStore.get(fragment.requireContext())
+        val user = login.userName()
+        val state = login.state(ServiceHelper.getWebviewUrl())
+        b.integrationHaLogin.isVisible = state != HaLoginStore.STATE_NONE
+        b.integrationHaLogin.text = when (state) {
+            HaLoginStore.STATE_OK -> fragment.getString(R.string.integration_ha_login_ok, user.orEmpty())
+            HaLoginStore.STATE_INVALID -> fragment.getString(R.string.integration_ha_login_invalid, user.orEmpty())
+            else -> ""
         }
     }
 

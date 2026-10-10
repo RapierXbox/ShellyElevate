@@ -148,6 +148,8 @@ public final class Constants {
     public static final String INTENT_WEBVIEW_INJECT_JAVASCRIPT = "me.rapierxbox.shellyelevatev2.WEBVIEW_INJECT_JAVASCRIPT";
     // reloads the dashboard without the full settings reapply that SETTINGS_CHANGED triggers
     public static final String INTENT_WEBVIEW_REFRESH = "me.rapierxbox.shellyelevatev2.WEBVIEW_REFRESH";
+    // the dashboard login from home assistant was set or cleared
+    public static final String INTENT_HA_LOGIN_CHANGED = "me.rapierxbox.shellyelevatev2.HA_LOGIN_CHANGED";
 
     // thermal prefs
     public static final String SP_PUBLISH_THERMAL_SENSORS      = "publishThermalSensors";

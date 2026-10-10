@@ -42,6 +42,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import me.rapierxbox.shellyelevatev2.BuildConfig
 import me.rapierxbox.shellyelevatev2.Constants.EXTRA_SCREEN_SAVER_ID
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_HA_LOGIN_CHANGED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STARTED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STOPPED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED
@@ -63,6 +64,8 @@ import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mShellyElevateJavascriptInterface
 import me.rapierxbox.shellyelevatev2.api.ApiHub
+import me.rapierxbox.shellyelevatev2.api.HaLoginRules
+import me.rapierxbox.shellyelevatev2.api.HaLoginStore
 import me.rapierxbox.shellyelevatev2.display.DisplayContent
 import me.rapierxbox.shellyelevatev2.display.DisplayHost
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
@@ -191,6 +194,17 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         }
     }
 
+    // home assistant handed over or took back the dashboard login
+    private val haLoginReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            try {
+                applyHaLogin(webView, webView.url)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error applying the dashboard login", e)
+            }
+        }
+    }
+
     private val screenStateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             val action = intent?.action ?: return
@@ -286,6 +300,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             registerReceiver(settingsChangedReceiver, IntentFilter(INTENT_SETTINGS_CHANGED))
             registerReceiver(webviewRefreshReceiver, IntentFilter(INTENT_WEBVIEW_REFRESH))
             registerReceiver(javascriptInjectReceiver, IntentFilter(INTENT_WEBVIEW_INJECT_JAVASCRIPT))
+            registerReceiver(haLoginReceiver, IntentFilter(INTENT_HA_LOGIN_CHANGED))
             registerReceiver(screenStateReceiver, IntentFilter().apply {
                 addAction(INTENT_TURN_SCREEN_ON)
                 addAction(INTENT_TURN_SCREEN_OFF)
@@ -305,6 +320,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             unregisterReceiver(settingsChangedReceiver)
             unregisterReceiver(webviewRefreshReceiver)
             unregisterReceiver(javascriptInjectReceiver)
+            unregisterReceiver(haLoginReceiver)
             unregisterReceiver(screenStateReceiver)
             unregisterReceiver(aodReceiver)
         }
@@ -390,6 +406,36 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         }
         lastRequestedUrl = url
         webView.loadUrl(url)
+    }
+
+    // hands the home assistant session to the page or drops it after a logout
+    // returns true when the page got the session
+    private fun applyHaLogin(target: WebView, pageUrl: String?): Boolean {
+        if (destroyed || pageUrl.isNullOrEmpty()) return false
+        val store = HaLoginStore.get(activity)
+        store.takeLogout(pageUrl)?.let { origin ->
+            target.evaluateJavascript(HaLoginRules.logoutScript(origin), null)
+            return false
+        }
+        return handOverHaLogin(target, store, pageUrl)
+    }
+
+    // the frontend is about to open the login page so the current page gets the session instead
+    // and the login never shows
+    private fun interceptHaLogin(view: WebView, url: String): Boolean {
+        val origin = HaLoginRules.originOf(url) ?: return false
+        if (!HaLoginRules.isAuthorizePage(url, origin) || !HaLoginRules.sameOrigin(view.url, origin)) return false
+        return handOverHaLogin(view, HaLoginStore.get(activity), url)
+    }
+
+    private fun handOverHaLogin(target: WebView, store: HaLoginStore, pageUrl: String): Boolean {
+        val dashboard = ServiceHelper.getWebviewUrl()
+        val session = store.handOver(pageUrl, dashboard) ?: return false
+        Log.i(TAG, "Logging the dashboard in as ${session.userName}")
+        target.evaluateJavascript(
+            HaLoginRules.loginScript(session.origin, session.clientId, session.refreshToken, dashboard), null
+        )
+        return true
     }
 
     private fun showOfflinePage(view: WebView, failingUrl: String?) {
@@ -611,6 +657,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
                 pendingJs.forEach { webView.evaluateJavascript(it, null) }
                 pendingJs.clear()
             }
+            if (view != null) applyHaLogin(view, url)
         }
 
         @SuppressLint("WebViewClientOnReceivedSslError")
@@ -660,6 +707,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
         override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
             val url = request?.url?.toString() ?: return false
+            if (view != null && request.isForMainFrame && interceptHaLogin(view, url)) return true
             if (!url.startsWith(APP_URL_SCHEME)) return false
             when (url.removePrefix(APP_URL_SCHEME)) {
                 "reload" -> view?.post { loadDashboard(ServiceHelper.getWebviewUrl()) }

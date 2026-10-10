@@ -225,7 +225,8 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
             case "unknown_action": return Status.NOT_FOUND;
             case "invalid_params":
             case "unsupported": return Status.BAD_REQUEST;
-            case "busy": return Status.CONFLICT;
+            case "busy":
+            case "origin_mismatch": return Status.CONFLICT;
             default: return Status.INTERNAL_ERROR;
         }
     }
