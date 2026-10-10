@@ -112,6 +112,8 @@ public final class Constants {
     public static final String SP_MQTT_CLIENTID = "mqttDeviceId";
     // the v1 api and mdns id. seeded once from the mqtt id and never changed so pairings survive an mqtt rename
     public static final String SP_API_DEVICE_ID = "apiDeviceId";
+    // friendly name shown in home assistant and on the network. empty means an automatic name with the mac
+    public static final String SP_DEVICE_NAME = "deviceName";
     // off for non ha brokers like iobroker that cannot parse the discovery json
     public static final String SP_MQTT_HA_DISCOVERY = "mqttHomeAssistantDiscovery";
     // retain state topics so a fresh subscriber sees current values immediately

@@ -100,6 +100,8 @@ public final class SettingsRegistry {
         Map<String, SettingDef> m = new LinkedHashMap<>();
 
         // general and screen content
+        add(m, string(Constants.SP_DEVICE_NAME, "", CATEGORY_GENERAL, "Device name").perDevice()
+                .description("Name shown in Home Assistant and on the network. Empty uses an automatic name with the mac"));
         add(m, new SettingDef.Builder(Constants.SP_DISPLAY_MODULE, TYPE_ENUM, DisplayModuleRegistry.DEFAULT_ID,
                 CATEGORY_GENERAL, "Show on screen").options(displayModuleOptions())
                 .description("What the display shows: the web dashboard or another app"));

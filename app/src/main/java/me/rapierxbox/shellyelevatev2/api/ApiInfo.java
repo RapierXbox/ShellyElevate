@@ -1,6 +1,7 @@
 package me.rapierxbox.shellyelevatev2.api;
 
 import static me.rapierxbox.shellyelevatev2.Constants.SP_API_DEVICE_ID;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE_NAME;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_MQTT_CLIENTID;
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mSharedPreferences;
 
@@ -52,7 +53,22 @@ public final class ApiInfo {
     }
 
     public static String name() {
-        return DeviceModel.getReportedDevice().displayName;
+        String custom = mSharedPreferences.getString(SP_DEVICE_NAME, "").trim();
+        return custom.isEmpty() ? defaultName() : custom;
+    }
+
+    // model name plus the last 4 of the mac so every display is distinct out of the box
+    public static String defaultName() {
+        String base = DeviceModel.getReportedDevice().displayName;
+        String mac = mac().replace(":", "");
+        String suffix = "";
+        if (mac.length() >= 4) {
+            suffix = mac.substring(mac.length() - 4);
+        } else {
+            String id = deviceId();
+            if (id.length() >= 4) suffix = id.substring(id.length() - 4);
+        }
+        return suffix.isEmpty() ? base : base + " " + suffix;
     }
 
     public static String codename() {

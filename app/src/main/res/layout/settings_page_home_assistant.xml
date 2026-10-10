@@ -6,6 +6,31 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
+    <!-- ─────────────── Device ─────────────── -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_weight="1"
+            android:text="@string/device_name"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/deviceName"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/device_name_hint"
+            android:imeOptions="actionDone"
+            android:inputType="text"
+            android:textSize="18sp" />
+    </LinearLayout>
+
     <!-- ─────────────── Shelly Elevate integration ─────────────── -->
     <TextView
         android:layout_width="match_parent"

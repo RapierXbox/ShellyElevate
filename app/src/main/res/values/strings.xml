@@ -71,6 +71,8 @@
     <string name="volume">Volume</string>
     <string name="mqtt">MQTT</string>
     <string name="broker_address">Broker address</string>
+    <string name="device_name">Device name</string>
+    <string name="device_name_hint">Automatic</string>
     <string name="http_server_running">Running</string>
     <string name="http_server_not_running">Not running</string>
     <string name="settings_saved">Settings saved</string>

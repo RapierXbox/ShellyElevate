@@ -534,6 +534,8 @@ class SettingsFragment : Fragment() {
         homeAssistantPage = b
         val defaultClientId = "shellyelevate-" + UUID.randomUUID().toString().replace("-", "").substring(2, 6)
         bindPage {
+            // empty keeps the automatic name from ApiInfo
+            +TextPref(b.deviceName, SP_DEVICE_NAME)
             +SwitchPref(b.integrationApiEnabled, SP_INTEGRATION_API_ENABLED, true)
             visibleWhen(b.integrationApiEnabled, b.integrationStatus, b.integrationClients, b.integrationFingerprint)
             // voice and the bluetooth proxy on other pages need the integration api

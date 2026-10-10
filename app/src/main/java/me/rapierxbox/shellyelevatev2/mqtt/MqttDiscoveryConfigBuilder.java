@@ -13,6 +13,7 @@ import java.util.Locale;
 
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
+import me.rapierxbox.shellyelevatev2.api.ApiInfo;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
@@ -75,7 +76,8 @@ class MqttDiscoveryConfigBuilder {
     private JSONObject buildDevice() throws JSONException {
         JSONObject d = new JSONObject();
         d.put("ids", clientId);
-        d.put("name", device.displayName + " (" + clientId + ")");
+        // the device name the user set or the automatic unique one
+        d.put("name", ApiInfo.name());
         d.put("mf", "Shelly");
         d.put("mdl", device.sku);
         d.put("sw", BuildConfig.VERSION_NAME);
