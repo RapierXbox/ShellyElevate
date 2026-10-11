@@ -1,6 +1,7 @@
 package me.rapierxbox.shellyelevatev2.api;
 
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_HA_LOGIN_CHANGED;
+import static me.rapierxbox.shellyelevatev2.Constants.SP_DEVICE_NAME;
 
 import android.content.Context;
 import android.content.Intent;
@@ -169,6 +170,13 @@ public final class ApiManager {
     }
 
     private void onSettingsChanged(JSONObject changes) {
+        if (changes.has(SP_DEVICE_NAME)) {
+            try {
+                executor.execute(this::announceName);
+            } catch (RuntimeException ignored) {
+                // shutting down
+            }
+        }
         if (changes.length() == 0 || !ApiHub.hasController()) return;
         try {
             ApiHub.send(new JSONObject().put("type", "settings_changed").put("changes", changes));
@@ -176,5 +184,19 @@ public final class ApiManager {
             Log.w(TAG, "Could not build settings_changed", e);
         }
         stateHub.poke();
+    }
+
+    // the name lives in hello info and the txt record so both are sent again
+    private void announceName() {
+        discovery.refresh();
+        if (!ApiHub.hasController()) return;
+        try {
+            ApiHub.send(new JSONObject()
+                    .put("type", "hello")
+                    .put("api", ApiInfo.API_VERSION)
+                    .put("info", ApiInfo.info(context)));
+        } catch (JSONException e) {
+            Log.w(TAG, "Could not build hello", e);
+        }
     }
 }

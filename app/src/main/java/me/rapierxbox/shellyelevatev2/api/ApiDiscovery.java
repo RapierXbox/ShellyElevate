@@ -73,6 +73,14 @@ final class ApiDiscovery {
         }
     }
 
+    // announces again with the current txt values
+    synchronized void refresh() {
+        if (listener == null) return;
+        boolean paired = registeredPaired;
+        unregister();
+        register(paired);
+    }
+
     synchronized void unregister() {
         if (nsd == null || listener == null) return;
         try {
