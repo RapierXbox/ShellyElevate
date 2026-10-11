@@ -122,7 +122,6 @@ Some things the app used to do on its own now go through the integration, so I r
 |---|---|
 | The ESPHome Bluetooth proxy on port 6053 | The integration's Bluetooth proxy. On the display: **Settings → Bluetooth → Bluetooth proxy via Home Assistant integration** |
 | The built-in voice assistant that used a long-lived token and a pipeline id | The integration's voice assistant. On the display: **Settings → Audio and voice → Voice assistant via Home Assistant integration**. The wake word still runs on the display |
-| `tools/uart-setup.py` | Install over ADB from the integration's **Install** tab, or follow the [manual install](https://github.com/RapierXbox/ShellyElevate/wiki/Installation) |
 
 If you're coming from an older version:
 

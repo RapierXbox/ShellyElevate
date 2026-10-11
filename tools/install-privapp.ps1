@@ -155,6 +155,8 @@ if (-not (Test-StockInstalled)) {
 Write-Host "enabling adb over wifi on port $adbTcpPort"
 & adb shell "settings put global development_settings_enabled 1"
 & adb shell "settings put global adb_enabled 1"
+# android 11+ wireless debugging. harmless on older versions
+& adb shell "settings put global adb_wifi_enabled 1"
 & adb shell "setprop persist.adb.tcp.port $adbTcpPort"
 
 $wifiPending = $false

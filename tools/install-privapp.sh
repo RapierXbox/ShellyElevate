@@ -236,6 +236,8 @@ fi
 echo "enabling adb over wifi on port $ADB_TCP_PORT"
 try_adb shell "settings put global development_settings_enabled 1"
 try_adb shell "settings put global adb_enabled 1"
+# android 11+ wireless debugging. harmless on older versions
+try_adb shell "settings put global adb_wifi_enabled 1"
 try_adb shell "setprop persist.adb.tcp.port $ADB_TCP_PORT"
 
 WIFI_PENDING=0
