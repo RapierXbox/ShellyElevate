@@ -207,6 +207,14 @@
     <string name="voice_wake_cooldown">Cooldown after detection (seconds)</string>
     <string name="voice_wake_sensitivity">Detection sensitivity</string>
     <string name="voice_score_bar">Show wake word score bar</string>
+    <string name="speaker_id">Speaker recognition</string>
+    <string name="speaker_id_hint">Tells Home Assistant who speaks. Add voices in the Shelly Elevate panel under Speakers</string>
+    <string name="speaker_id_model">Speaker model</string>
+    <string name="speaker_id_model_fast">Fast</string>
+    <string name="speaker_id_model_balanced">Balanced</string>
+    <string name="speaker_id_model_accurate">Accurate</string>
+    <string name="speaker_id_strictness">Strictness</string>
+    <string name="speaker_id_learn">Learn voices from use</string>
     <string name="voice_wake_experimental_models">Show experimental community models</string>
     <string name="voice_ha_not_connected">Home Assistant not connected</string>
     <string name="voice_timer_done">%1$s done</string>

@@ -46,6 +46,7 @@ import me.rapierxbox.shellyelevatev2.voice.WakeWordDetector
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModel
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModelDownloader
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModelManager
+import me.rapierxbox.shellyelevatev2.voice.speaker.SpeakerModels
 import me.rapierxbox.shellyelevatev2.databinding.SettingsFragmentBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageAudioBinding
 import me.rapierxbox.shellyelevatev2.databinding.SettingsPageBluetoothBinding
@@ -595,6 +596,10 @@ class SettingsFragment : Fragment() {
         val b = SettingsPageAudioBinding.inflate(layoutInflater, parent, true)
         audioPage = b
         val wakewordsDir = WakeWordModelManager.getModelDirectory(requireContext())
+        b.speakerIdModel.adapter = spinnerAdapter(listOf(
+            getString(R.string.speaker_id_model_fast),
+            getString(R.string.speaker_id_model_balanced),
+            getString(R.string.speaker_id_model_accurate)))
         bindPage {
             +SwitchPref(b.mediaEnabled, SP_MEDIA_ENABLED, false)
 
@@ -626,6 +631,16 @@ class SettingsFragment : Fragment() {
             +SliderPref(b.voiceWakeCooldown, SP_VOICE_WAKE_COOLDOWN_SEC, 5)
             +SwitchPref(b.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)
             +SwitchPref(b.voiceScoreBarEnabled, SP_VOICE_SCORE_BAR_ENABLED, false)
+
+            +SwitchPref(b.speakerIdEnabled, SP_SPEAKER_ID_ENABLED, false)
+            row(SP_SPEAKER_ID_ENABLED, b.speakerIdEnabled)
+            parent(b.speakerIdEnabled)
+            row(SP_SPEAKER_ID_MODEL, b.speakerIdHint, b.speakerIdModelLayout)
+            row(SP_SPEAKER_ID_STRICTNESS, b.speakerIdStrictnessLayout)
+            row(SP_SPEAKER_ID_LEARN, b.speakerIdLearn)
+            +SpinnerIdPref(b.speakerIdModel, SP_SPEAKER_ID_MODEL, listOf("b0", "b2", "b3"), SpeakerModels.DEFAULT)
+            +SliderPref(b.speakerIdStrictness, SP_SPEAKER_ID_STRICTNESS, 50)
+            +SwitchPref(b.speakerIdLearn, SP_SPEAKER_ID_LEARN, true)
         }
 
         val audioManager = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
