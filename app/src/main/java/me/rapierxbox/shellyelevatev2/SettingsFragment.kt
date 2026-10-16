@@ -66,6 +66,7 @@ import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper
 import me.rapierxbox.shellyelevatev2.helper.AppUpdater
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader
+import me.rapierxbox.shellyelevatev2.helper.PrivAppInstaller
 import me.rapierxbox.shellyelevatev2.helper.RebootHelper
 import me.rapierxbox.shellyelevatev2.helper.ServiceHelper
 import me.rapierxbox.shellyelevatev2.helper.WebViewUpdater
@@ -471,7 +472,7 @@ class SettingsFragment : Fragment() {
         viewLifecycleOwner.lifecycleScope.launch {
             val state = withContext(Dispatchers.IO) { AdbHelper.readState() }
             // a toggle that started meanwhile reports its own result
-            if (networkPage?.adbWifiEnabled?.isEnabled == true) showAdbWifi(state)
+            if (networkPage?.adbWifiStatus?.text != getString(R.string.adb_wifi_status_applying)) showAdbWifi(state)
         }
 
         // the wifi list inflates a row per network so let the page show first
@@ -504,8 +505,12 @@ class SettingsFragment : Fragment() {
             b.adbWifiEnabled.isChecked = state.enabled
             adbWifiSyncing = false
         }
-        b.adbWifiStatus.text = state.error
+        val status = state.error
             ?: getString(if (state.enabled) R.string.adb_wifi_status_on else R.string.adb_wifi_status_off)
+        // restarting adbd needs WRITE_SECURE_SETTINGS which only a priv app gets so the switch can not work
+        val privileged = PrivAppInstaller.isPrivApp(requireContext())
+        b.adbWifiEnabled.isEnabled = privileged
+        b.adbWifiStatus.text = if (privileged) status else getString(R.string.adb_wifi_needs_privapp, status)
     }
 
     private fun createControlsPage(parent: ViewGroup): View {
@@ -650,6 +655,15 @@ class SettingsFragment : Fragment() {
             +SliderPref(b.voiceWakeCooldown, SP_VOICE_WAKE_COOLDOWN_SEC, 5, b.voiceWakeCooldownValue)
             +SwitchPref(b.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)
 
+            +SwitchPref(b.voiceThinkingSound, SP_VOICE_THINKING_SOUND, false)
+            row(SP_VOICE_THINKING_SOUND, b.voiceThinkingSound)
+            parent(b.voiceThinkingSound)
+            row(SP_VOICE_THINKING_SOUND_LOOP, b.voiceThinkingOptions, b.voiceThinkingLoop)
+            row(SP_VOICE_THINKING_SOUND_PITCH, b.voiceThinkingPitchLayout)
+            +SwitchPref(b.voiceThinkingLoop, SP_VOICE_THINKING_SOUND_LOOP, true)
+            +SliderPref(b.voiceThinkingPitch, SP_VOICE_THINKING_SOUND_PITCH, 10, b.voiceThinkingPitchValue,
+                { getString(R.string.plus_minus_percent, it) })
+
             +SwitchPref(b.speakerIdEnabled, SP_SPEAKER_ID_ENABLED, false)
             row(SP_SPEAKER_ID_ENABLED, b.speakerIdEnabled, b.speakerIdHint)
             parent(b.speakerIdEnabled)
@@ -666,6 +680,10 @@ class SettingsFragment : Fragment() {
         val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         b.volumeSetting.value = (curVol.toFloat() / maxVol * 100f).coerceIn(0f, 100f).roundToInt().toFloat()
         b.volumeValue.text = getString(R.string.percent, b.volumeSetting.value.toInt())
+        // the file comes from the home assistant panel since the display has no file picker
+        val thinkingFile = mSharedPreferences.getString(SP_VOICE_THINKING_SOUND_FILE, "").orEmpty()
+        b.voiceThinkingFile.text = if (thinkingFile.isEmpty()) getString(R.string.voice_thinking_no_file)
+            else getString(R.string.voice_thinking_file, thinkingFile)
 
         selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
         storedModelName = selectedModelName

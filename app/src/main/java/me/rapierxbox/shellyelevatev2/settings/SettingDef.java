@@ -90,6 +90,8 @@ public final class SettingDef {
     public final boolean hidden;
     // shown but not editable in a ui
     public final boolean readOnly;
+    // mime filter of a setting that holds an uploaded file. the value is the file name
+    public final String accept;
 
     private SettingDef(Builder b) {
         key = b.key;
@@ -112,6 +114,7 @@ public final class SettingDef {
         requires = Collections.unmodifiableList(new ArrayList<>(b.requires));
         hidden = b.hidden;
         readOnly = b.readOnly;
+        accept = b.accept;
     }
 
     // true when enum values are ints and so stored with putInt
@@ -140,6 +143,7 @@ public final class SettingDef {
         private final List<Requirement> requires = new ArrayList<>();
         private boolean hidden;
         private boolean readOnly;
+        private String accept;
 
         public Builder(String key, String type, Object defaultValue, String category, String label) {
             this.key = key;
@@ -165,6 +169,8 @@ public final class SettingDef {
         public Builder requires(String cap, int min) { requires.add(new Requirement(cap, min)); return this; }
         public Builder hidden() { hidden = true; return this; }
         public Builder readOnly() { readOnly = true; return this; }
+        // set through the settings.file command only
+        public Builder file(String mime) { accept = mime; readOnly = true; return this; }
 
         public SettingDef build() {
             return new SettingDef(this);

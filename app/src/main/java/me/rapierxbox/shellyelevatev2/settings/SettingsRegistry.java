@@ -19,12 +19,14 @@ import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.PROXIMIT
 import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.RELAYS;
 import static me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities.TEMPERATURE;
 
+import android.content.Context;
 import android.content.SharedPreferences;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -85,6 +87,11 @@ public final class SettingsRegistry {
 
     public static SettingDef get(String key) {
         return DEFS.get(key);
+    }
+
+    // where the file of a file setting is kept
+    public static File uploadFile(Context context, String key) {
+        return new File(new File(context.getFilesDir(), "uploads"), key);
     }
 
     public static boolean isInternal(String key) {
@@ -231,6 +238,15 @@ public final class SettingsRegistry {
                 .visibleIf(voiceOn, wakeOn));
         add(m, bool(Constants.SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false, CATEGORY_VOICE, "Experimental wake words")
                 .visibleIf(voiceOn, wakeOn));
+        add(m, bool(Constants.SP_VOICE_THINKING_SOUND, false, CATEGORY_VOICE, "Thinking sound")
+                .description("Plays from the end of speech until the answer starts").visibleIf(voiceOn));
+        SettingDef.Condition thinkingOn = eq(Constants.SP_VOICE_THINKING_SOUND, true);
+        add(m, string(Constants.SP_VOICE_THINKING_SOUND_FILE, "", CATEGORY_VOICE, "Thinking sound file")
+                .file("audio/*").visibleIf(voiceOn, thinkingOn));
+        add(m, bool(Constants.SP_VOICE_THINKING_SOUND_LOOP, true, CATEGORY_VOICE, "Loop thinking sound")
+                .visibleIf(voiceOn, thinkingOn));
+        add(m, integer(Constants.SP_VOICE_THINKING_SOUND_PITCH, 10, CATEGORY_VOICE, "Thinking sound pitch variation")
+                .range(0, 50).unit("%").description("Random pitch change for every play").visibleIf(voiceOn, thinkingOn));
         add(m, bool(Constants.SP_SPEAKER_ID_ENABLED, false, CATEGORY_VOICE, "Speaker recognition")
                 .description("Recognise who speaks from the wake word and the command").visibleIf(voiceOn));
         SettingDef.Condition speakerOn = eq(Constants.SP_SPEAKER_ID_ENABLED, true);
@@ -667,6 +683,7 @@ public final class SettingsRegistry {
         }
         if (def.hidden) json.put("hidden", true);
         if (def.readOnly) json.put("read_only", true);
+        if (def.accept != null) json.put("accept", def.accept);
         return json;
     }
 

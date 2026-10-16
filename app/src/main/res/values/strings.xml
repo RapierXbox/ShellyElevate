@@ -33,6 +33,7 @@
     <string name="adb_wifi_status_on">ADB listens on port 5555</string>
     <string name="adb_wifi_status_off">ADB does not listen on port 5555</string>
     <string name="adb_wifi_status_applying">Restarting ADB…</string>
+    <string name="adb_wifi_needs_privapp">%1$s. ShellyElevate is not installed as a system app so it can not switch ADB. Run tools/install-privapp once over USB to fix that</string>
     <string name="wifi_ip_title">Wi-Fi IP settings</string>
     <string name="wifi_ip_ssid">Network: %1$s</string>
     <string name="wifi_ip_address">IP address: %1$s</string>
@@ -235,6 +236,12 @@
     <string name="thermal_offset_formula">Correction = k x max(0, device_temp − baseline)</string>
     <!-- settings ux -->
     <string name="percent">%1$d %%</string>
+    <string name="plus_minus_percent">± %1$d %%</string>
+    <string name="voice_thinking_sound">Thinking sound</string>
+    <string name="voice_thinking_file">Sound: %1$s</string>
+    <string name="voice_thinking_no_file">No sound yet. Upload one in the Shelly Elevate panel in Home Assistant under Settings</string>
+    <string name="voice_thinking_loop">Loop until the answer</string>
+    <string name="voice_thinking_pitch">Pitch variation</string>
     <string name="integration_api_hint">Turning this off disconnects Home Assistant and stops voice and the Bluetooth proxy</string>
     <string name="settings_advanced">Advanced</string>
     <string name="settings_advanced_closed">%1$s  ▸</string>

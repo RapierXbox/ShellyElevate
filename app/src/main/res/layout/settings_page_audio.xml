@@ -201,6 +201,64 @@
             tools:ignore="UseSwitchCompatOrMaterialXml" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/voiceThinkingSound"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/voice_thinking_sound"
+            android:textSize="18sp"
+            tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+        <!-- what the thinking sound switch turns on -->
+        <LinearLayout
+            android:id="@+id/voiceThinkingOptions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/voiceThinkingFile"
+                style="@style/Settings.Hint"
+                tools:text="thinking.mp3" />
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/voiceThinkingLoop"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/voice_thinking_loop"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+            <LinearLayout
+                android:id="@+id/voiceThinkingPitchLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:text="@string/voice_thinking_pitch"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/voiceThinkingPitch"
+                    style="@style/Settings.Slider"
+                    android:valueFrom="0"
+                    android:valueTo="50"
+                    android:stepSize="1" />
+
+                <TextView
+                    android:id="@+id/voiceThinkingPitchValue"
+                    style="@style/Settings.SliderValue" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/speakerIdEnabled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

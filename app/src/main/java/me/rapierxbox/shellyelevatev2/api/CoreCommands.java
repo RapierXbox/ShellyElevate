@@ -1,6 +1,7 @@
 package me.rapierxbox.shellyelevatev2.api;
 
 import static me.rapierxbox.shellyelevatev2.Constants.DISPLAY_MODULE_WEBVIEW;
+import static me.rapierxbox.shellyelevatev2.Constants.INTENT_SETTINGS_CHANGED;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_INJECT_JAVASCRIPT;
 import static me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH;
 import static me.rapierxbox.shellyelevatev2.Constants.SP_AUTOMATIC_BRIGHTNESS;
@@ -20,6 +21,7 @@ import android.content.Intent;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
+import android.util.Base64;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -28,14 +30,20 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.MainActivity;
+import me.rapierxbox.shellyelevatev2.SettingsParser;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.AppUpdater;
 import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
+import me.rapierxbox.shellyelevatev2.settings.SettingDef;
+import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
 
 // the commands of protocol-v1 section 6 that map onto existing managers
 // voice and media register their own commands
@@ -43,6 +51,8 @@ public final class CoreCommands {
     private static final String TAG = "ApiCommands";
     // ScreenManager animates on the main looper
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
+
+    private static final int MAX_UPLOAD_BYTES = 512 * 1024;
 
     private CoreCommands() {}
 
@@ -89,6 +99,7 @@ public final class CoreCommands {
             return null;
         });
         ApiHub.registerCommand("app.update", CoreCommands::appUpdate);
+        ApiHub.registerCommand("settings.file", CoreCommands::settingsFile);
     }
 
     private static JSONObject relaySet(JSONObject p) throws ApiHub.CommandException {
@@ -203,6 +214,44 @@ public final class CoreCommands {
             }
             System.exit(0);
         }, "ApiRestart").start();
+    }
+
+    // uploads or with data_b64 null removes the file of a file setting such as the thinking sound
+    private static JSONObject settingsFile(JSONObject p) throws ApiHub.CommandException, JSONException {
+        String key = p.optString("key");
+        SettingDef def = SettingsRegistry.get(key);
+        if (def == null || def.accept == null) throw ApiHub.CommandException.invalid("no file setting " + key);
+        File file = SettingsRegistry.uploadFile(mApplicationContext, key);
+        String name = "";
+        if (p.isNull("data_b64")) {
+            file.delete();
+        } else {
+            byte[] data;
+            try {
+                data = Base64.decode(p.optString("data_b64"), Base64.NO_WRAP);
+            } catch (IllegalArgumentException e) {
+                throw ApiHub.CommandException.invalid("data_b64 is not base64");
+            }
+            if (data.length == 0 || data.length > MAX_UPLOAD_BYTES) throw ApiHub.CommandException.invalid("the file must be 1 byte to 512 KB");
+            File part = new File(file.getPath() + ".part");
+            try {
+                File dir = file.getParentFile();
+                if (dir != null && !dir.isDirectory() && !dir.mkdirs()) throw new IOException("no upload folder");
+                try (FileOutputStream out = new FileOutputStream(part)) {
+                    out.write(data);
+                }
+                if (!part.renameTo(file)) throw new IOException("could not store the file");
+            } catch (IOException e) {
+                part.delete();
+                throw new ApiHub.CommandException("internal", e.getMessage());
+            }
+            String given = p.optString("name").trim();
+            name = given.isEmpty() ? "file" : given.substring(0, Math.min(64, given.length()));
+        }
+        mSharedPreferences.edit().putString(key, name).apply();
+        SettingsParser.dispatchChanges(new JSONObject().put(key, name));
+        LocalBroadcastManager.getInstance(mApplicationContext).sendBroadcast(new Intent(INTENT_SETTINGS_CHANGED));
+        return new JSONObject().put("name", name);
     }
 
     private static JSONObject appUpdate(JSONObject p) throws ApiHub.CommandException, JSONException {

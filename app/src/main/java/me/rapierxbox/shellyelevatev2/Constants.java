@@ -103,6 +103,10 @@ public final class Constants {
     public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
     public static final String SP_VOICE_WAKE_EXPERIMENTAL_MODELS = "voiceWakeExperimentalModels";
     public static final String SP_VOICE_ASSISTANT_MUTED = "voiceAssistantMuted";
+    public static final String SP_VOICE_THINKING_SOUND = "voiceThinkingSound";
+    public static final String SP_VOICE_THINKING_SOUND_FILE = "voiceThinkingSoundFile";
+    public static final String SP_VOICE_THINKING_SOUND_LOOP = "voiceThinkingSoundLoop";
+    public static final String SP_VOICE_THINKING_SOUND_PITCH = "voiceThinkingSoundPitch"; // 0..50 percent
     public static final String SP_SPEAKER_ID_ENABLED = "speakerIdEnabled";
     public static final String SP_SPEAKER_ID_MODEL = "speakerIdModel";
     public static final String SP_SPEAKER_ID_STRICTNESS = "speakerIdStrictness"; // 0..100 where 50 is the model default

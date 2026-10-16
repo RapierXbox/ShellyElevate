@@ -116,6 +116,7 @@ public class VoiceEngine {
     private final ExecutorService settingsExecutor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler   = new Handler(Looper.getMainLooper());
     private final TonePlayer tonePlayer = new TonePlayer(scheduler);
+    private final ThinkingSound thinkingSound = new ThinkingSound();
     private final VoiceTimers timers = new VoiceTimers(this);
 
     private final AtomicBoolean audioStreaming  = new AtomicBoolean(false);
@@ -754,6 +755,10 @@ public class VoiceEngine {
         Intent intent = new Intent(INTENT_VOICE_STATE_CHANGED).putExtra(INTENT_VOICE_STATE_KEY, s.name());
         LocalBroadcastManager.getInstance(mApplicationContext).sendBroadcast(intent);
         ApiHub.stateChanged();
+        // from the end of speech until anything else happens like the answer an error or idle
+        if (s == State.LISTENING) thinkingSound.prepare();
+        else if (s == State.PROCESSING) thinkingSound.start();
+        else thinkingSound.stop();
         // the controller sends no transcript so the bubble would keep saying listening
         if (s == State.PROCESSING) broadcastText(mApplicationContext.getString(R.string.voice_thinking));
         else if (s == State.SPEAKING) broadcastText("");
@@ -981,6 +986,7 @@ public class VoiceEngine {
 
     private void shutdown() {
         stopAudioCapture();
+        thinkingSound.stop();
         state = State.DISABLED;
         playbackPending = false;
         mainHandler.post(this::releaseTtsPlayer);
