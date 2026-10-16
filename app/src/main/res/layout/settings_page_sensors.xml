@@ -29,9 +29,22 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="48dp"
-        android:layout_marginTop="8dp"
         android:orientation="vertical"
         android:visibility="gone">
+
+        <TextView
+            style="@style/Settings.Hint"
+            android:text="@string/dynamic_temp_offset_hint" />
+
+        <include
+            android:id="@+id/tempOffsetAdvancedHeader"
+            layout="@layout/settings_advanced_header" />
+
+        <LinearLayout
+            android:id="@+id/tempOffsetAdvanced"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
 
         <LinearLayout
             android:id="@+id/dynamicTempOffsetZoneLayout"
@@ -112,6 +125,7 @@
             android:text="@string/thermal_offset_formula"
             android:textSize="13sp"
             android:alpha="0.6" />
+        </LinearLayout>
     </LinearLayout>
 
 </LinearLayout>

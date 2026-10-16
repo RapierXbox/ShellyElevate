@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -22,12 +21,14 @@
 
         <com.google.android.material.slider.Slider
             android:id="@+id/volumeSetting"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            style="@style/Settings.Slider"
             android:valueFrom="0"
             android:valueTo="100"
             android:stepSize="1" />
+
+        <TextView
+            android:id="@+id/volumeValue"
+            style="@style/Settings.SliderValue" />
 
     </LinearLayout>
 
@@ -40,6 +41,11 @@
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
 
+    <TextView
+        style="@style/Settings.Hint"
+        android:layout_marginStart="48dp"
+        android:text="@string/media_hint" />
+
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/haVoiceEnabled"
         android:layout_width="match_parent"
@@ -51,47 +57,17 @@
 
     <TextView
         android:id="@+id/haVoiceHint"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        style="@style/Settings.Hint"
         android:layout_marginStart="48dp"
-        android:layout_marginTop="4dp"
-        android:alpha="0.7"
-        android:text="@string/ha_voice_hint"
-        android:textSize="14sp" />
+        android:text="@string/ha_voice_hint" />
 
-    <!-- wake word and capture settings -->
+    <!-- everything that needs the voice assistant -->
     <LinearLayout
         android:id="@+id/voiceEngineLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginStart="48dp"
-        android:layout_marginTop="8dp"
         android:orientation="vertical">
-
-        <LinearLayout
-            android:id="@+id/voiceAssistantMaxSecondsLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_gravity="center_vertical"
-                android:text="@string/voice_assistant_max_seconds"
-                android:textSize="18sp" />
-
-            <EditText
-                android:id="@+id/voiceAssistantMaxSeconds"
-                android:layout_width="60dp"
-                android:layout_height="wrap_content"
-                android:hint="@string/voice_assistant_max_seconds_hint"
-                android:imeOptions="actionDone"
-                android:inputType="number"
-                android:textSize="18sp" />
-        </LinearLayout>
 
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/voiceWakeEnabled"
@@ -102,47 +78,38 @@
             android:textSize="18sp"
             tools:ignore="UseSwitchCompatOrMaterialXml" />
 
+        <!-- what the wake word switch turns on -->
         <LinearLayout
             android:id="@+id/voiceWakeModelLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginStart="24dp"
             android:layout_marginTop="8dp"
             android:orientation="vertical">
-
-            <com.google.android.material.materialswitch.MaterialSwitch
-                android:id="@+id/voiceWakeExperimentalModels"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:layout_marginBottom="8dp"
-                android:text="@string/voice_wake_experimental_models"
-                android:textSize="16sp"
-                tools:ignore="UseSwitchCompatOrMaterialXml" />
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
                 <TextView
-                    android:layout_width="0dp"
+                    android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:layout_weight="1"
-                    android:layout_gravity="center_vertical"
                     android:text="@string/voice_wake_model_name"
-                    android:textSize="16sp" />
+                    android:textSize="18sp" />
 
                 <TextView
                     android:id="@+id/voiceWakeModelLabel"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginHorizontal="8dp"
                     android:layout_weight="1"
-                    android:layout_gravity="center_vertical"
                     android:ellipsize="end"
+                    android:gravity="end"
                     android:maxLines="1"
-                    android:textSize="14sp"
-                    tools:text="okay_nabu" />
+                    android:textSize="16sp"
+                    tools:text="Hey Jarvis" />
 
                 <Button
                     android:id="@+id/voiceWakeChooseModel"
@@ -150,16 +117,7 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/voice_wake_model_choose"
-                    android:textSize="13sp" />
-
-                <ImageButton
-                    android:id="@+id/voiceWakeModelRefresh"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:src="@android:drawable/ic_menu_rotate"
-                    android:contentDescription="@string/voice_wake_model_refresh"
-                    android:background="?attr/selectableItemBackgroundBorderless" />
-
+                    android:textSize="14sp" />
             </LinearLayout>
 
             <LinearLayout
@@ -167,8 +125,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:orientation="horizontal"
                 android:gravity="center_vertical"
+                android:orientation="horizontal"
                 android:visibility="gone">
 
                 <ProgressBar
@@ -185,80 +143,54 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginStart="8dp"
+                    android:text="0%"
                     android:textSize="12sp"
-                    android:text="0%" />
-
+                    tools:ignore="HardcodedText" />
             </LinearLayout>
 
             <TextView
                 android:id="@+id/voiceWakeModelStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textSize="14sp"
-                tools:text="Model status: Loaded" />
+                style="@style/Settings.Hint"
+                tools:text="Hey Jarvis is loaded" />
 
-            <TextView
-                android:id="@+id/voiceWakeModelPath"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/voiceWakeSensitivityLayout"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="4dp"
-                android:textSize="12sp"
-                tools:text="Place .tflite file at: /data/.../files/wakewords/" />
+                android:layout_marginTop="16dp"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical"
+                        android:text="@string/voice_wake_sensitivity"
+                        android:textSize="18sp" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/voiceWakeSensitivity"
+                        style="@style/Settings.Slider"
+                        android:valueFrom="0"
+                        android:valueTo="100"
+                        android:stepSize="1" />
+
+                    <TextView
+                        android:id="@+id/voiceWakeSensitivityValue"
+                        style="@style/Settings.SliderValue" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/Settings.Hint"
+                    android:text="@string/voice_wake_sensitivity_hint" />
+            </LinearLayout>
 
         </LinearLayout>
 
-        <LinearLayout
-            android:id="@+id/voiceWakeSensitivityLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:text="@string/voice_wake_sensitivity"
-                android:textSize="18sp" />
-
-            <com.google.android.material.slider.Slider
-                android:id="@+id/voiceWakeSensitivity"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:valueFrom="0"
-                android:valueTo="100"
-                android:stepSize="1" />
-
-        </LinearLayout>
-
-        <LinearLayout
-            android:id="@+id/voiceWakeCooldownLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:text="@string/voice_wake_cooldown"
-                android:textSize="18sp" />
-
-            <com.google.android.material.slider.Slider
-                android:id="@+id/voiceWakeCooldown"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:valueFrom="1"
-                android:valueTo="10"
-                android:stepSize="1" />
-
-        </LinearLayout>
-
-        <!-- Wake sound -->
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/voiceWakeSoundEnabled"
             android:layout_width="match_parent"
@@ -268,92 +200,166 @@
             android:textSize="18sp"
             tools:ignore="UseSwitchCompatOrMaterialXml" />
 
-        <!-- Score bar overlay -->
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/voiceScoreBarEnabled"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/voice_score_bar"
-            android:textSize="18sp"
-            tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-        <!-- Speaker recognition -->
         <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/speakerIdEnabled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="24dp"
             android:text="@string/speaker_id"
             android:textSize="18sp"
             tools:ignore="UseSwitchCompatOrMaterialXml" />
 
         <TextView
             android:id="@+id/speakerIdHint"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:alpha="0.7"
-            android:text="@string/speaker_id_hint"
-            android:textSize="14sp" />
+            style="@style/Settings.Hint"
+            android:text="@string/speaker_id_hint" />
 
+        <!-- what the speaker recognition switch turns on -->
         <LinearLayout
-            android:id="@+id/speakerIdModelLayout"
+            android:id="@+id/speakerIdOptions"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
+            android:layout_marginStart="24dp"
+            android:orientation="vertical">
 
-            <TextView
-                android:layout_width="0dp"
+            <LinearLayout
+                android:id="@+id/speakerIdModelLayout"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:layout_weight="1"
-                android:text="@string/speaker_id_model"
-                android:textSize="18sp" />
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
 
-            <Spinner
-                android:id="@+id/speakerIdModel"
-                android:layout_width="wrap_content"
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:layout_weight="1"
+                    android:text="@string/speaker_id_model"
+                    android:textSize="18sp" />
+
+                <Spinner
+                    android:id="@+id/speakerIdModel"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:spinnerMode="dialog" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/speakerIdStrictnessLayout"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:spinnerMode="dialog" />
+                android:layout_marginTop="16dp"
+                android:orientation="vertical">
 
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_vertical"
+                        android:text="@string/speaker_id_strictness"
+                        android:textSize="18sp" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/speakerIdStrictness"
+                        style="@style/Settings.Slider"
+                        android:valueFrom="0"
+                        android:valueTo="100"
+                        android:stepSize="1" />
+
+                    <TextView
+                        android:id="@+id/speakerIdStrictnessValue"
+                        style="@style/Settings.SliderValue" />
+                </LinearLayout>
+
+                <TextView
+                    style="@style/Settings.Hint"
+                    android:text="@string/speaker_id_strictness_hint" />
+            </LinearLayout>
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/speakerIdLearn"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/speaker_id_learn"
+                android:textSize="18sp"
+                tools:ignore="UseSwitchCompatOrMaterialXml" />
         </LinearLayout>
 
+        <include
+            android:id="@+id/voiceAdvancedHeader"
+            layout="@layout/settings_advanced_header" />
+
         <LinearLayout
-            android:id="@+id/speakerIdStrictnessLayout"
+            android:id="@+id/voiceAdvanced"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
-            <TextView
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:id="@+id/voiceAssistantMaxSecondsLayout"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_gravity="center_vertical"
-                android:text="@string/speaker_id_strictness"
-                android:textSize="18sp" />
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
 
-            <com.google.android.material.slider.Slider
-                android:id="@+id/speakerIdStrictness"
-                android:layout_width="0dp"
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:layout_weight="1"
+                    android:text="@string/voice_assistant_max_seconds"
+                    android:textSize="18sp" />
+
+                <EditText
+                    android:id="@+id/voiceAssistantMaxSeconds"
+                    android:layout_width="80dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:hint="@string/voice_assistant_max_seconds_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="number"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginStart="4dp"
+                    android:text="@string/unit_seconds"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/voiceWakeCooldownLayout"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:valueFrom="0"
-                android:valueTo="100"
-                android:stepSize="1" />
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
 
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:text="@string/voice_wake_cooldown"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/voiceWakeCooldown"
+                    style="@style/Settings.Slider"
+                    android:valueFrom="1"
+                    android:valueTo="10"
+                    android:stepSize="1" />
+
+                <TextView
+                    android:id="@+id/voiceWakeCooldownValue"
+                    style="@style/Settings.SliderValue" />
+            </LinearLayout>
         </LinearLayout>
-
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/speakerIdLearn"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/speaker_id_learn"
-            android:textSize="18sp"
-            tools:ignore="UseSwitchCompatOrMaterialXml" />
-
     </LinearLayout>
 
 </LinearLayout>

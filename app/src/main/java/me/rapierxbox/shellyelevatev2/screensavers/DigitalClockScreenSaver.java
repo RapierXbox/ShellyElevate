@@ -28,6 +28,6 @@ public class DigitalClockScreenSaver extends ScreenSaver {
 
     @Override
     public String getName() {
-        return showDate ? "Digital Clock and Date" : "Digital Clock";
+        return showDate ? "Clock and date" : "Clock";
     }
 }

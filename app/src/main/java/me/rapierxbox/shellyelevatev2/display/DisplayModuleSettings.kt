@@ -29,7 +29,7 @@ class DisplayModuleSettings(
         val context = fragment.requireContext()
         val renderer = ModuleOptionRenderer(context)
         pages = DisplayModuleRegistry.modules.map { module ->
-            val options = renderer.render(module.options)
+            val options = renderer.render(module.options, module.advancedOptions)
             val custom = module.createCustomSettings(fragment, options.view)
             container.addView(options.view)
             Page(module, options.view, options, custom)

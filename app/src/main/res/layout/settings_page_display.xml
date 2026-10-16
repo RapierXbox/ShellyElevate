@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -12,37 +11,15 @@
         android:layout_height="wrap_content"
         android:layout_marginTop="24dp"
         android:text="@string/automaticBrightnessText"
-        android:textSize="18sp" />
-
-    <LinearLayout
-        android:id="@+id/minBrightnessLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_vertical"
-            android:text="@string/min_brightness"
-            android:textSize="18sp" />
-
-        <com.google.android.material.slider.Slider
-            android:id="@+id/min_brightness"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:valueFrom="1"
-            android:valueTo="255" />
-
-    </LinearLayout>
+        android:textSize="18sp"
+        tools:ignore="UseSwitchCompatOrMaterialXml" />
 
     <LinearLayout
         android:id="@+id/brightnessSettingLayout"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="16dp"
         android:orientation="horizontal">
 
         <TextView
@@ -54,12 +31,52 @@
 
         <com.google.android.material.slider.Slider
             android:id="@+id/brightnessSetting"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
+            style="@style/Settings.Slider"
             android:valueFrom="1"
-            android:valueTo="255" />
+            android:valueTo="255"
+            android:stepSize="1" />
 
+        <TextView
+            android:id="@+id/brightnessValue"
+            style="@style/Settings.SliderValue" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/minBrightnessLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="16dp"
+        android:orientation="vertical">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:text="@string/min_brightness"
+                android:textSize="18sp" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/min_brightness"
+                style="@style/Settings.Slider"
+                android:valueFrom="1"
+                android:valueTo="255"
+                android:stepSize="1" />
+
+            <TextView
+                android:id="@+id/minBrightnessValue"
+                style="@style/Settings.SliderValue" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/Settings.Hint"
+            android:text="@string/min_brightness_hint" />
     </LinearLayout>
 
     <com.google.android.material.materialswitch.MaterialSwitch
@@ -70,5 +87,10 @@
         android:text="@string/night_mode_enabled"
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+    <TextView
+        style="@style/Settings.Hint"
+        android:layout_marginStart="48dp"
+        android:text="@string/night_mode_hint" />
 
 </LinearLayout>

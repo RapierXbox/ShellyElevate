@@ -22,6 +22,9 @@ interface DisplayModule {
     // rendered into the display settings page and published by /display/modules
     val options: List<ModuleOption> get() = emptyList()
 
+    // keys of options that are rarely needed and start collapsed
+    val advancedOptions: Set<String> get() = emptySet()
+
     fun createContent(host: DisplayHost, parent: ViewGroup): DisplayContent
 
     // used by the kiosk watchdog to decide whether the module needs to come back

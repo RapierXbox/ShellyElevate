@@ -33,11 +33,8 @@
 
     <!-- ─────────────── Shelly Elevate integration ─────────────── -->
     <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/integration_header"
-        android:textAppearance="?attr/textAppearanceTitleMedium" />
+        style="@style/Settings.Header"
+        android:text="@string/integration_header" />
 
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/integrationApiEnabled"
@@ -47,6 +44,11 @@
         android:text="@string/integration_api_enabled"
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+    <TextView
+        style="@style/Settings.Hint"
+        android:layout_marginStart="48dp"
+        android:text="@string/integration_api_hint" />
 
     <TextView
         android:id="@+id/integrationStatus"
@@ -87,11 +89,8 @@
 
     <!-- ─────────────── MQTT ─────────────── -->
     <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="32dp"
-        android:text="@string/mqtt_header"
-        android:textAppearance="?attr/textAppearanceTitleMedium" />
+        style="@style/Settings.Header"
+        android:text="@string/mqtt_header" />
 
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/mqttEnabled"
@@ -101,31 +100,6 @@
         android:text="@string/mqtt"
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
-
-    <LinearLayout
-        android:id="@+id/mqttClientIdLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="48dp"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal">
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/client_id"
-            android:textSize="18sp" />
-
-        <EditText
-            android:id="@+id/mqttClientId"
-            android:layout_width="200dp"
-            android:layout_height="wrap_content"
-            android:hint="@string/mqtt_client_id_hint"
-            android:imeOptions="actionDone"
-            android:inputType="textUri"
-            android:textSize="18sp" />
-    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/mqttBrokerLayout"
@@ -169,9 +143,10 @@
 
         <EditText
             android:id="@+id/mqttPort"
-            android:layout_width="60dp"
+            android:layout_width="80dp"
             android:layout_height="wrap_content"
             android:hint="@string/mqtt_port_hint"
+            android:gravity="end"
             android:imeOptions="actionDone"
             android:inputType="number"
             android:textSize="18sp" />
@@ -223,7 +198,32 @@
             android:layout_height="wrap_content"
             android:hint="@string/mqtt_password_hint"
             android:imeOptions="actionDone"
-            android:inputType="textVisiblePassword"
+            android:inputType="textPassword"
+            android:textSize="18sp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/mqttClientIdLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="48dp"
+        android:layout_marginTop="24dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/client_id"
+            android:textSize="18sp" />
+
+        <EditText
+            android:id="@+id/mqttClientId"
+            android:layout_width="200dp"
+            android:layout_height="wrap_content"
+            android:hint="@string/mqtt_client_id_hint"
+            android:imeOptions="actionDone"
+            android:inputType="textUri"
             android:textSize="18sp" />
     </LinearLayout>
 
@@ -237,7 +237,6 @@
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
 
-
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/mqttRetainState"
         android:layout_width="match_parent"
@@ -247,6 +246,5 @@
         android:text="@string/mqtt_retain_state"
         android:textSize="18sp"
         tools:ignore="UseSwitchCompatOrMaterialXml" />
-
 
 </LinearLayout>

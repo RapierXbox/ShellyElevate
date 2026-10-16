@@ -128,7 +128,7 @@ public final class SettingsRegistry {
                 .description("Lowest brightness automatic brightness goes down to")
                 .visibleIf(eq(Constants.SP_AUTOMATIC_BRIGHTNESS, true)).requires(LUX));
         add(m, bool(Constants.SP_NIGHT_MODE_ENABLED, false, CATEGORY_DISPLAY, "Night mode")
-                .description("Dims the screen below the backlight minimum"));
+                .description("Puts a dim red filter over the screen for dark rooms"));
 
         // screensaver
         add(m, bool(Constants.SP_SCREEN_SAVER_ENABLED, true, CATEGORY_SCREENSAVER, "Screensaver"));

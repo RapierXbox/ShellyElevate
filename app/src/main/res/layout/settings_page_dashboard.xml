@@ -45,12 +45,16 @@
         tools:ignore="UseSwitchCompatOrMaterialXml" />
 
     <TextView
+        style="@style/Settings.Hint"
+        android:layout_marginStart="48dp"
+        android:text="@string/lite_mode_hint" />
+
+    <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="32dp"
         android:text="@string/app_switcher_title"
-        android:textSize="18sp"
-        android:textStyle="bold" />
+        android:textAppearance="?attr/textAppearanceTitleMedium" />
 
     <LinearLayout
         android:layout_width="match_parent"

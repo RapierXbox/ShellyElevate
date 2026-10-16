@@ -7,7 +7,6 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.Settings
-import android.text.InputType
 import android.util.Log
 import android.view.Choreographer
 import android.view.LayoutInflater
@@ -18,7 +17,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.inputmethod.EditorInfo
 import android.widget.ArrayAdapter
-import android.widget.EditText
 import android.widget.Toast
 import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
@@ -42,6 +40,8 @@ import kotlin.math.roundToInt
 import me.rapierxbox.shellyelevatev2.Constants.*
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.*
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader
+import me.rapierxbox.shellyelevatev2.api.ApiInfo
+import me.rapierxbox.shellyelevatev2.voice.VoiceEngine
 import me.rapierxbox.shellyelevatev2.voice.WakeWordDetector
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModel
 import me.rapierxbox.shellyelevatev2.voice.WakeWordModelDownloader
@@ -80,7 +80,6 @@ import java.io.IOException
 import java.net.NetworkInterface
 import java.net.SocketException
 import java.util.Locale
-import java.util.UUID
 
 class SettingsFragment : Fragment() {
 
@@ -174,13 +173,17 @@ class SettingsFragment : Fragment() {
                         true
                     }
                     R.id.action_restart -> {
-                        saveSettings()
-                        RebootHelper.reboot()
+                        confirm(R.string.confirm_reboot, R.string.confirm_reboot_action) {
+                            saveSettings()
+                            RebootHelper.reboot()
+                        }
                         true
                     }
                     R.id.action_exit -> {
-                        requireActivity().moveTaskToBack(true)
-                        requireActivity().finishAffinity()
+                        confirm(R.string.confirm_exit, R.string.confirm_exit_action) {
+                            requireActivity().moveTaskToBack(true)
+                            requireActivity().finishAffinity()
+                        }
                         true
                     }
                     else -> false
@@ -191,6 +194,14 @@ class SettingsFragment : Fragment() {
         mSharedPreferences.edit { putBoolean(SP_SETTINGS_EVER_SHOWN, true) }
         caps = DeviceCapabilities.snapshot(requireContext())
         setupCategories()
+    }
+
+    private fun confirm(@StringRes title: Int, @StringRes action: Int, onYes: () -> Unit) {
+        AlertDialog.Builder(requireContext())
+            .setTitle(title)
+            .setPositiveButton(action) { _, _ -> onYes() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     // ---- categories ----
@@ -357,8 +368,12 @@ class SettingsFragment : Fragment() {
             parent(b.automaticBrightness)
             row(SP_BRIGHTNESS, b.brightnessSettingLayout)
             row(SP_MIN_BRIGHTNESS, b.minBrightnessLayout)
-            +SliderPref(b.brightnessSetting, SP_BRIGHTNESS, DEFAULT_BRIGHTNESS) { mDeviceHelper.setScreenBrightness(it) }
-            +SliderPref(b.minBrightness, SP_MIN_BRIGHTNESS, 48) { mDeviceHelper.setScreenBrightness(it) }
+            +SliderPref(b.brightnessSetting, SP_BRIGHTNESS, DEFAULT_BRIGHTNESS, b.brightnessValue, ::brightnessPercent) {
+                mDeviceHelper.setScreenBrightness(it)
+            }
+            +SliderPref(b.minBrightness, SP_MIN_BRIGHTNESS, 48, b.minBrightnessValue, ::brightnessPercent) {
+                mDeviceHelper.setScreenBrightness(it)
+            }
 
             +SwitchPref(b.nightModeEnabled, SP_NIGHT_MODE_ENABLED, false) { enabled ->
                 mNightModeManager?.setEnabled(enabled)
@@ -388,8 +403,11 @@ class SettingsFragment : Fragment() {
             parent(b.wakeOnProximity)
             +IntTextPref(b.proximityKeepAwakeSeconds, SP_PROXIMITY_KEEP_AWAKE_SECONDS, PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS, min = 0)
             row(SP_PROXIMITY_KEEP_AWAKE_SECONDS, b.proximityKeepAwakeLayout)
-            +SliderPref(b.screensaverMinBrightness, SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT) { mDeviceHelper.setScreenBrightness(it) }
+            +SliderPref(b.screensaverMinBrightness, SP_SCREEN_SAVER_MIN_BRIGHTNESS, MIN_BRIGHTNESS_DEFAULT,
+                b.screensaverBrightnessValue, ::brightnessPercent) { mDeviceHelper.setScreenBrightness(it) }
             row(SP_SCREEN_SAVER_MIN_BRIGHTNESS, b.minBrightnessScreenSaverLayout)
+            +SwitchPref(b.touchToWake, SP_TOUCH_TO_WAKE, true)
+            row(SP_TOUCH_TO_WAKE, b.touchToWake)
         }
 
         b.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->
@@ -417,6 +435,7 @@ class SettingsFragment : Fragment() {
     private fun createNetworkPage(parent: ViewGroup): View {
         val b = SettingsPageNetworkBinding.inflate(layoutInflater, parent, true)
         networkPage = b
+        AdvancedSection.bind(b.networkAdvancedHeader.root, b.networkAdvanced)
         bindPage {
             // live only runs on a flip so opening the page never bounces adbd
             +SwitchPref(b.adbWifiEnabled, SP_ADB_WIFI_ENABLED, false) { enabled ->
@@ -533,10 +552,11 @@ class SettingsFragment : Fragment() {
     private fun createHomeAssistantPage(parent: ViewGroup): View {
         val b = SettingsPageHomeAssistantBinding.inflate(layoutInflater, parent, true)
         homeAssistantPage = b
-        val defaultClientId = "shellyelevate-" + UUID.randomUUID().toString().replace("-", "").substring(2, 6)
+        // the id mqtt and the api already use so an untouched field saves nothing new
+        val defaultClientId = ApiInfo.mqttClientId()
         bindPage {
             // empty keeps the automatic name from ApiInfo
-            +TextPref(b.deviceName, SP_DEVICE_NAME)
+            +TextPref(b.deviceName, SP_DEVICE_NAME, trim = true)
             +SwitchPref(b.integrationApiEnabled, SP_INTEGRATION_API_ENABLED, true)
             visibleWhen(b.integrationApiEnabled, b.integrationStatus, b.integrationClients, b.integrationFingerprint)
             // voice and the bluetooth proxy on other pages need the integration api
@@ -551,7 +571,7 @@ class SettingsFragment : Fragment() {
             row(SP_MQTT_HA_DISCOVERY, b.mqttHaDiscovery)
             row(SP_MQTT_RETAIN_STATE, b.mqttRetainState)
             +TextPref(b.mqttBroker, SP_MQTT_BROKER)
-            +IntTextPref(b.mqttPort, SP_MQTT_PORT, MQTT_DEFAULT_PORT)
+            +IntTextPref(b.mqttPort, SP_MQTT_PORT, MQTT_DEFAULT_PORT, min = 1, max = 65535)
             +TextPref(b.mqttUsername, SP_MQTT_USERNAME)
             +TextPref(b.mqttPassword, SP_MQTT_PASSWORD)
             +TextPref(b.mqttClientId, SP_MQTT_CLIENTID, defaultClientId)
@@ -565,6 +585,7 @@ class SettingsFragment : Fragment() {
     private fun createSensorsPage(parent: ViewGroup): View {
         val b = SettingsPageSensorsBinding.inflate(layoutInflater, parent, true)
         sensorsPage = b
+        AdvancedSection.bind(b.tempOffsetAdvancedHeader.root, b.tempOffsetAdvanced)
         bindPage {
             +SwitchPref(b.publishThermalSensors, SP_PUBLISH_THERMAL_SENSORS, false)
             row(SP_PUBLISH_THERMAL_SENSORS, b.publishThermalSensors)
@@ -600,24 +621,23 @@ class SettingsFragment : Fragment() {
             getString(R.string.speaker_id_model_fast),
             getString(R.string.speaker_id_model_balanced),
             getString(R.string.speaker_id_model_accurate)))
+        AdvancedSection.bind(b.voiceAdvancedHeader.root, b.voiceAdvanced)
         bindPage {
             +SwitchPref(b.mediaEnabled, SP_MEDIA_ENABLED, false)
 
             +SwitchPref(b.haVoiceEnabled, SP_HA_VOICE_ENABLED, false)
             row(SP_HA_VOICE_ENABLED, b.haVoiceEnabled, b.haVoiceHint)
             parent(b.haVoiceEnabled)
-            // the engine block shares the rule of its first row
+            // the voice block shares the rule of max listening time which only needs voice on
             row(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, b.voiceEngineLayout, b.voiceAssistantMaxSecondsLayout)
-            +IntTextPref(b.voiceAssistantMaxSeconds, SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, min = 1)
+            +IntTextPref(b.voiceAssistantMaxSeconds, SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, min = 1, max = 60)
             +SwitchPref(b.voiceWakeEnabled, SP_VOICE_WAKE_ENABLED, true)
             row(SP_VOICE_WAKE_ENABLED, b.voiceWakeEnabled)
             parent(b.voiceWakeEnabled)
             row(SP_VOICE_WAKE_MODEL_NAME, b.voiceWakeModelLayout)
-            row(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, b.voiceWakeExperimentalModels)
             row(SP_VOICE_WAKE_SENSITIVITY, b.voiceWakeSensitivityLayout)
             row(SP_VOICE_WAKE_COOLDOWN_SEC, b.voiceWakeCooldownLayout)
             row(SP_VOICE_WAKE_SOUND_ENABLED, b.voiceWakeSoundEnabled)
-            row(SP_VOICE_SCORE_BAR_ENABLED, b.voiceScoreBarEnabled)
             // the vad model is required to suppress false wake triggers so fetch
             // it as soon as wake word detection is enabled registered via the binder
             // so it does not clobber the visibility toggle listener
@@ -626,20 +646,18 @@ class SettingsFragment : Fragment() {
                     ensureVadDownloaded(wakewordsDir)
                 }
             }
-            +SwitchPref(b.voiceWakeExperimentalModels, SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
-            +SliderPref(b.voiceWakeSensitivity, SP_VOICE_WAKE_SENSITIVITY, 50)
-            +SliderPref(b.voiceWakeCooldown, SP_VOICE_WAKE_COOLDOWN_SEC, 5)
+            +SliderPref(b.voiceWakeSensitivity, SP_VOICE_WAKE_SENSITIVITY, 50, b.voiceWakeSensitivityValue)
+            +SliderPref(b.voiceWakeCooldown, SP_VOICE_WAKE_COOLDOWN_SEC, 5, b.voiceWakeCooldownValue)
             +SwitchPref(b.voiceWakeSoundEnabled, SP_VOICE_WAKE_SOUND_ENABLED, true)
-            +SwitchPref(b.voiceScoreBarEnabled, SP_VOICE_SCORE_BAR_ENABLED, false)
 
             +SwitchPref(b.speakerIdEnabled, SP_SPEAKER_ID_ENABLED, false)
-            row(SP_SPEAKER_ID_ENABLED, b.speakerIdEnabled)
+            row(SP_SPEAKER_ID_ENABLED, b.speakerIdEnabled, b.speakerIdHint)
             parent(b.speakerIdEnabled)
-            row(SP_SPEAKER_ID_MODEL, b.speakerIdHint, b.speakerIdModelLayout)
+            row(SP_SPEAKER_ID_MODEL, b.speakerIdOptions, b.speakerIdModelLayout)
             row(SP_SPEAKER_ID_STRICTNESS, b.speakerIdStrictnessLayout)
             row(SP_SPEAKER_ID_LEARN, b.speakerIdLearn)
             +SpinnerIdPref(b.speakerIdModel, SP_SPEAKER_ID_MODEL, listOf("b0", "b2", "b3"), SpeakerModels.DEFAULT)
-            +SliderPref(b.speakerIdStrictness, SP_SPEAKER_ID_STRICTNESS, 50)
+            +SliderPref(b.speakerIdStrictness, SP_SPEAKER_ID_STRICTNESS, 50, b.speakerIdStrictnessValue)
             +SwitchPref(b.speakerIdLearn, SP_SPEAKER_ID_LEARN, true)
         }
 
@@ -647,6 +665,7 @@ class SettingsFragment : Fragment() {
         val maxVol = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         val curVol = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
         b.volumeSetting.value = (curVol.toFloat() / maxVol * 100f).coerceIn(0f, 100f).roundToInt().toFloat()
+        b.volumeValue.text = getString(R.string.percent, b.volumeSetting.value.toInt())
 
         selectedModelName = mSharedPreferences.getString(SP_VOICE_WAKE_MODEL_NAME, "") ?: ""
         storedModelName = selectedModelName
@@ -654,6 +673,7 @@ class SettingsFragment : Fragment() {
 
         var lastAppliedVol = -1
         b.volumeSetting.addOnChangeListener { _, value, fromUser ->
+            b.volumeValue.text = getString(R.string.percent, value.toInt())
             if (fromUser) {
                 val am = requireContext().getSystemService(Context.AUDIO_SERVICE) as AudioManager
                 val max = am.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
@@ -1045,7 +1065,7 @@ class SettingsFragment : Fragment() {
     // shared "none" + "relay 0".."relay n-1" option list used by both relay pickers
     private fun relayOptionsAdapter(relayCount: Int): ArrayAdapter<String> {
         val options = mutableListOf(getString(R.string.button_relay_none))
-        for (i in 0 until relayCount) options.add(getString(R.string.button_relay_relay_label, i))
+        for (i in 0 until relayCount) options.add(getString(R.string.button_relay_relay_label, i + 1))
         return spinnerAdapter(options)
     }
 
@@ -1064,14 +1084,6 @@ class SettingsFragment : Fragment() {
         fetchAndMergeRemoteModels(wakewordsDir)
 
         b.voiceWakeChooseModel.setOnClickListener { showModelPickerDialog() }
-
-        b.voiceWakeModelRefresh.setOnClickListener {
-            fetchAndMergeRemoteModels(wakewordsDir)
-        }
-
-        b.voiceWakeExperimentalModels.setOnCheckedChangeListener { _, _ ->
-            fetchAndMergeRemoteModels(wakewordsDir)
-        }
     }
 
     private fun ensureVadDownloaded(wakewordsDir: File) {
@@ -1100,19 +1112,20 @@ class SettingsFragment : Fragment() {
         val installedNames = installed.map { it.name }.toSet()
         val filteredDownloadable = downloadable.filter { it.name !in installedNames }
         val filteredExperimental = experimental.filter { it.name !in installedNames }
-        modelList = (installed + filteredDownloadable + filteredExperimental + listOf(WakeWordModel.Custom.INSTANCE)).toMutableList()
+        modelList = (installed + filteredDownloadable + filteredExperimental).toMutableList()
         updateModelLabel()
     }
 
     private fun updateModelLabel() {
         val b = audioPage ?: return
-        b.voiceWakeModelLabel.text = selectedModelName.ifEmpty { getString(R.string.voice_wake_model_none_selected) }
+        b.voiceWakeModelLabel.text = if (selectedModelName.isEmpty()) getString(R.string.voice_wake_model_none_selected)
+            else VoiceEngine.phraseOf(selectedModelName)
     }
 
-    private fun fetchAndMergeRemoteModels(wakewordsDir: File) {
-        val b = audioPage ?: return
-        val showExperimental = b.voiceWakeExperimentalModels.isChecked
-        b.voiceWakeModelRefresh.isEnabled = false
+    // reopenPicker shows the picker again once the new list is there
+    private fun fetchAndMergeRemoteModels(wakewordsDir: File, reopenPicker: Boolean = false) {
+        if (audioPage == null) return
+        val showExperimental = mSharedPreferences.getBoolean(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
 
         viewLifecycleOwner.lifecycleScope.launch {
             try {
@@ -1132,21 +1145,25 @@ class SettingsFragment : Fragment() {
             } catch (e: Exception) {
                 Log.w("SettingsFragment", "GitHub fetch failed: ${e.message}")
                 if (isAdded) Toast.makeText(requireContext(), getString(R.string.voice_wake_model_fetch_failed), Toast.LENGTH_SHORT).show()
-            } finally {
-                audioPage?.voiceWakeModelRefresh?.isEnabled = true
             }
+            if (reopenPicker && audioPage != null) showModelPickerDialog()
         }
     }
 
     private fun showModelPickerDialog() {
-        if (modelList.isEmpty()) return
         val labels = modelList.map { labelFor(it) }.toTypedArray()
+        val community = mSharedPreferences.getBoolean(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false)
         AlertDialog.Builder(requireContext())
             .setTitle(R.string.voice_wake_model_name)
             .setItems(labels) { _, which ->
                 val model = modelList.getOrNull(which) ?: return@setItems
                 onModelSelected(model)
             }
+            .setNeutralButton(if (community) R.string.voice_wake_hide_community else R.string.voice_wake_show_community) { _, _ ->
+                mSharedPreferences.edit { putBoolean(SP_VOICE_WAKE_EXPERIMENTAL_MODELS, !community) }
+                fetchAndMergeRemoteModels(WakeWordModelManager.getModelDirectory(requireContext()), reopenPicker = true)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 
@@ -1154,19 +1171,27 @@ class SettingsFragment : Fragment() {
         is WakeWordModel.Installed    -> "✓  ${model.displayName}"
         is WakeWordModel.Downloadable -> "⬇  ${model.displayName}"
         is WakeWordModel.Experimental -> "⚡  ${model.displayName}"
-        else                          -> model.displayName  // custom
+        else                          -> model.displayName
     }
 
     private fun onModelSelected(model: WakeWordModel) {
         when (model) {
-            is WakeWordModel.Installed -> {
-                selectedModelName = model.name
-                updateModelLabel()
-            }
+            is WakeWordModel.Installed -> useModel(model.name)
             is WakeWordModel.Downloadable -> startModelDownload(model.name, model.tfliteUrl, model.jsonUrl)
             is WakeWordModel.Experimental -> startModelDownload(model.name, model.tfliteUrl, model.jsonUrl)
-            else -> showCustomModelPathDialog()  // custom
+            else -> {}
         }
+    }
+
+    // a picked model applies right away like a downloaded one and the status follows once it loaded
+    private fun useModel(name: String) {
+        selectedModelName = name
+        storedModelName = name
+        mSharedPreferences.edit { putString(SP_VOICE_WAKE_MODEL_NAME, name) }
+        LocalBroadcastManager.getInstance(requireContext()).sendBroadcast(Intent(INTENT_SETTINGS_CHANGED))
+        updateModelLabel()
+        updateWakeModelStatus()
+        binding.root.postDelayed({ if (_binding != null) updateWakeModelStatus() }, MODEL_STATUS_DELAY_MS)
     }
 
     private fun startModelDownload(name: String, tfliteUrl: String, jsonUrl: String) {
@@ -1191,16 +1216,11 @@ class SettingsFragment : Fragment() {
                         }}
                     }, { !isActive })
                 }
-                selectedModelName = name
-                storedModelName = name
-                mSharedPreferences.edit { putString(SP_VOICE_WAKE_MODEL_NAME, name) }
                 val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
                 rebuildModelList(installed,
                     modelList.filterIsInstance<WakeWordModel.Downloadable>(),
                     modelList.filterIsInstance<WakeWordModel.Experimental>())
-                LocalBroadcastManager.getInstance(requireContext())
-                    .sendBroadcast(Intent(INTENT_SETTINGS_CHANGED))
-                updateWakeModelStatus()
+                useModel(name)
                 Toast.makeText(requireContext(), getString(R.string.voice_wake_model_downloaded, name), Toast.LENGTH_SHORT).show()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -1215,56 +1235,6 @@ class SettingsFragment : Fragment() {
         }
     }
 
-    private fun showCustomModelPathDialog() {
-        val wakewordsDir = WakeWordModelManager.getModelDirectory(requireContext())
-        val input = EditText(requireContext()).apply {
-            hint = getString(R.string.voice_wake_model_custom_hint)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine()
-        }
-        val container = android.widget.LinearLayout(requireContext()).apply {
-            setPadding(64, 16, 64, 0)
-            addView(input)
-        }
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.voice_wake_model_custom_title)
-            .setMessage(R.string.voice_wake_model_custom_message)
-            .setView(container)
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val path = input.text.toString().trim()
-                if (path.isNotEmpty()) importModelFromPath(path, wakewordsDir)
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun importModelFromPath(path: String, wakewordsDir: File) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            try {
-                val stem = withContext(Dispatchers.IO) {
-                    val src = File(path)
-                    if (!src.exists()) throw IOException("File not found: $path")
-                    val s = src.name.removeSuffix(".tflite")
-                    wakewordsDir.mkdirs()
-                    src.copyTo(File(wakewordsDir, "$s.tflite"), overwrite = true)
-                    val jsonSrc = File(src.parent, "$s.json")
-                    if (jsonSrc.exists()) jsonSrc.copyTo(File(wakewordsDir, "$s.json"), overwrite = true)
-                    s
-                }
-                selectedModelName = stem
-                val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
-                rebuildModelList(installed,
-                    modelList.filterIsInstance<WakeWordModel.Downloadable>(),
-                    modelList.filterIsInstance<WakeWordModel.Experimental>())
-                updateWakeModelStatus()
-                Toast.makeText(requireContext(), getString(R.string.voice_wake_model_imported, stem), Toast.LENGTH_SHORT).show()
-            } catch (e: Exception) {
-                Log.e("SettingsFragment", "Custom import failed", e)
-                if (isAdded) Toast.makeText(requireContext(), getString(R.string.voice_wake_model_import_failed), Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
     private fun setupButtonRelaySpinners(b: SettingsPageControlsBinding, buttonCount: Int, relayCount: Int) {
         val optionCount = relayCount + 1
         val adapter = relayOptionsAdapter(relayCount)
@@ -1275,7 +1245,7 @@ class SettingsFragment : Fragment() {
 
         // the rows of missing buttons are hidden by their requires rule
         for (i in 0 until buttonCount.coerceAtMost(buttonLayouts.size)) {
-            buttonLabels[i].text = getString(R.string.button_relay_button_label, i)
+            buttonLabels[i].text = getString(R.string.button_relay_button_label, i + 1)
             buttonSpinners[i].adapter = adapter
             // stored value -1 is none position 0 then relay 0 at position 1 and so on
             val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
@@ -1289,15 +1259,10 @@ class SettingsFragment : Fragment() {
     }
 
     private fun saveSettings() {
+        val before = mSharedPreferences.all.toMap()
         mSharedPreferences.edit {
             // only pages that were opened write anything so unopened ones keep their stored values
             binders.forEach { it.saveTo(this) }
-
-            // home assistant may have set a model meanwhile so only a pick made here is written
-            if (audioPage != null && selectedModelName != storedModelName) {
-                putString(SP_VOICE_WAKE_MODEL_NAME, selectedModelName)
-                storedModelName = selectedModelName
-            }
 
             val sensors = sensorsPage
             if (sensors != null && zonesLoaded) {
@@ -1319,6 +1284,7 @@ class SettingsFragment : Fragment() {
             }
         }
 
+        if (mSharedPreferences.all == before) return
         // http server lifecycle is owned by the application settings receiver
         // which reacts to the broadcast below; starting it here as well raced
         // that receiver and crashed on rebind failures
@@ -1356,16 +1322,12 @@ class SettingsFragment : Fragment() {
     private fun updateWakeModelStatus() {
         val b = audioPage ?: return
         val manager = mVoiceEngine ?: return
-        val statusText = when (manager.wakeModelStatus) {
-            WakeWordDetector.ModelStatus.LOADED         -> getString(R.string.voice_wake_model_status_loaded)
-            WakeWordDetector.ModelStatus.FILE_NOT_FOUND -> getString(R.string.voice_wake_model_status_not_found)
-            WakeWordDetector.ModelStatus.LOAD_ERROR     -> getString(R.string.voice_wake_model_status_error)
-            WakeWordDetector.ModelStatus.NOT_LOADED     -> getString(R.string.voice_wake_model_status_none)
-        }
-        val loadedName = manager.loadedModelName
-        val display = if (loadedName.isNotEmpty()) "$loadedName ($statusText)" else statusText
-        b.voiceWakeModelStatus.text = getString(R.string.voice_wake_model_status, display)
-        b.voiceWakeModelPath.text   = getString(R.string.voice_wake_model_path, manager.wakeModelDirectory)
+        b.voiceWakeModelStatus.text = getString(when (manager.wakeModelStatus) {
+            WakeWordDetector.ModelStatus.LOADED         -> R.string.voice_wake_model_status_loaded
+            WakeWordDetector.ModelStatus.FILE_NOT_FOUND -> R.string.voice_wake_model_status_not_found
+            WakeWordDetector.ModelStatus.LOAD_ERROR     -> R.string.voice_wake_model_status_error
+            WakeWordDetector.ModelStatus.NOT_LOADED     -> R.string.voice_wake_model_status_none
+        })
     }
 
     companion object {
@@ -1373,5 +1335,7 @@ class SettingsFragment : Fragment() {
         const val PROXIMITY_KEEP_AWAKE_DEFAULT_SECONDS = 30
         const val MQTT_DEFAULT_PORT = 1883
         private const val PAGE_FADE_MS = 120L
+        // the engine loads a picked model in the background
+        private const val MODEL_STATUS_DELAY_MS = 1500L
     }
 }

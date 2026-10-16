@@ -21,11 +21,9 @@
         android:orientation="vertical">
 
         <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/wifi_ip_title"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            style="@style/Settings.Header"
+            android:layout_marginTop="0dp"
+            android:text="@string/wifi_ip_title" />
 
         <TextView
             android:id="@+id/wifiIpInfo"
@@ -55,7 +53,6 @@
                 android:id="@+id/wifiIpUseStatic"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginStart="48dp"
                 android:layout_marginTop="8dp"
                 android:text="@string/wifi_ip_use_static"
                 android:textSize="18sp"
@@ -215,114 +212,130 @@
         </LinearLayout>
     </LinearLayout>
 
-    <com.google.android.material.materialswitch.MaterialSwitch
-        android:id="@+id/httpServerEnabled"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/http_server_enabled"
-        android:textSize="18sp"
-        tools:ignore="UseSwitchCompatOrMaterialXml" />
+    <include
+        android:id="@+id/networkAdvancedHeader"
+        layout="@layout/settings_advanced_header" />
 
     <LinearLayout
-        android:id="@+id/httpServerAddressLayout"
+        android:id="@+id/networkAdvanced"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="48dp"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal">
+        android:orientation="vertical">
 
-        <TextView
-            android:layout_width="0dp"
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/httpServerEnabled"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/http_server_address"
-            android:textSize="18sp" />
-
-        <TextView
-            android:id="@+id/httpServerAddress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingVertical="0dp"
+            android:layout_marginTop="24dp"
+            android:text="@string/http_server_enabled"
             android:textSize="18sp"
-            tools:text="http://127.0.0.1:8080" />
-    </LinearLayout>
-
-    <LinearLayout
-        android:id="@+id/httpServerLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="48dp"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal">
+            tools:ignore="UseSwitchCompatOrMaterialXml" />
 
         <TextView
-            android:id="@+id/httpServerText"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/http_server_status_default"
-            android:textSize="18sp" />
+            style="@style/Settings.Hint"
+            android:layout_marginStart="48dp"
+            android:text="@string/http_server_hint" />
 
-        <TextView
-            android:id="@+id/httpServerStatus"
-            android:layout_width="0dp"
+        <LinearLayout
+            android:id="@+id/httpServerAddressLayout"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:gravity="end"
+            android:layout_marginStart="48dp"
+            android:layout_marginTop="24dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/http_server_address"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/httpServerAddress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="0dp"
+                android:textSize="18sp"
+                tools:text="http://127.0.0.1:8080" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:id="@+id/httpServerLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="48dp"
+            android:layout_marginTop="24dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/httpServerText"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/http_server_status_default"
+                android:textSize="18sp" />
+
+            <TextView
+                android:id="@+id/httpServerStatus"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:gravity="end"
+                android:textSize="18sp"
+                tools:text="@string/http_server_running" />
+
+            <Button
+                android:id="@+id/httpServerButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="0dp"
+                android:text="@string/start"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/adbWifiEnabled"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/adb_wifi_enabled"
             android:textSize="18sp"
-            tools:text="@string/http_server_running" />
+            tools:ignore="UseSwitchCompatOrMaterialXml" />
 
-        <Button
-            android:id="@+id/httpServerButton"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:id="@+id/adbWifiAddressLayout"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:paddingVertical="0dp"
-            android:text="@string/start"
-            android:textSize="18sp" />
-    </LinearLayout>
+            android:layout_marginStart="48dp"
+            android:layout_marginTop="24dp"
+            android:orientation="horizontal">
 
-    <com.google.android.material.materialswitch.MaterialSwitch
-        android:id="@+id/adbWifiEnabled"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="24dp"
-        android:text="@string/adb_wifi_enabled"
-        android:textSize="18sp"
-        tools:ignore="UseSwitchCompatOrMaterialXml" />
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/adb_wifi_address"
+                android:textSize="18sp" />
 
-    <LinearLayout
-        android:id="@+id/adbWifiAddressLayout"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="48dp"
-        android:layout_marginTop="24dp"
-        android:orientation="horizontal">
+            <TextView
+                android:id="@+id/adbWifiAddress"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingVertical="0dp"
+                android:textSize="18sp"
+                tools:text="192.168.1.50:5555" />
+        </LinearLayout>
 
+        <!-- the real state of adbd and why a change did not apply -->
         <TextView
-            android:layout_width="0dp"
+            android:id="@+id/adbWifiStatus"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/adb_wifi_address"
-            android:textSize="18sp" />
-
-        <TextView
-            android:id="@+id/adbWifiAddress"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:paddingVertical="0dp"
-            android:textSize="18sp"
-            tools:text="192.168.1.50:5555" />
+            android:layout_marginStart="48dp"
+            android:layout_marginTop="12dp"
+            android:textSize="16sp"
+            tools:text="@string/adb_wifi_status_on" />
     </LinearLayout>
-
-    <!-- the real state of adbd and why a change did not apply -->
-    <TextView
-        android:id="@+id/adbWifiStatus"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginStart="48dp"
-        android:layout_marginTop="12dp"
-        android:textSize="16sp"
-        tools:text="@string/adb_wifi_status_on" />
 
 </LinearLayout>

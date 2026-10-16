@@ -47,6 +47,8 @@ object WebViewDisplayModule : DisplayModule {
             summaryRes = R.string.webview_batch_updates_summary),
     )
 
+    override val advancedOptions = setOf(SP_IGNORE_SSL_ERRORS, SP_EXTENDED_JAVASCRIPT_INTERFACE)
+
     override fun createContent(host: DisplayHost, parent: ViewGroup): DisplayContent = WebViewContent(host)
 
     override fun isInFront(context: Context): Boolean? = DisplayController.isHostInFront()

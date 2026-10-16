@@ -5,6 +5,7 @@ import android.view.View
 import android.widget.AdapterView
 import android.widget.EditText
 import android.widget.Spinner
+import android.widget.TextView
 import androidx.core.content.edit
 import androidx.core.view.isVisible
 import com.google.android.material.button.MaterialButtonToggleGroup
@@ -120,13 +121,19 @@ class FloatTextPref(
     }
 }
 
+// a 0 to 255 brightness shown as percent
+fun brightnessPercent(value: Int): String = "${(value * 100 + 127) / 255} %"
+
 class SliderPref(
     private val view: Slider,
     private val key: String,
     private val default: Int,
+    valueView: TextView? = null,
+    format: (Int) -> String = { it.toString() },
     live: ((Int) -> Unit)? = null
 ) : ValueBinding {
     init {
+        if (valueView != null) view.addOnChangeListener { _, value, _ -> valueView.text = format(value.toInt()) }
         if (live != null) {
             // fromUser guard so load() setting the value doesnt fire the live preview
             // otherwise loading the brightness sliders dims the settings screen

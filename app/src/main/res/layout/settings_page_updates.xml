@@ -18,8 +18,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/webview_update_title"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
 
         <TextView
             android:id="@+id/webviewUpdateVersion"
@@ -93,8 +92,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/app_update_title"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:textAppearance="?attr/textAppearanceTitleMedium" />
 
         <TextView
             android:id="@+id/appUpdateCurrentVersion"

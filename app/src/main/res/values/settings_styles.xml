@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- section title inside a settings page -->
+    <style name="Settings.Header" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">24dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
+    </style>
+
+    <!-- short explanation under a setting -->
+    <style name="Settings.Hint" parent="">
+        <item name="android:layout_width">match_parent</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:alpha">0.7</item>
+        <item name="android:textSize">14sp</item>
+    </style>
+
+    <!-- the number next to a slider -->
+    <style name="Settings.SliderValue" parent="">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_gravity">center_vertical</item>
+        <item name="android:minWidth">56dp</item>
+        <item name="android:gravity">end</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <style name="Settings.Slider" parent="">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
+        <item name="tickVisible">false</item>
+        <item name="labelBehavior">gone</item>
+    </style>
+</resources>

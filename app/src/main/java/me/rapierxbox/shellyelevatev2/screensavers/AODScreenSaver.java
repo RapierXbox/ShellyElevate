@@ -21,6 +21,6 @@ public class AODScreenSaver extends ScreenSaver {
 
     @Override
     public String getName() {
-        return "Always On Display";
+        return "Always-on display";
     }
 }

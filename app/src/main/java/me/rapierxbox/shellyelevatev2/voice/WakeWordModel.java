@@ -56,12 +56,4 @@ public abstract class WakeWordModel {
             super(name, stem, folderPath, tfliteUrl, jsonUrl);
         }
     }
-
-    public static class Custom extends WakeWordModel {
-        public static final Custom INSTANCE = new Custom();
-
-        private Custom() {}
-
-        @Override public String getDisplayName() { return "Custom..."; }
-    }
 }

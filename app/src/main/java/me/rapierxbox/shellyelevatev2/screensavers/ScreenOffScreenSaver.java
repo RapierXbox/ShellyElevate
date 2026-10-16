@@ -19,6 +19,6 @@ public class ScreenOffScreenSaver extends ScreenSaver {
 
     @Override
     public String getName() {
-        return "Screen Off";
+        return "Screen off";
     }
 }

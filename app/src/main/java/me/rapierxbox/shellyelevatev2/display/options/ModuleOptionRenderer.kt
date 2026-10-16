@@ -20,6 +20,7 @@ import androidx.core.view.isVisible
 import androidx.core.widget.doAfterTextChanged
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.slider.Slider
+import me.rapierxbox.shellyelevatev2.AdvancedSection
 import me.rapierxbox.shellyelevatev2.FloatTextPref
 import me.rapierxbox.shellyelevatev2.IntTextPref
 import me.rapierxbox.shellyelevatev2.PrefBinding
@@ -36,7 +37,8 @@ import me.rapierxbox.shellyelevatev2.switcher.AppPickerDialog
 // turns a list of module options into settings rows plus the bindings that load and save them
 class ModuleOptionRenderer(private val context: Context) {
 
-    fun render(options: List<ModuleOption>): RenderedOptions {
+    // options whose key is in advanced go into a collapsed block below the others
+    fun render(options: List<ModuleOption>, advanced: Set<String> = emptySet()): RenderedOptions {
         val container = LinearLayout(context).apply {
             orientation = LinearLayout.VERTICAL
             layoutParams = LinearLayout.LayoutParams(
@@ -44,7 +46,10 @@ class ModuleOptionRenderer(private val context: Context) {
         }
         val inflater = LayoutInflater.from(context)
         val rendered = RenderedOptions(context, container)
-        for (option in options) {
+        val (rare, common) = options.partition { it.key in advanced }
+        var target: LinearLayout = container
+        for (option in common + rare) {
+            if (option === rare.firstOrNull()) target = AdvancedSection.create(container)
             val control = createControl(inflater, container, option, rendered)
             control.row.findViewById<TextView?>(R.id.optionSummary)?.let { summary ->
                 option.summaryRes?.let {
@@ -52,7 +57,7 @@ class ModuleOptionRenderer(private val context: Context) {
                     summary.isVisible = true
                 }
             }
-            container.addView(control.row)
+            target.addView(control.row)
             rendered.add(control)
         }
         return rendered
