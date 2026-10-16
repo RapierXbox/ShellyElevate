@@ -54,12 +54,14 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
     }
 
     @Override
-    public void startSession(String wakeWordId, String phrase, boolean remoteInitiated) {
+    public void startSession(long session, String wakeWordId, String phrase, boolean remoteInitiated,
+                             boolean speakerPending) {
         streaming.set(true);
         // the controller already runs a pipeline when it asked for the session
         if (remoteInitiated) return;
         try {
-            JSONObject payload = new JSONObject();
+            JSONObject payload = new JSONObject().put("session", session);
+            if (speakerPending) payload.put("speaker_pending", true);
             if (wakeWordId != null && !wakeWordId.isEmpty()) payload.put("wake_word_id", wakeWordId);
             if (phrase != null && !phrase.isEmpty()) payload.put("phrase", phrase);
             ApiHub.send("voice.wake", payload);

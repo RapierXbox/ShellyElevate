@@ -27,8 +27,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executors;
@@ -38,7 +41,9 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.api.ApiInfo;
+import me.rapierxbox.shellyelevatev2.api.StateReader;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
@@ -92,6 +97,9 @@ public class MQTTServer {
 
     private BroadcastReceiver settingsChangedReceiver;
     private BroadcastReceiver voiceStateReceiver;
+    private final Runnable stateListener = this::publishStateLater;
+    private final AtomicBoolean statePending = new AtomicBoolean(false);
+    private volatile String lastState;
 
     private static final class PendingPublish {
         final String payload;
@@ -135,6 +143,9 @@ public class MQTTServer {
             }
         };
         lbm.registerReceiver(voiceStateReceiver, new IntentFilter(INTENT_VOICE_STATE_CHANGED));
+
+        StateReader.get(mApplicationContext);
+        ApiHub.addStateListener(stateListener);
     }
 
     // scheduler helpers that never throw once the scheduler is shut down
@@ -373,12 +384,12 @@ public class MQTTServer {
     }
 
     // only command topics so we never echo our own state back
-    private String[] inboundTopics() {
-        return new String[]{
+    private List<String> inboundTopics() {
+        List<String> topics = new ArrayList<>(Arrays.asList(
                 parseTopic(MQTT_TOPIC_UPDATE),
                 MQTT_TOPIC_UPDATE_GENERIC,
                 parseTopic(MQTT_TOPIC_RELAY_COMMAND),
-                parseTopic(MQTT_TOPIC_RELAY_COMMAND) + "_1",
+                parseTopic(MQTT_TOPIC_COMMAND) + "/+",
                 parseTopic(MQTT_TOPIC_DIMMER_COMMAND),
                 parseTopic(MQTT_TOPIC_SLEEP_BUTTON),
                 parseTopic(MQTT_TOPIC_WAKE_BUTTON),
@@ -388,8 +399,11 @@ public class MQTTServer {
                 parseTopic(MQTT_TOPIC_NIGHT_MODE_COMMAND),
                 parseTopic(MQTT_TOPIC_VOICE_TRIGGER),
                 parseTopic(MQTT_TOPIC_VOICE_MUTE_COMMAND),
-                MQTT_TOPIC_HOME_ASSISTANT_STATUS
-        };
+                MQTT_TOPIC_HOME_ASSISTANT_STATUS));
+        for (int num = 1; num < DeviceModel.getReportedDevice().relays; num++) {
+            topics.add(parseTopic(MQTT_TOPIC_RELAY_COMMAND) + "_" + num);
+        }
+        return topics;
     }
 
     public void disconnect() {
@@ -491,6 +505,7 @@ public class MQTTServer {
         try {
             publishTempAndHum();
             publishThermalZones();
+            publishState(true);
             if (mDeviceHelper.isDimmerAttached()) {
                 StesProtocolHandler.getStatus(s -> publishDimmer(s.on, s.actualBrightness / 10));
                 StesProtocolHandler.getPowerMeter(p -> publishDimmerPower(p.powerW, p.voltageV, p.currentA));
@@ -528,6 +543,7 @@ public class MQTTServer {
                 }
                 schedule(this::publishVoiceState, 250, TimeUnit.MILLISECONDS);
                 schedule(this::publishThermalZones, 2, TimeUnit.SECONDS);
+                schedule(() -> publishState(true), 300, TimeUnit.MILLISECONDS);
             } catch (Exception e) {
                 Log.e(TAG, "publishStatus failed", e);
             }
@@ -803,6 +819,31 @@ public class MQTTServer {
                 "{\"event_type\": \"" + eventType + "\"}", 1, false);
     }
 
+    // the whole v1 state for the entities that read it. a burst of changes is sent once
+    private void publishStateLater() {
+        if (!isClientConnected() || !statePending.compareAndSet(false, true)) return;
+        if (schedule(() -> {
+            statePending.set(false);
+            publishState(false);
+        }, 2, TimeUnit.SECONDS) == null) {
+            statePending.set(false);
+        }
+    }
+
+    // fresh rereads the polled sensors. a change only reuses their last reading
+    private void publishState(boolean fresh) {
+        if (!isClientConnected()) return;
+        String state = StateReader.get(mApplicationContext).snapshot(fresh).toString();
+        if (!fresh && state.equals(lastState)) return;
+        lastState = state;
+        publishInternal(parseTopic(MQTT_TOPIC_STATE), state, 1, shouldRetainState());
+    }
+
+    // the event entity reads event_type
+    public void publishSpeakerEvent(String json) {
+        publishInternal(parseTopic(MQTT_TOPIC_SPEAKER_EVENT), json, 1, false);
+    }
+
     public void publishHello() {
         if (!shouldSend()) return;
         try {
@@ -854,6 +895,7 @@ public class MQTTServer {
         LocalBroadcastManager lbm = LocalBroadcastManager.getInstance(mApplicationContext);
         if (settingsChangedReceiver != null) lbm.unregisterReceiver(settingsChangedReceiver);
         if (voiceStateReceiver != null) lbm.unregisterReceiver(voiceStateReceiver);
+        ApiHub.removeStateListener(stateListener);
         stopPeriodicPublish();
         disconnect();
         MqttClient client = mMqttClient;

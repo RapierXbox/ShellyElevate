@@ -12,11 +12,9 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.app.Activity;
-import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaPlayer;
-import android.media.MediaRecorder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
@@ -53,9 +51,6 @@ import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities;
 public class VoiceEngine {
     private static final String TAG = "VoiceEngine";
 
-    private static final int SAMPLE_RATE = 16000;
-    private static final int CHANNEL_CFG = AudioFormat.CHANNEL_IN_MONO;
-    private static final int AUDIO_FMT = AudioFormat.ENCODING_PCM_16BIT;
     // 100 ms of 16 khz mono pcm16 matching the wake word frontend
     private static final int CHUNK_BYTES = NativeMelExtractor.HOP_SAMPLES * 2 * 10;
 
@@ -88,6 +83,10 @@ public class VoiceEngine {
     private volatile State state = State.DISABLED;
     private volatile Mode mode = Mode.OFF;
     private volatile VoiceTransport transport;
+    // speaker recognition and the like. null while nothing listens
+    private volatile VoiceTap tap;
+    // enrollment records with the mic so wake words and sessions wait
+    private volatile boolean micBorrowed;
     private volatile boolean muted = false;
     private volatile long errorUntil = 0L;
     // the vad ignores capture until then so the wake tone does not count as the start of speech
@@ -212,6 +211,11 @@ public class VoiceEngine {
         applyWakeDetectorSettings();
     }
 
+    public void setTap(VoiceTap tap) {
+        this.tap = tap;
+        checkAndApplySettings();
+    }
+
     public void invalidateLoadedModel() {
         loadedModelName = "";
         LocalBroadcastManager.getInstance(mApplicationContext)
@@ -254,11 +258,12 @@ public class VoiceEngine {
                 Log.i(TAG, "loading wake model \"" + modelName + "\" -> " + wakeDetector.loadModel(modelName));
             }
 
+            wakeDetector.setPreRoll(tap != null);
             wakeDetector.setSensitivity(mSharedPreferences.getInt(SP_VOICE_WAKE_SENSITIVITY, 50));
             wakeDetector.setCooldown(mSharedPreferences.getInt(SP_VOICE_WAKE_COOLDOWN_SEC, 5));
             wakeDetector.setScoreBroadcastEnabled(mSharedPreferences.getBoolean(SP_VOICE_SCORE_BAR_ENABLED, false));
 
-            if (micAllowed && state == State.IDLE && !wakeDetector.isRunning()
+            if (micAllowed && state == State.IDLE && !micBorrowed && !wakeDetector.isRunning()
                     && wakeDetector.getModelStatus() == WakeWordDetector.ModelStatus.LOADED) {
                 wakeDetector.start();
             }
@@ -379,13 +384,14 @@ public class VoiceEngine {
         if (mode == Mode.OFF || state != State.IDLE) return;
         Log.i(TAG, "wake detected, starting session");
         WakeWordDetector det = wakeDetector;
+        byte[] preRoll = det != null ? det.takePreRoll() : null;
         if (det != null) det.stop();
         mainHandler.post(() -> mScreenSaverManager.stopScreenSaver());
         if (mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true)) {
             wakeToneEndsAt = SystemClock.elapsedRealtime() + WAKE_TONE_GUARD_MS;
             tonePlayer.playWake();
         }
-        if (mode != Mode.OFF && state == State.IDLE) trigger();
+        if (mode != Mode.OFF && state == State.IDLE) startSession(false, preRoll);
     }
 
     // ---------------------------------------------------------------- transport callbacks
@@ -453,17 +459,17 @@ public class VoiceEngine {
     // ---------------------------------------------------------------- sessions
 
     public void trigger() {
-        startSession(false);
+        startSession(false, null);
     }
 
-    private boolean startSession(boolean remoteInitiated) {
+    private boolean startSession(boolean remoteInitiated, byte[] preRoll) {
         if (mode == Mode.OFF)                      { Log.d(TAG, "trigger ignored: disabled");       return false; }
         if (muted)                                 { Log.d(TAG, "trigger ignored: muted");          return false; }
         VoiceTransport t;
         long session;
         // a wake word and a voice.start arriving together would otherwise open two sessions
         synchronized (sessionLock) {
-            if (state != State.IDLE)               { Log.d(TAG, "trigger ignored: state=" + state); return false; }
+            if (state != State.IDLE || micBorrowed) { Log.d(TAG, "trigger ignored: state=" + state); return false; }
             t = transport;
             if (t == null) {
                 restartDetectorLater();
@@ -487,7 +493,10 @@ public class VoiceEngine {
         speechEnded.set(false);
 
         String model = loadedModelName;
-        t.startSession(model, model.isEmpty() ? null : phraseOf(model), remoteInitiated);
+        VoiceTap vt = tap;
+        boolean speakerPending = vt != null && vt.quickResult(preRoll);
+        t.startSession(session, model, model.isEmpty() ? null : phraseOf(model), remoteInitiated, speakerPending);
+        if (vt != null) vt.onSessionStart(session, preRoll, speakerPending);
 
         audioStreaming.set(true);
         scheduler.execute(() -> captureAndStream(session));
@@ -515,12 +524,14 @@ public class VoiceEngine {
         // restart detector after a short delay so leftover spectrogram state from
         // this session does not immediately retrigger the wake word
         scheduler.schedule(() -> {
-            if (mode != Mode.OFF && state == State.IDLE && !micPermissionMissing
-                    && mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
-                    && detSnapshot == wakeDetector
-                    && detSnapshot.getModelStatus() == WakeWordDetector.ModelStatus.LOADED
-                    && !detSnapshot.isRunning()) {
-                detSnapshot.start();
+            synchronized (wakeLock) {
+                if (mode != Mode.OFF && state == State.IDLE && !micPermissionMissing && !micBorrowed
+                        && mSharedPreferences.getBoolean(SP_VOICE_WAKE_ENABLED, true)
+                        && detSnapshot == wakeDetector
+                        && detSnapshot.getModelStatus() == WakeWordDetector.ModelStatus.LOADED
+                        && !detSnapshot.isRunning()) {
+                    detSnapshot.start();
+                }
             }
         }, 1_500, TimeUnit.MILLISECONDS);
     }
@@ -541,7 +552,7 @@ public class VoiceEngine {
         if (mode != Mode.CONTROLLER) throw ApiHub.CommandException.unsupported("voice through Home Assistant is off");
         if (muted) throw new ApiHub.CommandException("busy", "microphone muted");
         if (state != State.IDLE) throw new ApiHub.CommandException("busy", "voice session running");
-        if (!startSession(true)) throw new ApiHub.CommandException("busy", "voice session not started");
+        if (!startSession(true, null)) throw new ApiHub.CommandException("busy", "voice session not started");
     }
 
     // voice.stop_audio: the controller has enough audio
@@ -603,6 +614,25 @@ public class VoiceEngine {
     }
 
     public VoiceTimers timers() { return timers; }
+
+    // pauses the wake word so someone else can record. false while muted or a session runs
+    public boolean borrowMic() {
+        // under wakeLock so a settings pass or a restart can not start the detector in between
+        synchronized (wakeLock) {
+            synchronized (sessionLock) {
+                if (muted || micBorrowed || state != State.IDLE) return false;
+                micBorrowed = true;
+            }
+            WakeWordDetector det = wakeDetector;
+            if (det != null) det.stopAndWait();
+        }
+        return true;
+    }
+
+    public void releaseMic() {
+        micBorrowed = false;
+        restartDetectorLater();
+    }
 
     // ---------------------------------------------------------------- wake word config
 
@@ -743,14 +773,11 @@ public class VoiceEngine {
         WakeWordDetector det = wakeDetector;
         if (det != null) det.stopAndWait();
 
-        int minBuf  = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CFG, AUDIO_FMT);
-        int bufSize = Math.max(minBuf > 0 ? minBuf : CHUNK_BYTES, CHUNK_BYTES * 4);
-
         AudioRecord recorder = null;
         boolean micFailed = false;
         try {
-            recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, SAMPLE_RATE, CHANNEL_CFG, AUDIO_FMT, bufSize);
-            if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
+            recorder = Mic.open(CHUNK_BYTES);
+            if (recorder == null) {
                 Log.e(TAG, "AudioRecord init failed");
                 micFailed = true;
                 mainHandler.post(() -> Toast.makeText(mApplicationContext,
@@ -793,6 +820,8 @@ public class VoiceEngine {
                             noiseFrames++;
                         }
                         float speechThreshold = Math.max(VAD_SPEECH_MIN, noiseFloor * VAD_SPEECH_RATIO);
+                        VoiceTap vt = tap;
+                        if (vt != null) vt.onAudio(session, buf, read, rms >= speechThreshold);
 
                         if (mlVadActive) {
                             if (mlVad.everActive()) speechStarted = true;
@@ -838,7 +867,11 @@ public class VoiceEngine {
         } finally {
             if (recorder != null) { try { recorder.release(); } catch (Exception ignored) {} }
             VoiceTransport t = transport;
-            if (t != null && state != State.DISABLED && sessionId.get() == session) {
+            boolean current = state != State.DISABLED && sessionId.get() == session;
+            VoiceTap vt = tap;
+            boolean finished = state == State.LISTENING || state == State.SPEAKING;
+            if (vt != null) vt.onSessionEnd(session, current && finished && !micFailed);
+            if (t != null && current) {
                 t.endAudio();
                 if (micFailed) {
                     stopAudioCapture();

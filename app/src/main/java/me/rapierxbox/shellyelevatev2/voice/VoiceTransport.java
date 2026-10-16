@@ -30,7 +30,8 @@ public interface VoiceTransport {
     String unavailableMessage();
 
     // a session started. remoteInitiated is true when the remote side asked for it so it needs no notice
-    void startSession(String wakeWordId, String phrase, boolean remoteInitiated);
+    // speakerPending tells the remote side that a speaker result for this session follows
+    void startSession(long session, String wakeWordId, String phrase, boolean remoteInitiated, boolean speakerPending);
 
     // pcm 16 khz 16 bit little endian mono
     void sendAudio(byte[] buf, int len);

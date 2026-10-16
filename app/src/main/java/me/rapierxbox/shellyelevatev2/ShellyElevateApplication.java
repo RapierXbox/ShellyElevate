@@ -30,7 +30,9 @@ import java.util.concurrent.TimeUnit;
 import me.rapierxbox.shellyelevatev2.api.ApiManager;
 import me.rapierxbox.shellyelevatev2.api.ApiInfo;
 import me.rapierxbox.shellyelevatev2.api.BleChannel;
+import me.rapierxbox.shellyelevatev2.api.CoreCommands;
 import me.rapierxbox.shellyelevatev2.api.MediaCommands;
+import me.rapierxbox.shellyelevatev2.api.SpeakerCommands;
 import me.rapierxbox.shellyelevatev2.display.DisplayController;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper;
@@ -53,6 +55,7 @@ import me.rapierxbox.shellyelevatev2.settings.SettingsChangeTracker;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 import me.rapierxbox.shellyelevatev2.switcher.AppCatalog;
 import me.rapierxbox.shellyelevatev2.voice.VoiceEngine;
+import me.rapierxbox.shellyelevatev2.voice.speaker.SpeakerRecognizer;
 
 public class ShellyElevateApplication extends Application {
     private static final String TAG = "ShellyElevateApplication";
@@ -182,10 +185,13 @@ public class ShellyElevateApplication extends Application {
         if (mSharedPreferences.getBoolean(SP_MEDIA_ENABLED, false)) {
             mMediaHelper = new MediaHelper();
         }
+        // registered for every transport so mqtt can run them without the integration api
+        CoreCommands.register();
         MediaCommands.register();
 
         mMQTTServer = new MQTTServer();
         mVoiceEngine = new VoiceEngine();
+        SpeakerCommands.register(new SpeakerRecognizer(mVoiceEngine), mVoiceEngine);
         BleChannel.start(this);
         mPowerOptimizer = new PowerOptimizer(this);
 

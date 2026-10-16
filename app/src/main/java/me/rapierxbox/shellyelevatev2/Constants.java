@@ -103,6 +103,10 @@ public final class Constants {
     public static final String SP_VOICE_WAKE_COOLDOWN_SEC   = "voiceWakeCooldownSec";
     public static final String SP_VOICE_WAKE_EXPERIMENTAL_MODELS = "voiceWakeExperimentalModels";
     public static final String SP_VOICE_ASSISTANT_MUTED = "voiceAssistantMuted";
+    public static final String SP_SPEAKER_ID_ENABLED = "speakerIdEnabled";
+    public static final String SP_SPEAKER_ID_MODEL = "speakerIdModel";
+    public static final String SP_SPEAKER_ID_STRICTNESS = "speakerIdStrictness"; // 0..100 where 50 is the model default
+    public static final String SP_SPEAKER_ID_LEARN = "speakerIdLearn";
 
     // mqtt prefs
     public static final String SP_MQTT_ENABLED = "mqttEnabled";
@@ -188,6 +192,11 @@ public final class Constants {
     public static final String MQTT_TOPIC_SLEEPING_BINARY_SENSOR = "shellyelevatev2/%s/sleeping";
     public static final String MQTT_TOPIC_THERMAL_ZONE = "shellyelevatev2/%s/thermal/%s";
     public static final String MQTT_TOPIC_HOME_ASSISTANT_STATUS = "homeassistant/status";
+    // cmd/<action> runs a protocol v1 command with the json payload as params and answers on cmd/<action>/result
+    public static final String MQTT_TOPIC_COMMAND = "shellyelevatev2/%s/cmd";
+    // the protocol v1 state as one json object
+    public static final String MQTT_TOPIC_STATE = "shellyelevatev2/%s/state";
+    public static final String MQTT_TOPIC_SPEAKER_EVENT = "shellyelevatev2/%s/speaker/event";
 
     // voice assistant intents
     public static final String INTENT_VOICE_STATE_CHANGED = "me.rapierxbox.shellyelevatev2.VOICE_STATE_CHANGED";

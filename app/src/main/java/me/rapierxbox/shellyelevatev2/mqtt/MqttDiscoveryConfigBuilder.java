@@ -1,9 +1,9 @@
 package me.rapierxbox.shellyelevatev2.mqtt;
 
 import static me.rapierxbox.shellyelevatev2.Constants.*;
+import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 
 import android.content.SharedPreferences;
-import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -16,12 +16,12 @@ import me.rapierxbox.shellyelevatev2.DeviceModel;
 import me.rapierxbox.shellyelevatev2.api.ApiInfo;
 import me.rapierxbox.shellyelevatev2.helper.DeviceHelper;
 import me.rapierxbox.shellyelevatev2.helper.ThermalZoneReader;
+import me.rapierxbox.shellyelevatev2.settings.DeviceCapabilities;
 import me.rapierxbox.shellyelevatev2.stes.StesProtocolHandler;
 
 // builds the single device based home assistant discovery payload
 // unique ids and object ids are part of the ha entity registry so never change them
 class MqttDiscoveryConfigBuilder {
-    private static final String TAG = "MqttDiscoveryConfigBuilder";
     private static final String OBJECT_ID_PREFIX = "shelly_walldisplay_";
 
     private final String clientId;
@@ -49,7 +49,9 @@ class MqttDiscoveryConfigBuilder {
         addMiscComponents(components);
         addThermalComponents(components);
         addVoiceComponents(components);
+        addSpeakerComponents(components);
         addNightModeComponent(components);
+        addStateComponents(components);
         payload.put("cmps", components);
 
         // shared availability so every entity follows the lwt status topic
@@ -143,10 +145,9 @@ class MqttDiscoveryConfigBuilder {
 
             // in button mode the input also emits press gestures on button/10x like the touch buttons
             int mode = prefs.getInt(String.format(Locale.US, SP_SW_INPUT_MODE_FORMAT, num), SW_INPUT_MODE_BUTTON);
-            if (mode == SW_INPUT_MODE_BUTTON) {
-                String eventTopic = parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + (100 + num);
-                add(components, clientId + "_switch" + suffix + "_events", buttonEvent(name + " Events", eventTopic));
-            }
+            String eventTopic = parseTopic(MQTT_TOPIC_BUTTON_STATE) + "/" + (100 + num);
+            put(components, mode == SW_INPUT_MODE_BUTTON, clientId + "_switch" + suffix + "_events",
+                    buttonEvent(name + " Events", eventTopic));
         }
     }
 
@@ -160,6 +161,11 @@ class MqttDiscoveryConfigBuilder {
         dimmer.put("brightness_scale", 100);
         dimmer.put("on_command_type", "brightness");
         add(components, clientId + "_dimmer", dimmer);
+
+        String power = parseTopic(MQTT_TOPIC_DIMMER_POWER);
+        add(components, clientId + "_dimmer_power", jsonSensor("Dimmer Power", power, "power", "power", "W"));
+        add(components, clientId + "_dimmer_voltage", jsonSensor("Dimmer Voltage", power, "voltage", "voltage", "V"));
+        add(components, clientId + "_dimmer_current", jsonSensor("Dimmer Current", power, "current", "current", "A"));
     }
 
     private void addScreenBrightnessComponent(JSONObject components) throws JSONException {
@@ -222,11 +228,9 @@ class MqttDiscoveryConfigBuilder {
         }
     }
 
-    // voice entities only exist while a voice transport is enabled in settings
+    // voice entities only exist while voice is enabled in settings
     private void addVoiceComponents(JSONObject components) throws JSONException {
         boolean enabled = prefs.getBoolean(SP_HA_VOICE_ENABLED, false);
-        Log.d(TAG, "addVoiceComponents: enabled=" + enabled);
-        if (!enabled) return;
 
         JSONObject status = component("sensor", "Voice Assistant");
         status.put("state_topic", parseTopic(MQTT_TOPIC_VOICE_STATUS));
@@ -237,22 +241,108 @@ class MqttDiscoveryConfigBuilder {
                 .put(VOICE_STATUS_LISTENING)
                 .put(VOICE_STATUS_ANSWERING));
         status.put("icon", "mdi:microphone-message");
-        add(components, clientId + "_voice_status", status);
+        put(components, enabled, clientId + "_voice_status", status);
 
         JSONObject mute = onOffSwitch("Voice Assistant Mute", MQTT_TOPIC_VOICE_MUTE_STATE, MQTT_TOPIC_VOICE_MUTE_COMMAND);
         mute.put("icon", "mdi:microphone-off");
-        add(components, clientId + "_voice_mute", mute);
+        put(components, enabled, clientId + "_voice_mute", mute);
 
         JSONObject trigger = component("button", "Voice Assistant Listen");
         trigger.put("command_topic", parseTopic(MQTT_TOPIC_VOICE_TRIGGER));
         trigger.put("icon", "mdi:microphone");
-        add(components, clientId + "_voice_trigger", trigger);
+        put(components, enabled, clientId + "_voice_trigger", trigger);
+    }
+
+    private void addSpeakerComponents(JSONObject components) throws JSONException {
+        boolean on = prefs.getBoolean(SP_HA_VOICE_ENABLED, false) && prefs.getBoolean(SP_SPEAKER_ID_ENABLED, false);
+        String state = parseTopic(MQTT_TOPIC_STATE);
+        JSONObject last = component("sensor", "Last Speaker");
+        last.put("state_topic", state);
+        last.put("value_template", "{{ value_json['speaker.last'] }}");
+        last.put("json_attributes_topic", state);
+        last.put("json_attributes_template", "{{ {'speaker_id': value_json['speaker.last_id'], "
+                + "'person': value_json['speaker.person'], 'score': value_json['speaker.score']} | tojson }}");
+        last.put("icon", "mdi:account-voice");
+        put(components, on, clientId + "_last_speaker", last);
+
+        JSONObject score = component("sensor", "Speaker Confidence");
+        score.put("state_topic", state);
+        score.put("value_template", "{{ (value_json['speaker.score'] * 100) | round "
+                + "if value_json['speaker.score'] is not none else None }}");
+        score.put("unit_of_measurement", "%");
+        score.put("entity_category", "diagnostic");
+        put(components, on, clientId + "_speaker_confidence", score);
+
+        JSONObject event = component("event", "Speaker");
+        event.put("state_topic", parseTopic(MQTT_TOPIC_SPEAKER_EVENT));
+        event.put("event_types", new JSONArray().put("identified").put("unknown"));
+        put(components, on, clientId + "_speaker", event);
+
+        // a name creates the speaker and starts the recording on the display
+        JSONObject enroll = component("text", "Enroll Speaker");
+        enroll.put("command_topic", parseTopic(MQTT_TOPIC_COMMAND) + "/speaker.enroll.start");
+        enroll.put("command_template", "{\"name\": {{ value | tojson }}}");
+        enroll.put("icon", "mdi:account-plus");
+        put(components, on, clientId + "_speaker_enroll", enroll);
+        put(components, on, clientId + "_speaker_enroll_cancel", command("Cancel Speaker Enrollment", "speaker.enroll.cancel", null));
+    }
+
+    // entities that read the json state topic or run a command through cmd/<action>
+    private void addStateComponents(JSONObject components) throws JSONException {
+        String state = parseTopic(MQTT_TOPIC_STATE);
+        if (device.hasProximitySensor) {
+            JSONObject presence = component("binary_sensor", "Presence");
+            presence.put("state_topic", state);
+            presence.put("value_template", "{{ 'ON' if value_json.presence else 'OFF' }}");
+            presence.put("device_class", "occupancy");
+            add(components, clientId + "_presence", presence);
+        }
+        add(components, clientId + "_wifi_rssi", diagnostic(stateSensor("Wi-Fi Signal", "wifi.rssi", "signal_strength", "dBm")));
+        add(components, clientId + "_memory_free", diagnostic(stateSensor("Free Memory", "memory.free", "data_size", "MB")));
+        add(components, clientId + "_cpu_temperature", diagnostic(stateSensor("CPU Temperature", "cpu.temperature", "temperature", "°C")));
+        add(components, clientId + "_uptime", diagnostic(stateSensor("Uptime", "uptime", "duration", "s")));
+
+        if (DeviceCapabilities.hasLightSensor(mApplicationContext)) {
+            JSONObject auto = component("switch", "Automatic Brightness");
+            auto.put("state_topic", state);
+            auto.put("value_template", "{{ 'ON' if value_json['screen.auto_brightness'] else 'OFF' }}");
+            auto.put("command_topic", parseTopic(MQTT_TOPIC_COMMAND) + "/screen.set");
+            auto.put("payload_on", "{\"auto\": true}");
+            auto.put("payload_off", "{\"auto\": false}");
+            auto.put("state_on", "ON");
+            auto.put("state_off", "OFF");
+            auto.put("icon", "mdi:brightness-auto");
+            add(components, clientId + "_auto_brightness", auto);
+        }
+
+        JSONObject page = component("text", "Dashboard Page");
+        page.put("state_topic", state);
+        page.put("value_template", "{{ value_json['webview.url'] }}");
+        page.put("command_topic", parseTopic(MQTT_TOPIC_COMMAND) + "/webview.navigate");
+        page.put("command_template", "{\"url\": {{ value | tojson }}}");
+        page.put("max", 255);
+        page.put("icon", "mdi:web");
+        add(components, clientId + "_dashboard_page", page);
+
+        JSONObject notify = component("notify", "Notification");
+        notify.put("command_topic", parseTopic(MQTT_TOPIC_COMMAND) + "/ui.notify");
+        notify.put("command_template", "{\"message\": {{ value | tojson }}}");
+        add(components, clientId + "_notify", notify);
+
+        add(components, clientId + "_restart_app", command("Restart App", "app.restart", "restart"));
     }
 
     private void addNightModeComponent(JSONObject components) throws JSONException {
         JSONObject nightMode = onOffSwitch("Night Mode", MQTT_TOPIC_NIGHT_MODE_STATE, MQTT_TOPIC_NIGHT_MODE_COMMAND);
         nightMode.put("icon", "mdi:weather-night");
         add(components, clientId + "_night_mode", nightMode);
+    }
+
+    // a feature switched off in the settings is sent as a bare platform so ha removes its entity
+    // hardware that was not detected this time is just left out so its entity survives
+    private static void put(JSONObject components, boolean on, String uniqueId, JSONObject component) throws JSONException {
+        if (on) add(components, uniqueId, component);
+        else components.put(uniqueId, new JSONObject().put("p", component.getString("p")));
     }
 
     // every component is keyed by its unique id and gets the matching object id
@@ -275,6 +365,36 @@ class MqttDiscoveryConfigBuilder {
         s.put("device_class", deviceClass);
         s.put("unit_of_measurement", unit);
         return s;
+    }
+
+    private JSONObject stateSensor(String name, String key, String deviceClass, String unit) throws JSONException {
+        return jsonSensor(name, parseTopic(MQTT_TOPIC_STATE), key, deviceClass, unit);
+    }
+
+    private static JSONObject jsonSensor(String name, String topic, String key, String deviceClass, String unit)
+            throws JSONException {
+        JSONObject s = component("sensor", name);
+        s.put("state_topic", topic);
+        s.put("value_template", "{{ value_json['" + key + "'] }}");
+        s.put("device_class", deviceClass);
+        s.put("unit_of_measurement", unit);
+        s.put("state_class", "measurement");
+        return s;
+    }
+
+    private static JSONObject diagnostic(JSONObject component) throws JSONException {
+        component.put("entity_category", "diagnostic");
+        component.put("enabled_by_default", false);
+        return component;
+    }
+
+    // a button that runs a protocol v1 command
+    private JSONObject command(String name, String action, String deviceClass) throws JSONException {
+        JSONObject b = component("button", name);
+        b.put("command_topic", parseTopic(MQTT_TOPIC_COMMAND) + "/" + action);
+        b.put("payload_press", "{}");
+        if (deviceClass != null) b.put("device_class", deviceClass);
+        return b;
     }
 
     private JSONObject onOffSwitch(String name, String stateTopic, String commandTopic) throws JSONException {

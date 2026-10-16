@@ -39,14 +39,14 @@ import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 
 // the commands of protocol-v1 section 6 that map onto existing managers
 // voice and media register their own commands
-final class CoreCommands {
+public final class CoreCommands {
     private static final String TAG = "ApiCommands";
     // ScreenManager animates on the main looper
     private static final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private CoreCommands() {}
 
-    static void register() {
+    public static void register() {
         ApiHub.registerCommand("relay.set", CoreCommands::relaySet);
         ApiHub.registerCommand("dimmer.set", CoreCommands::dimmerSet);
         ApiHub.registerCommand("screen.wake", p -> {
@@ -205,7 +205,7 @@ final class CoreCommands {
         }, "ApiRestart").start();
     }
 
-    private static JSONObject appUpdate(JSONObject p) throws ApiHub.CommandException {
+    private static JSONObject appUpdate(JSONObject p) throws ApiHub.CommandException, JSONException {
         String url = p.optString("url", "");
         String version = p.optString("version", "");
         if (url.isEmpty() || version.isEmpty()) throw ApiHub.CommandException.invalid("url and version required");
@@ -227,11 +227,7 @@ final class CoreCommands {
                     }
                     @Override public void onCancelled() {}
                 });
-        try {
-            return new JSONObject().put("started", true);
-        } catch (JSONException e) {
-            return null;
-        }
+        return new JSONObject().put("started", true);
     }
 
     private static void requireWebview() throws ApiHub.CommandException {

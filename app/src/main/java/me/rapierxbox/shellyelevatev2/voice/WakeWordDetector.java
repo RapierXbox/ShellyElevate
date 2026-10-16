@@ -4,9 +4,7 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.media.AudioFormat;
 import android.media.AudioRecord;
-import android.media.MediaRecorder;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -34,12 +32,10 @@ import me.rapierxbox.shellyelevatev2.Constants;
 public class WakeWordDetector {
     private static final String TAG = "WakeWordDetector";
 
-    private static final int SAMPLE_RATE = NativeMelExtractor.SAMPLE_RATE;
-    private static final int CHANNEL_CFG = AudioFormat.CHANNEL_IN_MONO;
-    private static final int AUDIO_FMT = AudioFormat.ENCODING_PCM_16BIT;
     // 100 ms which is 10 mel hops
     private static final int CHUNK_BYTES = NativeMelExtractor.HOP_SAMPLES * 2 * 10;
     private static final long SHUTDOWN_TIMEOUT_MS = 1_000L;
+    private static final int PRE_ROLL_BYTES = 2 * NativeMelExtractor.SAMPLE_RATE * 2;
     private static final long SCORE_BROADCAST_INTERVAL_MS = 50L;
     private static final int MIN_SLICES_BEFORE_DETECTION = 100;
 
@@ -76,6 +72,8 @@ public class WakeWordDetector {
     private volatile long cooldownMs = 5_000L;
     private volatile boolean scoreBroadcastEnabled = false;
     private volatile boolean lowPowerMode = false;
+    // raw pcm before a wake for whoever wants the wake phrase. null keeps none
+    private volatile PcmRing preRoll;
 
     // wake model state
     private StreamingModel wakeModel;
@@ -224,6 +222,19 @@ public class WakeWordDetector {
         lowPowerMode = low;
     }
 
+    // keeps the last 2 s of the mic for whoever wants the wake phrase itself
+    public void setPreRoll(boolean keep) {
+        if (!keep) preRoll = null;
+        else if (preRoll == null) preRoll = new PcmRing(PRE_ROLL_BYTES);
+    }
+
+    // only valid inside onWakeDetected which runs on the listen thread
+    public byte[] takePreRoll() {
+        PcmRing ring = preRoll;
+        if (ring == null) return null;
+        return ring.snapshot();
+    }
+
     public void start() {
         if (modelStatus != ModelStatus.LOADED) {
             Log.w(TAG, "can't start: model not loaded (" + modelStatus + ")");
@@ -320,22 +331,17 @@ public class WakeWordDetector {
                 return;
             }
 
-            int minBuf = AudioRecord.getMinBufferSize(SAMPLE_RATE, CHANNEL_CFG, AUDIO_FMT);
-            if (minBuf == AudioRecord.ERROR_BAD_VALUE) {
-                Log.e(TAG, "audio input not supported by hardware (rate=" + SAMPLE_RATE + ")");
-                return;
-            }
-            int bufSize = Math.max(minBuf > 0 ? minBuf : CHUNK_BYTES, CHUNK_BYTES * 4);
-
-            recorder = new AudioRecord(MediaRecorder.AudioSource.MIC, SAMPLE_RATE, CHANNEL_CFG, AUDIO_FMT, bufSize);
-            if (recorder.getState() != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord init failed (state=" + recorder.getState() + ")");
+            recorder = Mic.open(CHUNK_BYTES);
+            if (recorder == null) {
+                Log.e(TAG, "AudioRecord init failed");
                 return;
             }
 
             activeRecorder.set(recorder);
             recorder.startRecording();
             if (!prepareSession()) return;
+            PcmRing stale = preRoll;
+            if (stale != null) stale.clear();
 
             FeatureFrontend frontend = new NativeFeatureFrontend();
             byte[] buf = new byte[CHUNK_BYTES];
@@ -352,6 +358,8 @@ public class WakeWordDetector {
                         break;
                     }
                     if (read == 0) continue;
+                    PcmRing ring = preRoll;
+                    if (ring != null) ring.write(buf, read);
 
                     boolean wake;
                     synchronized (this) {
@@ -540,7 +548,7 @@ public class WakeWordDetector {
         return vadDetected;
     }
 
-    static float calculateRms(byte[] buf, int length) {
+    public static float calculateRms(byte[] buf, int length) {
         long sum = 0;
         int samples = length / 2;
         for (int i = 0; i < length - 1; i += 2) {

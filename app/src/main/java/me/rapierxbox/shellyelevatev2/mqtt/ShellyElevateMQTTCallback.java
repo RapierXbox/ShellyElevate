@@ -13,9 +13,14 @@ import android.util.Log;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import org.eclipse.paho.mqttv5.common.MqttMessage;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
+import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.helper.RebootHelper;
 
 // dispatches inbound command topics to the matching device helper
@@ -23,6 +28,7 @@ public class ShellyElevateMQTTCallback {
     private static final String TAG = "MQTTCallback";
 
     private final MQTTServer server;
+    private final ExecutorService commands = Executors.newSingleThreadExecutor(r -> new Thread(r, "MqttCommands"));
 
     ShellyElevateMQTTCallback(MQTTServer server) {
         this.server = server;
@@ -43,7 +49,27 @@ public class ShellyElevateMQTTCallback {
         }
 
         String payload = new String(message.getPayload(), StandardCharsets.UTF_8);
-        switch (topicPattern(topic, server.getClientId())) {
+        String pattern = topicPattern(topic, server.getClientId());
+        // a retained command would run again on every reconnect
+        if (message.isRetained() && !MQTT_TOPIC_HOME_ASSISTANT_STATUS.equals(pattern)) {
+            Log.w(TAG, "Ignoring retained command on " + topic);
+            return;
+        }
+        String commandPrefix = MQTT_TOPIC_COMMAND + "/";
+        if (pattern.startsWith(commandPrefix)) {
+            runCommand(topic, pattern.substring(commandPrefix.length()), payload);
+            return;
+        }
+        String relayPrefix = MQTT_TOPIC_RELAY_COMMAND + "_";
+        if (pattern.startsWith(relayPrefix)) {
+            try {
+                mDeviceHelper.setRelay(Integer.parseInt(pattern.substring(relayPrefix.length())), payload.contains("ON"));
+            } catch (NumberFormatException e) {
+                Log.w(TAG, "Ignoring relay command on " + topic);
+            }
+            return;
+        }
+        switch (pattern) {
             case MQTT_TOPIC_UPDATE:
                 server.publishStatus();
                 break;
@@ -54,12 +80,8 @@ public class ShellyElevateMQTTCallback {
                     server.publishStatus();
                 }
                 break;
-            // todo match the relay index generically instead of one case per channel
             case MQTT_TOPIC_RELAY_COMMAND:
                 mDeviceHelper.setRelay(0, payload.contains("ON"));
-                break;
-            case MQTT_TOPIC_RELAY_COMMAND + "_1":
-                mDeviceHelper.setRelay(1, payload.contains("ON"));
                 break;
             case MQTT_TOPIC_REFRESH_WEBVIEW_BUTTON:
                 LocalBroadcastManager.getInstance(mApplicationContext)
@@ -96,6 +118,28 @@ public class ShellyElevateMQTTCallback {
             default:
                 break;
         }
+    }
+
+    // runs off the paho thread and answers on <topic>/result
+    private void runCommand(String topic, String action, String payload) {
+        commands.execute(() -> {
+            JSONObject result = new JSONObject();
+            try {
+                // installing apps and handing out dashboard logins stay with the paired integration
+                if (action.equals("app.update") || action.startsWith("ha_login.")) {
+                    throw ApiHub.CommandException.unsupported(action + " is not available over mqtt");
+                }
+                JSONObject data = ApiHub.run(action, payload.trim().isEmpty() ? new JSONObject() : new JSONObject(payload));
+                result.put("ok", true).put("data", data != null ? data : JSONObject.NULL);
+            } catch (JSONException | ApiHub.CommandException e) {
+                Log.w(TAG, "Command " + action + " failed: " + e.getMessage());
+                try {
+                    result.put("ok", false).put("error", String.valueOf(e.getMessage()));
+                } catch (JSONException ignored) {
+                }
+            }
+            server.publishInternal(topic + "/result", result.toString(), 1, false);
+        });
     }
 
     private void handleReboot() {

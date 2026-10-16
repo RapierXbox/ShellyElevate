@@ -19,7 +19,7 @@ public final class ApiHub {
     // runs a v1 command and returns its data object or null for none
     // called on a server thread so handlers post to the main thread themselves when needed
     public interface CommandHandler {
-        JSONObject handle(JSONObject params) throws CommandException;
+        JSONObject handle(JSONObject params) throws CommandException, JSONException;
     }
 
     // adds flat state keys from protocol-v1 section 5 to a snapshot
@@ -59,7 +59,7 @@ public final class ApiHub {
     private static final CopyOnWriteArrayList<StateProvider> stateProviders = new CopyOnWriteArrayList<>();
     private static final CopyOnWriteArrayList<ControllerListener> controllerListeners = new CopyOnWriteArrayList<>();
     private static volatile Sink sink;
-    private static volatile Runnable stateChangedHook;
+    private static final CopyOnWriteArrayList<Runnable> stateListeners = new CopyOnWriteArrayList<>();
 
     public static void registerCommand(String action, CommandHandler handler) {
         commands.put(action, handler);
@@ -69,8 +69,16 @@ public final class ApiHub {
         commands.remove(action, handler);
     }
 
-    public static CommandHandler command(String action) {
-        return commands.get(action);
+    // runs a command for any transport. a crash in a handler becomes an internal error
+    public static JSONObject run(String action, JSONObject params) throws CommandException {
+        CommandHandler handler = commands.get(action);
+        if (handler == null) throw new CommandException("unknown_action", "unknown action " + action);
+        try {
+            return handler.handle(params);
+        } catch (JSONException | RuntimeException e) {
+            Log.e(TAG, "Command " + action + " failed", e);
+            throw new CommandException("internal", e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
     }
 
     public static void addStateProvider(StateProvider provider) {
@@ -137,18 +145,21 @@ public final class ApiHub {
         }
     }
 
-    // tells the state hub that something changed so it diffs and pushes a state_delta
+    // something in the section 5 state changed. the listeners debounce it themselves
     public static void stateChanged() {
-        Runnable hook = stateChangedHook;
-        if (hook != null) hook.run();
+        for (Runnable listener : stateListeners) listener.run();
+    }
+
+    public static void addStateListener(Runnable listener) {
+        stateListeners.addIfAbsent(listener);
+    }
+
+    public static void removeStateListener(Runnable listener) {
+        stateListeners.remove(listener);
     }
 
     static void setSink(Sink newSink) {
         sink = newSink;
-    }
-
-    static void setStateChangedHook(Runnable hook) {
-        stateChangedHook = hook;
     }
 
     static void notifyControllerChanged(boolean connected) {

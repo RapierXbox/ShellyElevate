@@ -80,7 +80,6 @@ public final class ApiManager {
     }
 
     private void startInternal() {
-        CoreCommands.register();
         HaLoginCommands.register(context);
         stateHub.start();
         tokens.addListener(clientsListener);

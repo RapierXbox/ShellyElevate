@@ -217,23 +217,10 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
         String action = request.optString("action", "");
         JSONObject params = request.optJSONObject("params");
         try {
-            JSONObject data = runCommand(action, params != null ? params : new JSONObject());
+            JSONObject data = ApiHub.run(action, params != null ? params : new JSONObject());
             return json(Status.OK, new JSONObject().put("success", true).put("data", data != null ? data : new JSONObject()));
         } catch (ApiHub.CommandException e) {
             return error(statusFor(e.code), e.code, e.getMessage());
-        }
-    }
-
-    static JSONObject runCommand(String action, JSONObject params) throws ApiHub.CommandException {
-        ApiHub.CommandHandler handler = ApiHub.command(action);
-        if (handler == null) throw new ApiHub.CommandException("unknown_action", "unknown action " + action);
-        try {
-            return handler.handle(params);
-        } catch (ApiHub.CommandException e) {
-            throw e;
-        } catch (RuntimeException e) {
-            Log.e(TAG, "Command " + action + " failed", e);
-            throw new ApiHub.CommandException("internal", e.getClass().getSimpleName() + ": " + e.getMessage());
         }
     }
 
@@ -482,7 +469,7 @@ final class ApiServer extends NanoWSD implements ApiHub.Sink {
 
         private void runAndReply(int id, String action, JSONObject params) {
             try {
-                reply(id, runCommand(action, params), null);
+                reply(id, ApiHub.run(action, params), null);
             } catch (ApiHub.CommandException e) {
                 reply(id, null, e);
             }

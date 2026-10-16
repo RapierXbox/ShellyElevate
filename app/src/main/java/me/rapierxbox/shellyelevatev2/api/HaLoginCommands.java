@@ -46,22 +46,17 @@ final class HaLoginCommands {
     }
 
     // the controller reads the origin here and makes the token for it
-    private static JSONObject status(HaLoginStore store) throws ApiHub.CommandException {
+    private static JSONObject status(HaLoginStore store) throws JSONException {
         String dashboard = ServiceHelper.getWebviewUrl();
         String origin = HaLoginRules.originOf(dashboard);
-        try {
-            JSONObject out = new JSONObject();
-            out.put("state", store.state(dashboard));
-            out.put("user", store.userName() != null ? store.userName() : JSONObject.NULL);
-            out.put("origin", origin != null ? origin : JSONObject.NULL);
-            out.put("client_id", origin != null ? HaLoginRules.clientIdFor(origin) : JSONObject.NULL);
-            return out;
-        } catch (JSONException e) {
-            throw new ApiHub.CommandException("internal", "could not build the status");
-        }
+        return new JSONObject()
+                .put("state", store.state(dashboard))
+                .put("user", store.userName() != null ? store.userName() : JSONObject.NULL)
+                .put("origin", origin != null ? origin : JSONObject.NULL)
+                .put("client_id", origin != null ? HaLoginRules.clientIdFor(origin) : JSONObject.NULL);
     }
 
-    private static JSONObject set(Context app, HaLoginStore store, JSONObject p) throws ApiHub.CommandException {
+    private static JSONObject set(Context app, HaLoginStore store, JSONObject p) throws ApiHub.CommandException, JSONException {
         String origin = p.optString("origin", "");
         String clientId = p.optString("client_id", "");
         String token = p.optString("refresh_token", "");

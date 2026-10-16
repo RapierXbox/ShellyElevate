@@ -41,6 +41,7 @@ import me.rapierxbox.shellyelevatev2.Constants;
 import me.rapierxbox.shellyelevatev2.display.DisplayModule;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.display.options.ModuleOption;
+import me.rapierxbox.shellyelevatev2.voice.speaker.SpeakerModels;
 
 // every user setting the app keeps in the ShellyElevateV2 prefs with its type and default
 // defaults match what the runtime reads so the v1 schema never lies about an unset key
@@ -230,6 +231,20 @@ public final class SettingsRegistry {
                 .visibleIf(voiceOn, wakeOn));
         add(m, bool(Constants.SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false, CATEGORY_VOICE, "Experimental wake words")
                 .visibleIf(voiceOn, wakeOn));
+        add(m, bool(Constants.SP_SPEAKER_ID_ENABLED, false, CATEGORY_VOICE, "Speaker recognition")
+                .description("Recognise who speaks from the wake word and the command").visibleIf(voiceOn));
+        SettingDef.Condition speakerOn = eq(Constants.SP_SPEAKER_ID_ENABLED, true);
+        add(m, new SettingDef.Builder(Constants.SP_SPEAKER_ID_MODEL, TYPE_ENUM, SpeakerModels.DEFAULT,
+                CATEGORY_VOICE, "Speaker model").options(Arrays.asList(
+                        new SettingDef.Option("b0", "Fast (ReDimNet2 B0)"),
+                        new SettingDef.Option("b2", "Balanced (ReDimNet2 B2)"),
+                        new SettingDef.Option("b3", "Accurate (ReDimNet2 B3)")))
+                .visibleIf(voiceOn, speakerOn));
+        add(m, integer(Constants.SP_SPEAKER_ID_STRICTNESS, 50, CATEGORY_VOICE, "Speaker strictness")
+                .range(0, 100).description("Higher needs a closer match before a speaker is named")
+                .visibleIf(voiceOn, speakerOn));
+        add(m, bool(Constants.SP_SPEAKER_ID_LEARN, true, CATEGORY_VOICE, "Learn voices from use")
+                .description("Adds very confident matches as extra samples").visibleIf(voiceOn, speakerOn));
 
         // bluetooth
         add(m, bool(Constants.SP_BLE_SCANNER_ENABLED, false, CATEGORY_BLUETOOTH, "Bluetooth proxy via Home Assistant integration")
