@@ -65,6 +65,7 @@ import me.rapierxbox.shellyelevatev2.helper.ScreenManager.DEFAULT_BRIGHTNESS
 import me.rapierxbox.shellyelevatev2.helper.ScreenManager.MIN_BRIGHTNESS_DEFAULT
 import me.rapierxbox.shellyelevatev2.helper.AdbHelper
 import me.rapierxbox.shellyelevatev2.helper.AppUpdater
+import me.rapierxbox.shellyelevatev2.helper.AudioOutput
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader
 import me.rapierxbox.shellyelevatev2.helper.PrivAppInstaller
 import me.rapierxbox.shellyelevatev2.helper.RebootHelper
@@ -626,8 +627,23 @@ class SettingsFragment : Fragment() {
             getString(R.string.speaker_id_model_fast),
             getString(R.string.speaker_id_model_balanced),
             getString(R.string.speaker_id_model_accurate)))
+        b.audioOutput.adapter = spinnerAdapter(listOf(
+            getString(R.string.audio_output_auto),
+            getString(R.string.audio_output_builtin),
+            getString(R.string.audio_output_split)))
         AdvancedSection.bind(b.voiceAdvancedHeader.root, b.voiceAdvanced)
         bindPage {
+            +SpinnerIdPref(b.audioOutput, SP_AUDIO_OUTPUT,
+                listOf(AudioOutput.OUTPUT_AUTO, AudioOutput.OUTPUT_BUILTIN, AudioOutput.OUTPUT_SPLIT),
+                AudioOutput.OUTPUT_AUTO)
+            parent(b.audioOutput)
+            // the split block shares the rule of the announcement level
+            row(SP_ANNOUNCE_VOLUME, b.splitOutputLayout)
+            +SliderPref(b.announceVolume, SP_ANNOUNCE_VOLUME, 100, b.announceVolumeValue,
+                { getString(R.string.percent, it) })
+            row(SP_VOICE_REPLY_VOLUME, b.voiceReplyVolumeLayout)
+            +SliderPref(b.voiceReplyVolume, SP_VOICE_REPLY_VOLUME, 100, b.voiceReplyVolumeValue,
+                { getString(R.string.percent, it) })
             +SwitchPref(b.mediaEnabled, SP_MEDIA_ENABLED, false)
 
             +SwitchPref(b.haVoiceEnabled, SP_HA_VOICE_ENABLED, false)

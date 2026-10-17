@@ -72,6 +72,14 @@
     <string name="wifi_ip_error_dns">Enter a valid DNS server address</string>
     <string name="brightness">Brightness</string>
     <string name="volume">Volume</string>
+    <string name="audio_output">Audio output</string>
+    <string name="audio_output_auto">Automatic</string>
+    <string name="audio_output_builtin">Built-in speaker</string>
+    <string name="audio_output_split">Bluetooth for music only</string>
+    <string name="audio_output_hint">Automatic uses a connected Bluetooth speaker, otherwise the built-in speaker. Bluetooth for music only plays music on the Bluetooth speaker and keeps announcements and voice on the built-in speaker</string>
+    <string name="split_output_hint">Volume above sets the music. Announcements and voice replies play on the built-in speaker at their own level</string>
+    <string name="announce_volume">Announcements</string>
+    <string name="voice_reply_volume">Voice replies</string>
     <string name="mqtt">MQTT</string>
     <string name="broker_address">Broker address</string>
     <string name="device_name">Device name</string>
