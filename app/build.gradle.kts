@@ -38,8 +38,9 @@ android {
         versionCode = buildVersionCode
         versionName = buildVersionName
 
-        // the wall display is armeabi-v7a and arm64 devices can run it too
-        ndk { abiFilters += "armeabi-v7a" }
+        // 32-bit for the wall displays that are armeabi-v7a, and 64-bit for the ones whose system webview is arm64 only (the X2i):
+        // a 32-bit app cannot load a 64-bit webview library, so it crashes as soon as it makes its first web view
+        ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a") }
         externalNativeBuild {
             cmake { cppFlags("-std=c++17") }
         }
