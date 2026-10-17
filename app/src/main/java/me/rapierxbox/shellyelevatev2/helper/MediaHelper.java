@@ -350,10 +350,10 @@ public class MediaHelper {
         try {
             player.reset();
             player.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            AudioOutput.routeMusic(player);
             // repeat one loops in the player so a loop needs no new prepare or download
             player.setLooping(queue.getRepeat() == MediaQueue.Repeat.ONE);
             player.setDataSource(mApplicationContext, Uri.parse(MediaUrls.forPlayback(track.url)));
+            AudioOutput.routeMusic(player);
             applyGain();
             player.prepareAsync();
             setState(State.BUFFERING);
@@ -489,9 +489,9 @@ public class MediaHelper {
         announcePlayer = player;
         try {
             player.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            AudioOutput.routeAnnounce(player);
             player.setLooping(false);
             player.setDataSource(mApplicationContext, Uri.parse(MediaUrls.forPlayback(url)));
+            AudioOutput.routeAnnounce(player);
             player.setOnPreparedListener(mp -> {
                 if (mp != announcePlayer) return;
                 float gain = muted ? 0f : AudioOutput.announceGain();

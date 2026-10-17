@@ -933,7 +933,6 @@ public class VoiceEngine {
         MediaPlayer player = new MediaPlayer();
         ttsPlayer = player;
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
-        AudioOutput.applyVoice(player);
         // stagefright retries an unreachable url for half a minute while the wake word stays off
         Runnable giveUp = () -> {
             if (ttsPlayer != player) return;
@@ -942,6 +941,7 @@ public class VoiceEngine {
         };
         try {
             player.setDataSource(MediaUrls.forPlayback(url));
+            AudioOutput.applyVoice(player);
             player.setOnPreparedListener(mp -> {
                 mainHandler.removeCallbacks(giveUp);
                 mp.start();

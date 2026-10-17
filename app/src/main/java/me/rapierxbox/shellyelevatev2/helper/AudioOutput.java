@@ -56,6 +56,7 @@ public final class AudioOutput {
     }
 
     // null hands a reused player back to the system
+    // call after setDataSource. before it the native player does not exist yet and android drops the device
     private static void route(MediaPlayer player, boolean builtIn) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return;
         player.setPreferredDevice(builtIn ? builtInSpeaker() : null);
