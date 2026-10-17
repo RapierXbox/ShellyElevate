@@ -30,7 +30,9 @@ import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -100,6 +102,7 @@ public final class CoreCommands {
         });
         ApiHub.registerCommand("app.update", CoreCommands::appUpdate);
         ApiHub.registerCommand("settings.file", CoreCommands::settingsFile);
+        ApiHub.registerCommand("settings.file_read", CoreCommands::settingsFileRead);
     }
 
     private static JSONObject relaySet(JSONObject p) throws ApiHub.CommandException {
@@ -252,6 +255,25 @@ public final class CoreCommands {
         SettingsParser.dispatchChanges(new JSONObject().put(key, name));
         LocalBroadcastManager.getInstance(mApplicationContext).sendBroadcast(new Intent(INTENT_SETTINGS_CHANGED));
         return new JSONObject().put("name", name);
+    }
+
+    // the uploaded file of a file setting so a profile can take it along, data_b64 null when there is none
+    private static JSONObject settingsFileRead(JSONObject p) throws ApiHub.CommandException, JSONException {
+        String key = p.optString("key");
+        SettingDef def = SettingsRegistry.get(key);
+        if (def == null || def.accept == null) throw ApiHub.CommandException.invalid("no file setting " + key);
+        File file = SettingsRegistry.uploadFile(mApplicationContext, key);
+        JSONObject out = new JSONObject().put("name", mSharedPreferences.getString(key, ""));
+        if (!file.isFile() || file.length() > MAX_UPLOAD_BYTES) return out.put("data_b64", JSONObject.NULL);
+        try (FileInputStream in = new FileInputStream(file)) {
+            ByteArrayOutputStream data = new ByteArrayOutputStream((int) file.length());
+            byte[] buffer = new byte[16384];
+            int n;
+            while ((n = in.read(buffer)) > 0) data.write(buffer, 0, n);
+            return out.put("data_b64", Base64.encodeToString(data.toByteArray(), Base64.NO_WRAP));
+        } catch (IOException e) {
+            throw new ApiHub.CommandException("internal", e.getMessage());
+        }
     }
 
     private static JSONObject appUpdate(JSONObject p) throws ApiHub.CommandException, JSONException {
