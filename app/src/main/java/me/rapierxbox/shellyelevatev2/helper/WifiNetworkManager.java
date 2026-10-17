@@ -50,6 +50,8 @@ public final class WifiNetworkManager {
     public static final int FAIL_AUTH = 1;
     public static final int FAIL_TIMEOUT = 2;
     public static final int FAIL_ERROR = 3;
+    // a saved network with that name and security exists and is only changed after forgetting it
+    public static final int FAIL_ALREADY_SAVED = 4;
 
     public enum Security { OPEN, WEP, PSK, EAP, UNSUPPORTED }
 
@@ -285,11 +287,23 @@ public final class WifiNetworkManager {
         Attempt a = begin(ssid, listener);
         WifiConfiguration config = buildConfig(ssid, security, password, hidden);
         WORKER.execute(() -> {
+            List<SavedNetwork> saved = getSavedNetworks();
+            // addNetwork would update that config in place and a typo there cannot be rolled back
+            // since the old password cannot be read. an open one has nothing to lose so it is just joined
+            SavedNetwork same = security == Security.UNSUPPORTED ? null : findSaved(saved, ssid, security);
+            if (same != null) {
+                if (security != Security.OPEN) {
+                    main.post(() -> fail(a, FAIL_ALREADY_SAVED));
+                    return;
+                }
+                a.targetNetId = same.networkId;
+                if (!enable(same.networkId)) main.post(() -> fail(a, FAIL_ERROR));
+                return;
+            }
             Set<Integer> existing = new HashSet<>();
-            for (SavedNetwork s : getSavedNetworks()) existing.add(s.networkId);
+            for (SavedNetwork s : saved) existing.add(s.networkId);
             int id;
             try {
-                // a config with the same ssid and security gets updated in place
                 id = wifi != null ? wifi.addNetwork(config) : -1;
             } catch (SecurityException e) {
                 Log.w(TAG, "add network not allowed", e);

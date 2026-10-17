@@ -3,6 +3,8 @@ package me.rapierxbox.shellyelevatev2.settings;
 import android.content.SharedPreferences;
 import android.util.Log;
 
+import java.util.Arrays;
+
 // prefs of features that were removed. cleared once so exports and the api stop showing them
 public final class RemovedSettings {
     private static final String TAG = "RemovedSettings";
@@ -18,6 +20,10 @@ public final class RemovedSettings {
     };
 
     private RemovedSettings() {}
+
+    public static boolean isRemoved(String key) {
+        return Arrays.asList(KEYS).contains(key);
+    }
 
     public static void clear(SharedPreferences prefs) {
         SharedPreferences.Editor editor = null;
@@ -36,7 +42,8 @@ public final class RemovedSettings {
 
     private static SharedPreferences.Editor carryOver(SharedPreferences prefs, SharedPreferences.Editor editor,
                                                       String removedKey, String replacementKey) {
-        if (!prefs.getBoolean(removedKey, false) || prefs.contains(replacementKey)) return editor;
+        // read untyped since older versions let the http api store any type here
+        if (!Boolean.TRUE.equals(prefs.getAll().get(removedKey)) || prefs.contains(replacementKey)) return editor;
         if (editor == null) editor = prefs.edit();
         editor.putBoolean(replacementKey, true);
         Log.i(TAG, removedKey + " was on so " + replacementKey + " is switched on");

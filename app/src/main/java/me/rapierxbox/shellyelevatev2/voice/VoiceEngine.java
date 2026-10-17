@@ -69,6 +69,8 @@ public class VoiceEngine {
     private static final long PROCESSING_TIMEOUT_SEC = 60;
     private static final long ERROR_SHOW_MS = 3_000L;
     private static final long TTS_PREPARE_TIMEOUT_MS = 15_000L;
+    // a stream whose position stops moving this long is treated as finished
+    private static final long TTS_STALL_MS = 20_000L;
     // the wake tone is 0.8 s plus room echo and the speaker sits next to the mic
     private static final long WAKE_TONE_GUARD_MS = 1_000L;
     private static final int MIC_PERMISSION_REQUEST = 4712;
@@ -415,7 +417,9 @@ public class VoiceEngine {
         @Override public void onDisconnected(boolean keepIdle) {
             if (!current()) return;
             stopAudioCapture();
-            if (state == State.LISTENING || state == State.PROCESSING) onSessionEnded();
+            // responding without a started answer has nothing left that would end it
+            boolean waitingForAnswer = state == State.SPEAKING && !isPlaying();
+            if (state == State.LISTENING || state == State.PROCESSING || waitingForAnswer) onSessionEnded();
             else if (!keepIdle && state != State.SPEAKING) { state = State.DISABLED; ApiHub.stateChanged(); }
         }
 
@@ -546,6 +550,16 @@ public class VoiceEngine {
         }, PROCESSING_TIMEOUT_SEC, TimeUnit.SECONDS);
     }
 
+    // responding that never gets an answer to play frees the wake word again
+    private void scheduleAnswerTimeout(long session) {
+        scheduler.schedule(() -> {
+            if (state == State.SPEAKING && sessionId.get() == session && !isPlaying()) {
+                Log.w(TAG, "no answer to play for the session, back to idle");
+                onSessionEnded();
+            }
+        }, PROCESSING_TIMEOUT_SEC, TimeUnit.SECONDS);
+    }
+
     // ---------------------------------------------------------------- controller commands
 
     // voice.start: listen without the wake word because the controller asked
@@ -576,6 +590,7 @@ public class VoiceEngine {
                 if (state == State.LISTENING || state == State.PROCESSING) {
                     speechEnded.set(true); stopAudioCapture();
                     state = State.SPEAKING; broadcastState(state);
+                    scheduleAnswerTimeout(sessionId.get());
                 }
                 break;
             case "idle":
@@ -928,6 +943,7 @@ public class VoiceEngine {
             player.setOnPreparedListener(mp -> {
                 mainHandler.removeCallbacks(giveUp);
                 mp.start();
+                watchForStall(player, next);
             });
             player.setOnCompletionListener(mp -> { if (ttsPlayer == mp) next.run(); });
             player.setOnErrorListener((mp, what, extra) -> {
@@ -942,6 +958,34 @@ public class VoiceEngine {
             Log.e(TAG, "TTS start failed", e);
             next.run();
         }
+    }
+
+    // main thread. a hung http stream fires neither completion nor error so the session would never end
+    private void watchForStall(MediaPlayer player, Runnable next) {
+        mainHandler.postDelayed(new Runnable() {
+            private int lastPosition = -1;
+            private long lastMoveAt = SystemClock.elapsedRealtime();
+
+            @Override public void run() {
+                if (ttsPlayer != player) return;
+                int position;
+                try {
+                    position = player.getCurrentPosition();
+                } catch (IllegalStateException e) {
+                    return;
+                }
+                long now = SystemClock.elapsedRealtime();
+                if (position != lastPosition) {
+                    lastPosition = position;
+                    lastMoveAt = now;
+                } else if (now - lastMoveAt >= TTS_STALL_MS) {
+                    Log.w(TAG, "TTS stream stalled");
+                    next.run();
+                    return;
+                }
+                mainHandler.postDelayed(this, 1_000);
+            }
+        }, 1_000);
     }
 
     private void finishPlayback(Runnable onDone) {

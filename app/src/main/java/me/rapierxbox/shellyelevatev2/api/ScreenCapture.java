@@ -41,6 +41,12 @@ final class ScreenCapture {
         Bitmap bitmap = copyWindow(activity);
         if (bitmap == null) return null;
         try {
+            // a software draw of a hardware layer like the webview can come out as one flat color
+            // no png then so the controller falls back to adb screencap
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O && isFlat(bitmap)) {
+                Log.w(TAG, "Window copy is blank");
+                return null;
+            }
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
             return out.toByteArray();
@@ -128,10 +134,24 @@ final class ScreenCapture {
             }
         }
         if (!ok.get()) {
-            bitmap.recycle();
+            // after a timeout the copy may still write into it so it is left to the gc
+            if (done.getCount() == 0) bitmap.recycle();
             return null;
         }
         return bitmap;
+    }
+
+    // samples a grid since reading every pixel of a full screen is slow on these socs
+    private static boolean isFlat(Bitmap bitmap) {
+        int w = bitmap.getWidth();
+        int h = bitmap.getHeight();
+        int first = bitmap.getPixel(0, 0);
+        for (int y = 0; y < 32; y++) {
+            for (int x = 0; x < 32; x++) {
+                if (bitmap.getPixel(x * (w - 1) / 31, y * (h - 1) / 31) != first) return false;
+            }
+        }
+        return true;
     }
 
     private static boolean startsWith(byte[] data, byte[] prefix) {

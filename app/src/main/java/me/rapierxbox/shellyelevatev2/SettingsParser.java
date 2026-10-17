@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
+import me.rapierxbox.shellyelevatev2.settings.RemovedSettings;
 import me.rapierxbox.shellyelevatev2.settings.SettingDef;
 import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
 
@@ -88,7 +89,8 @@ public class SettingsParser {
             Object value = settings.get(key);
             // the v1 api id never changes once set
             if (Constants.SP_API_DEVICE_ID.equals(key)) continue;
-            if (isTrustedOnly(key)) {
+            // the app reads these with typed getters so a wrong type would crash it at every start
+            if (isTrustedOnly(key) || SettingsRegistry.isInternal(key) || RemovedSettings.isRemoved(key)) {
                 refused.put(key);
                 continue;
             }

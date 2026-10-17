@@ -15,6 +15,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import me.rapierxbox.shellyelevatev2.SettingsParser;
@@ -44,6 +45,8 @@ public final class ApiManager {
     // set once by stop so a queued start or watchdog run does nothing
     private boolean stopped = false;
     private long retryDelayS = 5;
+    // one retry chain at a time. the watchdog would otherwise start another one every period
+    private ScheduledFuture<?> pendingRetry;
 
     private ApiManager(Context context) {
         this.context = context.getApplicationContext();
@@ -88,7 +91,7 @@ public final class ApiManager {
         executor.execute(this::startServer);
         executor.scheduleWithFixedDelay(() -> {
             ApiServer s = server;
-            if (s == null || !s.isAlive()) {
+            if ((s == null || !s.isAlive()) && !retryPending()) {
                 Log.w(TAG, "v1 server not alive, restarting");
                 startServer();
             }
@@ -146,11 +149,20 @@ public final class ApiManager {
         }
     }
 
-    private void scheduleRetry() {
+    private synchronized boolean retryPending() {
+        return pendingRetry != null && !pendingRetry.isDone();
+    }
+
+    private synchronized void scheduleRetry() {
+        if (retryPending()) return;
         long delay = retryDelayS;
         retryDelayS = Math.min(retryDelayS * 2, RETRY_MAX_S);
         try {
-            executor.schedule(this::startServer, delay, TimeUnit.SECONDS);
+            pendingRetry = executor.schedule(() -> {
+                // cleared first so a failed start can schedule the next retry
+                synchronized (this) { pendingRetry = null; }
+                startServer();
+            }, delay, TimeUnit.SECONDS);
         } catch (RuntimeException ignored) {
             // shutting down
         }

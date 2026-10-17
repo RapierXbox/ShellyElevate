@@ -399,6 +399,7 @@ class WifiSettingsSection(
                 val msg = str(when (reason) {
                     WifiNetworkManager.FAIL_AUTH -> R.string.wifi_failed_auth
                     WifiNetworkManager.FAIL_TIMEOUT -> R.string.wifi_failed_timeout
+                    WifiNetworkManager.FAIL_ALREADY_SAVED -> R.string.wifi_failed_already_saved
                     else -> R.string.wifi_failed
                 }, ssid)
                 setStatus(msg)

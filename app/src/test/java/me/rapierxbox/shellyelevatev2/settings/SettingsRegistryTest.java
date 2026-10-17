@@ -139,4 +139,15 @@ public class SettingsRegistryTest {
             // ok
         }
     }
+
+    // the http write path refuses these since the app reads them with typed getters at start
+    @Test
+    public void typedBookkeepingKeysAreGuarded() {
+        assertTrue(SettingsRegistry.isInternal("homeAssistantIp"));
+        assertTrue(SettingsRegistry.isInternal("webviewUpdatePendingFrom"));
+        assertTrue(RemovedSettings.isRemoved("bluetoothProxyEnabled"));
+        assertTrue(RemovedSettings.isRemoved("voiceAssistantEnabled"));
+        assertFalse(RemovedSettings.isRemoved("bleScannerEnabled"));
+        for (String key : RemovedSettings.KEYS) assertNull(key, SettingsRegistry.get(key));
+    }
 }

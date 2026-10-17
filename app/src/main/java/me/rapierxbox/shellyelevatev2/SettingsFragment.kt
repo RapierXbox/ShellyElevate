@@ -2,6 +2,7 @@ package me.rapierxbox.shellyelevatev2
 
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
@@ -116,6 +117,9 @@ class SettingsFragment : Fragment() {
     private var displaySettings: DisplayModuleSettings? = null
     // the zone list loads in the background and must not be saved before it is there
     private var zonesLoaded = false
+    private var zoneNames: List<String> = emptyList()
+    // values of the hand bound spinners as shown. a save only writes the ones the user changed
+    private val spinnerValues = mutableMapOf<String, Any>()
     private var menuScrollY = 0
     // what the requires rules of the settings are checked against
     private var caps: Map<String, Any> = emptyMap()
@@ -142,6 +146,8 @@ class SettingsFragment : Fragment() {
         pageViews.clear()
         displaySettings = null
         zonesLoaded = false
+        zoneNames = emptyList()
+        spinnerValues.clear()
         openCategory = null
         categoryBack.isEnabled = false
         _binding = null
@@ -607,12 +613,15 @@ class SettingsFragment : Fragment() {
 
         // zone discovery walks sysfs so keep it off the main thread
         viewLifecycleOwner.lifecycleScope.launch {
-            val zoneNames = withContext(Dispatchers.IO) { ThermalZoneReader.discoverZones().map { it.type } }
+            val zones = withContext(Dispatchers.IO) { ThermalZoneReader.discoverZones().map { it.type } }
             val page = sensorsPage ?: return@launch
-            page.dynamicTempOffsetZone.adapter = spinnerAdapter(zoneNames)
-            val savedZone = mSharedPreferences.getString(SP_DYNAMIC_TEMP_OFFSET_ZONE, null)
-            val zoneIdx = zoneNames.indexOf(savedZone)
-            if (zoneIdx >= 0) page.dynamicTempOffsetZone.setSelection(zoneIdx)
+            zoneNames = zones
+            // position 0 is none which the empty default means
+            page.dynamicTempOffsetZone.adapter = spinnerAdapter(listOf(getString(R.string.thermal_zone_none)) + zones)
+            val savedZone = mSharedPreferences.getString(SP_DYNAMIC_TEMP_OFFSET_ZONE, null) ?: ""
+            page.dynamicTempOffsetZone.setSelection(zones.indexOf(savedZone) + 1)
+            // a stored zone this display does not list shows as none and stays until the user picks a zone
+            spinnerValues[SP_DYNAMIC_TEMP_OFFSET_ZONE] = if (savedZone in zones) savedZone else ""
             zonesLoaded = true
         }
         return b.root
@@ -1091,8 +1100,10 @@ class SettingsFragment : Fragment() {
         val optionCount = relayCount + 1
         b.swInputRelay.adapter = relayOptionsAdapter(relayCount)
         // stored value -1 is none position 0 then relay 0 at position 1 and so on
-        val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), 0)
+        val key = String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0)
+        val storedRelay = mSharedPreferences.getInt(key, 0)
         b.swInputRelay.setSelection((storedRelay + 1).coerceIn(0, optionCount - 1))
+        spinnerValues[key] = b.swInputRelay.selectedItemPosition - 1
     }
 
     private fun setupModelChooser(b: SettingsPageAudioBinding, wakewordsDir: File) {
@@ -1266,8 +1277,10 @@ class SettingsFragment : Fragment() {
             buttonLabels[i].text = getString(R.string.button_relay_button_label, i + 1)
             buttonSpinners[i].adapter = adapter
             // stored value -1 is none position 0 then relay 0 at position 1 and so on
-            val storedRelay = mSharedPreferences.getInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), -1)
+            val key = String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i)
+            val storedRelay = mSharedPreferences.getInt(key, -1)
             buttonSpinners[i].setSelection((storedRelay + 1).coerceIn(0, optionCount - 1))
+            spinnerValues[key] = buttonSpinners[i].selectedItemPosition - 1
         }
 
         if (buttonCount > buttonLayouts.size) {
@@ -1284,21 +1297,16 @@ class SettingsFragment : Fragment() {
 
             val sensors = sensorsPage
             if (sensors != null && zonesLoaded) {
-                putString(SP_DYNAMIC_TEMP_OFFSET_ZONE, sensors.dynamicTempOffsetZone.selectedItem?.toString() ?: "")
+                val pos = sensors.dynamicTempOffsetZone.selectedItemPosition
+                saveSpinner(this, SP_DYNAMIC_TEMP_OFFSET_ZONE, zoneNames.getOrNull(pos - 1) ?: "")
             }
 
             controlsPage?.let { c ->
-                // button-to-relay mapping
-                if (device.buttons > 0 && device.relays > 0) {
-                    val spinners = listOf(c.buttonRelayMap0, c.buttonRelayMap1, c.buttonRelayMap2, c.buttonRelayMap3)
-                    for (i in 0 until device.buttons.coerceAtMost(4))
-                        putInt(String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), spinners[i].selectedItemPosition - 1)
-                }
-
-                // sw input relay target spinner position 0 is none = -1
-                if (device.inputs > 0) {
-                    putInt(String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), c.swInputRelay.selectedItemPosition - 1)
-                }
+                // spinner position 0 is none which is stored as -1
+                val spinners = listOf(c.buttonRelayMap0, c.buttonRelayMap1, c.buttonRelayMap2, c.buttonRelayMap3)
+                for (i in spinners.indices)
+                    saveSpinner(this, String.format(Locale.US, SP_BUTTON_RELAY_MAP_FORMAT, i), spinners[i].selectedItemPosition - 1)
+                saveSpinner(this, String.format(Locale.US, SP_SW_INPUT_RELAY_MAP_FORMAT, 0), c.swInputRelay.selectedItemPosition - 1)
             }
         }
 
@@ -1308,6 +1316,18 @@ class SettingsFragment : Fragment() {
         // that receiver and crashed on rebind failures
         LocalBroadcastManager.getInstance(ShellyElevateApplication.mApplicationContext).sendBroadcast(Intent(INTENT_SETTINGS_CHANGED))
         Toast.makeText(requireContext(), getString(R.string.settings_saved), Toast.LENGTH_SHORT).show()
+    }
+
+    // only spinners that were set up are written and only after the user changed them
+    // so a value home assistant or the api wrote meanwhile is kept
+    private fun saveSpinner(editor: SharedPreferences.Editor, key: String, value: Any) {
+        val shown = spinnerValues[key] ?: return
+        if (shown == value) return
+        when (value) {
+            is Int -> editor.putInt(key, value)
+            is String -> editor.putString(key, value)
+        }
+        spinnerValues[key] = value
     }
 
     private fun getLocalIpAddress(): String? = try {

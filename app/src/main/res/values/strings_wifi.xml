@@ -64,4 +64,5 @@
     <string name="wifi_failed_auth">Wrong password for %1$s</string>
     <string name="wifi_failed_timeout">Connecting to %1$s timed out</string>
     <string name="wifi_failed">Could not connect to %1$s</string>
+    <string name="wifi_failed_already_saved">%1$s is already saved. Forget it first to change its password</string>
 </resources>

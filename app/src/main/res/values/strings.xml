@@ -186,6 +186,7 @@
     <string name="button_relay_mapping">Buttons switch relays</string>
     <string name="button_relay_button_label">Button %1$d</string>
     <string name="button_relay_none">None</string>
+    <string name="thermal_zone_none">None</string>
     <string name="button_relay_relay_label">Relay %1$d</string>
     <string name="sw_input_mode_title">External switch input</string>
     <string name="sw_input_mode_detached">Detached (report only)</string>
