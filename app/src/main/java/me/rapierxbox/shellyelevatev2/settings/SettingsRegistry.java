@@ -279,11 +279,12 @@ public final class SettingsRegistry {
                         new SettingDef.Option(AudioOutput.OUTPUT_AUTO, "Automatic"),
                         new SettingDef.Option(AudioOutput.OUTPUT_BUILTIN, "Built-in speaker"),
                         new SettingDef.Option(AudioOutput.OUTPUT_SPLIT, "Bluetooth for music only")))
-                .description("Automatic uses a connected Bluetooth speaker, otherwise the built-in speaker. "
-                        + "Bluetooth for music only keeps announcements and voice on the built-in speaker"));
+                .description("Automatic plays everything on a connected Bluetooth speaker. "
+                        + "Bluetooth for music only keeps announcements and voice on the built-in speaker")
+                .requires(BLUETOOTH));
         add(m, integer(Constants.SP_ANNOUNCE_VOLUME, 100, CATEGORY_MEDIA, "Announcement volume")
                 .range(0, 100).unit("%").description("Announcements on the built-in speaker")
-                .visibleIf(eq(Constants.SP_AUDIO_OUTPUT, AudioOutput.OUTPUT_SPLIT)));
+                .visibleIf(eq(Constants.SP_MEDIA_ENABLED, true), eq(Constants.SP_AUDIO_OUTPUT, AudioOutput.OUTPUT_SPLIT)));
 
         // advanced
         add(m, bool(Constants.SP_INTEGRATION_API_ENABLED, true, CATEGORY_ADVANCED, "Home Assistant integration API (port 8443)")

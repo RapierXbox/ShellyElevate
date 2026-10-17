@@ -1,5 +1,6 @@
 package me.rapierxbox.shellyelevatev2
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
@@ -234,13 +235,13 @@ class SettingsFragment : Fragment() {
             Category(binding.catSensorsRow, R.string.settings_cat_sensors, ::createSensorsPage,
                 only = listOf(SP_PUBLISH_THERMAL_SENSORS, SP_DYNAMIC_TEMP_OFFSET_ENABLED)),
             Category(binding.catAudioRow, R.string.settings_cat_audio, ::createAudioPage),
-            Category(binding.catBluetoothRow, R.string.settings_cat_bluetooth, ::createBluetoothPage,
-                only = listOf(SP_BLE_SCANNER_ENABLED)),
+            Category(binding.catBluetoothRow, R.string.settings_cat_bluetooth, ::createBluetoothPage),
             Category(binding.catUpdatesRow, R.string.settings_cat_updates, ::createUpdatesPage),
         )
         for (category in categories) {
             category.row.setOnClickListener { showCategory(category) }
         }
+        binding.catBluetoothRow.isVisible = caps[DeviceCapabilities.BLUETOOTH] == true
         refreshCategories()
         requireActivity().onBackPressedDispatcher.addCallback(viewLifecycleOwner, categoryBack)
     }
@@ -636,15 +637,16 @@ class SettingsFragment : Fragment() {
             +SpinnerIdPref(b.audioOutput, SP_AUDIO_OUTPUT,
                 listOf(AudioOutput.OUTPUT_AUTO, AudioOutput.OUTPUT_BUILTIN, AudioOutput.OUTPUT_SPLIT),
                 AudioOutput.OUTPUT_AUTO)
+            row(SP_AUDIO_OUTPUT, b.audioOutputLayout, b.audioOutputHint)
             parent(b.audioOutput)
-            // the split block shares the rule of the announcement level
-            row(SP_ANNOUNCE_VOLUME, b.splitOutputLayout)
+            row(SP_ANNOUNCE_VOLUME, b.announceVolumeLayout)
             +SliderPref(b.announceVolume, SP_ANNOUNCE_VOLUME, 100, b.announceVolumeValue,
                 { getString(R.string.percent, it) })
             row(SP_VOICE_REPLY_VOLUME, b.voiceReplyVolumeLayout)
             +SliderPref(b.voiceReplyVolume, SP_VOICE_REPLY_VOLUME, 100, b.voiceReplyVolumeValue,
                 { getString(R.string.percent, it) })
             +SwitchPref(b.mediaEnabled, SP_MEDIA_ENABLED, false)
+            parent(b.mediaEnabled)
 
             +SwitchPref(b.haVoiceEnabled, SP_HA_VOICE_ENABLED, false)
             row(SP_HA_VOICE_ENABLED, b.haVoiceEnabled, b.haVoiceHint)
@@ -726,6 +728,7 @@ class SettingsFragment : Fragment() {
     private fun createBluetoothPage(parent: ViewGroup): View {
         val b = SettingsPageBluetoothBinding.inflate(layoutInflater, parent, true)
         bluetoothPage = b
+        b.bluetoothDevicesOpen.setOnClickListener { openBluetoothSettings() }
         bindPage {
             +SwitchPref(b.bleScannerEnabled, SP_BLE_SCANNER_ENABLED, false)
             row(SP_BLE_SCANNER_ENABLED, b.bleScannerEnabled, b.bleScannerHint)
@@ -733,6 +736,15 @@ class SettingsFragment : Fragment() {
         return b.root
     }
 
+    private fun openBluetoothSettings() {
+        // a deliberate trip to android settings so the watchdog must not pull us back
+        DisplayController.markUserAway("bluetooth settings")
+        try {
+            startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+        } catch (_: ActivityNotFoundException) {
+            startActivity(Intent(Settings.ACTION_SETTINGS))
+        }
+    }
 
     private fun createUpdatesPage(parent: ViewGroup): View {
         val b = SettingsPageUpdatesBinding.inflate(layoutInflater, parent, true)

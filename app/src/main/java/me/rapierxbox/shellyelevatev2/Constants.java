@@ -22,8 +22,8 @@ public final class Constants {
 
     // media prefs
     public static final String SP_MEDIA_ENABLED = "mediaEnabled";
-    public static final String SP_AUDIO_OUTPUT = "audioOutput"; // auto, builtin or split
-    // levels of their own with the split output. 0..100 percent of the built-in speaker volume
+    public static final String SP_AUDIO_OUTPUT = "audioOutput"; // auto builtin or split
+    // 0..100 percent of the built-in speaker volume and only used by the split output
     public static final String SP_ANNOUNCE_VOLUME = "announceVolume";
     public static final String SP_VOICE_REPLY_VOLUME = "voiceReplyVolume";
 

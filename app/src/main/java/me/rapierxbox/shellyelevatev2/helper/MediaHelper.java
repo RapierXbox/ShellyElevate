@@ -33,7 +33,7 @@ public class MediaHelper {
     private static final long STATUS_INTERVAL_MS = 10_000;
     private static final long STATUS_WAIT_MS = 500;
     private static final float DUCK_GAIN = 0.2f;
-    // sent for every volume change. hardware keys, a bluetooth speaker and the api all end up here
+    // hidden system broadcast for every volume change from keys a bluetooth speaker or the api
     private static final String VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION";
     private static final String EXTRA_VOLUME_STREAM_TYPE = "android.media.EXTRA_VOLUME_STREAM_TYPE";
     // a dragged slider or a held key sends a burst so only the last change is reported
@@ -74,6 +74,7 @@ public class MediaHelper {
     private final BroadcastReceiver volumeReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (!ApiHub.hasController()) return;
             if (intent.getIntExtra(EXTRA_VOLUME_STREAM_TYPE, -1) != AudioManager.STREAM_MUSIC) return;
             handler.removeCallbacks(volumeReport);
             handler.postDelayed(volumeReport, VOLUME_REPORT_DELAY_MS);
@@ -100,7 +101,7 @@ public class MediaHelper {
             if (connected) post(this::pushStatus);
         };
         ApiHub.addControllerListener(controllerListener);
-        // the controller hears about volume changes right away instead of on the next status tick
+        // the status tick only runs while playing so a volume change is reported on its own
         mApplicationContext.registerReceiver(volumeReceiver, new IntentFilter(VOLUME_CHANGED_ACTION), null, handler);
         // a controller that is already connected gets the status as soon as media is enabled
         if (ApiHub.hasController()) post(this::pushStatus);
@@ -488,7 +489,7 @@ public class MediaHelper {
         announcePlayer = player;
         try {
             player.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            AudioOutput.routeVoice(player);
+            AudioOutput.routeAnnounce(player);
             player.setLooping(false);
             player.setDataSource(mApplicationContext, Uri.parse(MediaUrls.forPlayback(url)));
             player.setOnPreparedListener(mp -> {
