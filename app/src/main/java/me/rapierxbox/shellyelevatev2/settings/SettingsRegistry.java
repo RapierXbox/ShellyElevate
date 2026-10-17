@@ -43,6 +43,7 @@ import me.rapierxbox.shellyelevatev2.Constants;
 import me.rapierxbox.shellyelevatev2.display.DisplayModule;
 import me.rapierxbox.shellyelevatev2.display.DisplayModuleRegistry;
 import me.rapierxbox.shellyelevatev2.display.options.ModuleOption;
+import me.rapierxbox.shellyelevatev2.helper.AudioOutput;
 import me.rapierxbox.shellyelevatev2.voice.speaker.SpeakerModels;
 
 // every user setting the app keeps in the ShellyElevateV2 prefs with its type and default
@@ -234,6 +235,9 @@ public final class SettingsRegistry {
                 .range(1, 10).unit("s").visibleIf(voiceOn, wakeOn));
         // a session the controller starts plays it too so it does not need the wake word
         add(m, bool(Constants.SP_VOICE_WAKE_SOUND_ENABLED, true, CATEGORY_VOICE, "Wake sound").visibleIf(voiceOn));
+        add(m, integer(Constants.SP_VOICE_REPLY_VOLUME, 100, CATEGORY_VOICE, "Voice reply volume")
+                .range(0, 100).unit("%").description("Voice replies and voice tones on the built-in speaker")
+                .visibleIf(voiceOn, eq(Constants.SP_AUDIO_OUTPUT, AudioOutput.OUTPUT_SPLIT)));
         add(m, bool(Constants.SP_VOICE_SCORE_BAR_ENABLED, false, CATEGORY_VOICE, "Show wake score bar")
                 .visibleIf(voiceOn, wakeOn));
         add(m, bool(Constants.SP_VOICE_WAKE_EXPERIMENTAL_MODELS, false, CATEGORY_VOICE, "Experimental wake words")
@@ -269,6 +273,18 @@ public final class SettingsRegistry {
 
         // media
         add(m, bool(Constants.SP_MEDIA_ENABLED, false, CATEGORY_MEDIA, "Media playback"));
+        // the default is what the app always did so nothing changes until a user picks another output
+        add(m, new SettingDef.Builder(Constants.SP_AUDIO_OUTPUT, TYPE_ENUM, AudioOutput.OUTPUT_AUTO,
+                CATEGORY_MEDIA, "Audio output").options(Arrays.asList(
+                        new SettingDef.Option(AudioOutput.OUTPUT_AUTO, "Automatic"),
+                        new SettingDef.Option(AudioOutput.OUTPUT_BUILTIN, "Built-in speaker"),
+                        new SettingDef.Option(AudioOutput.OUTPUT_SPLIT, "Bluetooth for music only")))
+                .description("Automatic plays everything on a connected Bluetooth speaker. "
+                        + "Bluetooth for music only keeps announcements and voice on the built-in speaker")
+                .requires(BLUETOOTH));
+        add(m, integer(Constants.SP_ANNOUNCE_VOLUME, 100, CATEGORY_MEDIA, "Announcement volume")
+                .range(0, 100).unit("%").description("Announcements on the built-in speaker")
+                .visibleIf(eq(Constants.SP_MEDIA_ENABLED, true), eq(Constants.SP_AUDIO_OUTPUT, AudioOutput.OUTPUT_SPLIT)));
 
         // advanced
         add(m, bool(Constants.SP_INTEGRATION_API_ENABLED, true, CATEGORY_ADVANCED, "Home Assistant integration API (port 8443)")

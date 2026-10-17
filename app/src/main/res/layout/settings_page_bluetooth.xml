@@ -5,6 +5,35 @@
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
+    <!-- pairing lives in the android bluetooth settings -->
+    <LinearLayout
+        android:id="@+id/bluetoothDevicesLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/bluetooth_devices"
+            android:textSize="18sp" />
+
+        <Button
+            android:id="@+id/bluetoothDevicesOpen"
+            style="@style/Widget.Material3.Button.TonalButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/bluetooth_devices_open"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <TextView
+        style="@style/Settings.Hint"
+        android:text="@string/bluetooth_devices_hint" />
+
     <!-- adverts go to the paired home assistant over the v1 websocket -->
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/bleScannerEnabled"

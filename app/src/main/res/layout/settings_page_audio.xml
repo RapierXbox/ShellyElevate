@@ -32,6 +32,85 @@
 
     </LinearLayout>
 
+    <LinearLayout
+        android:id="@+id/audioOutputLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:layout_weight="1"
+            android:text="@string/audio_output"
+            android:textSize="18sp" />
+
+        <Spinner
+            android:id="@+id/audioOutput"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:spinnerMode="dialog" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/audioOutputHint"
+        style="@style/Settings.Hint"
+        android:text="@string/audio_output_hint" />
+
+    <!-- own levels with bluetooth for music only -->
+    <LinearLayout
+        android:id="@+id/announceVolumeLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="@string/announce_volume"
+            android:textSize="18sp" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/announceVolume"
+            style="@style/Settings.Slider"
+            android:valueFrom="0"
+            android:valueTo="100"
+            android:stepSize="1" />
+
+        <TextView
+            android:id="@+id/announceVolumeValue"
+            style="@style/Settings.SliderValue" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/voiceReplyVolumeLayout"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_vertical"
+            android:text="@string/voice_reply_volume"
+            android:textSize="18sp" />
+
+        <com.google.android.material.slider.Slider
+            android:id="@+id/voiceReplyVolume"
+            style="@style/Settings.Slider"
+            android:valueFrom="0"
+            android:valueTo="100"
+            android:stepSize="1" />
+
+        <TextView
+            android:id="@+id/voiceReplyVolumeValue"
+            style="@style/Settings.SliderValue" />
+    </LinearLayout>
     <com.google.android.material.materialswitch.MaterialSwitch
         android:id="@+id/mediaEnabled"
         android:layout_width="match_parent"

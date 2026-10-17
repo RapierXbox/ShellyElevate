@@ -41,6 +41,7 @@ import java.util.concurrent.atomic.AtomicLong;
 import me.rapierxbox.shellyelevatev2.BuildConfig;
 import me.rapierxbox.shellyelevatev2.api.ApiHub;
 import me.rapierxbox.shellyelevatev2.api.ControllerVoiceTransport;
+import me.rapierxbox.shellyelevatev2.helper.AudioOutput;
 import me.rapierxbox.shellyelevatev2.helper.ForegroundActivities;
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader;
 import me.rapierxbox.shellyelevatev2.helper.MediaUrls;
@@ -932,6 +933,7 @@ public class VoiceEngine {
         MediaPlayer player = new MediaPlayer();
         ttsPlayer = player;
         player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+        AudioOutput.applyVoice(player);
         // stagefright retries an unreachable url for half a minute while the wake word stays off
         Runnable giveUp = () -> {
             if (ttsPlayer != player) return;

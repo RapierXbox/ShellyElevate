@@ -7,6 +7,8 @@ import android.util.Log;
 
 import java.util.concurrent.Executor;
 
+import me.rapierxbox.shellyelevatev2.helper.AudioOutput;
+
 public class TonePlayer {
     private static final String TAG = "TonePlayer";
     private static final int SAMPLE_RATE = 44100;
@@ -38,6 +40,7 @@ public class TonePlayer {
                 track = new AudioTrack(AudioManager.STREAM_MUSIC, SAMPLE_RATE,
                         AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT,
                         buf.length * 2, AudioTrack.MODE_STATIC);
+                AudioOutput.applyVoice(track);
                 track.write(buf, 0, buf.length);
                 track.play();
                 Thread.sleep((long) (durationSec * 1000) + 200);

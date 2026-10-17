@@ -2,7 +2,10 @@ package me.rapierxbox.shellyelevatev2.helper;
 
 import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.media.AudioManager;
 import android.media.MediaPlayer;
 import android.net.Uri;
@@ -30,6 +33,11 @@ public class MediaHelper {
     private static final long STATUS_INTERVAL_MS = 10_000;
     private static final long STATUS_WAIT_MS = 500;
     private static final float DUCK_GAIN = 0.2f;
+    // hidden system broadcast for every volume change from keys a bluetooth speaker or the api
+    private static final String VOLUME_CHANGED_ACTION = "android.media.VOLUME_CHANGED_ACTION";
+    private static final String EXTRA_VOLUME_STREAM_TYPE = "android.media.EXTRA_VOLUME_STREAM_TYPE";
+    // a dragged slider or a held key sends a burst so only the last change is reported
+    private static final long VOLUME_REPORT_DELAY_MS = 300;
 
     private enum State { IDLE, BUFFERING, PLAYING, PAUSED }
 
@@ -59,6 +67,20 @@ public class MediaHelper {
     private volatile boolean destroyed;
     private volatile JSONObject lastStatus = new JSONObject();
 
+    private final Runnable volumeReport = () -> {
+        if (!destroyed) pushStatus();
+    };
+
+    private final BroadcastReceiver volumeReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (!ApiHub.hasController()) return;
+            if (intent.getIntExtra(EXTRA_VOLUME_STREAM_TYPE, -1) != AudioManager.STREAM_MUSIC) return;
+            handler.removeCallbacks(volumeReport);
+            handler.postDelayed(volumeReport, VOLUME_REPORT_DELAY_MS);
+        }
+    };
+
     private final Runnable statusTicker = new Runnable() {
         @Override
         public void run() {
@@ -79,6 +101,8 @@ public class MediaHelper {
             if (connected) post(this::pushStatus);
         };
         ApiHub.addControllerListener(controllerListener);
+        // the status tick only runs while playing so a volume change is reported on its own
+        mApplicationContext.registerReceiver(volumeReceiver, new IntentFilter(VOLUME_CHANGED_ACTION), null, handler);
         // a controller that is already connected gets the status as soon as media is enabled
         if (ApiHub.hasController()) post(this::pushStatus);
         Log.i(TAG, "MediaHelper enabled");
@@ -301,6 +325,10 @@ public class MediaHelper {
 
     public void onDestroy() {
         ApiHub.removeControllerListener(controllerListener);
+        try {
+            mApplicationContext.unregisterReceiver(volumeReceiver);
+        } catch (IllegalArgumentException ignored) {
+        }
         handler.post(() -> {
             stopAnnounceNow();
             releaseMusicPlayer();
@@ -322,6 +350,7 @@ public class MediaHelper {
         try {
             player.reset();
             player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+            AudioOutput.routeMusic(player);
             // repeat one loops in the player so a loop needs no new prepare or download
             player.setLooping(queue.getRepeat() == MediaQueue.Repeat.ONE);
             player.setDataSource(mApplicationContext, Uri.parse(MediaUrls.forPlayback(track.url)));
@@ -460,11 +489,12 @@ public class MediaHelper {
         announcePlayer = player;
         try {
             player.setAudioStreamType(AudioManager.STREAM_MUSIC);
+            AudioOutput.routeAnnounce(player);
             player.setLooping(false);
             player.setDataSource(mApplicationContext, Uri.parse(MediaUrls.forPlayback(url)));
             player.setOnPreparedListener(mp -> {
                 if (mp != announcePlayer) return;
-                float gain = muted ? 0f : 1f;
+                float gain = muted ? 0f : AudioOutput.announceGain();
                 mp.setVolume(gain, gain);
                 mp.start();
             });
@@ -592,7 +622,7 @@ public class MediaHelper {
             }
         }
         if (announcePlayer != null) {
-            float announceGain = muted ? 0f : 1f;
+            float announceGain = muted ? 0f : AudioOutput.announceGain();
             try {
                 announcePlayer.setVolume(announceGain, announceGain);
             } catch (IllegalStateException ignored) {

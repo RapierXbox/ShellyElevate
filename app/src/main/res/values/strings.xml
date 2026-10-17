@@ -72,6 +72,13 @@
     <string name="wifi_ip_error_dns">Enter a valid DNS server address</string>
     <string name="brightness">Brightness</string>
     <string name="volume">Volume</string>
+    <string name="audio_output">Audio output</string>
+    <string name="audio_output_auto">Automatic</string>
+    <string name="audio_output_builtin">Built-in speaker</string>
+    <string name="audio_output_split">Bluetooth for music only</string>
+    <string name="audio_output_hint">Automatic plays everything on a connected Bluetooth speaker. Bluetooth for music only keeps announcements and voice on the display at their own level and the volume sets the music. Pair a speaker under Bluetooth</string>
+    <string name="announce_volume">Announcements</string>
+    <string name="voice_reply_volume">Voice replies</string>
     <string name="mqtt">MQTT</string>
     <string name="broker_address">Broker address</string>
     <string name="device_name">Device name</string>
@@ -120,7 +127,10 @@
     <string name="settings_cat_audio">Audio and voice</string>
     <string name="settings_cat_audio_summary">Volume, media, voice assistant</string>
     <string name="settings_cat_bluetooth">Bluetooth</string>
-    <string name="settings_cat_bluetooth_summary">Bluetooth proxy</string>
+    <string name="settings_cat_bluetooth_summary">Devices and Bluetooth proxy</string>
+    <string name="bluetooth_devices">Bluetooth devices</string>
+    <string name="bluetooth_devices_open">Open</string>
+    <string name="bluetooth_devices_hint">Pair and connect a speaker or headphones in the Android Bluetooth settings</string>
     <string name="settings_cat_updates">Updates</string>
     <string name="settings_cat_updates_summary">App and WebView updates</string>
     <string name="broker_port">Broker port</string>

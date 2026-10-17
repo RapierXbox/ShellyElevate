@@ -16,6 +16,7 @@ import android.util.Log;
 import java.io.File;
 import java.util.Random;
 
+import me.rapierxbox.shellyelevatev2.helper.AudioOutput;
 import me.rapierxbox.shellyelevatev2.settings.SettingsRegistry;
 
 // the uploaded sound that plays while home assistant works on the answer
@@ -51,6 +52,7 @@ final class ThinkingSound {
         MediaPlayer p = new MediaPlayer();
         try {
             p.setAudioStreamType(AudioManager.STREAM_MUSIC);
+            AudioOutput.applyVoice(p);
             p.setDataSource(file.getPath());
             p.prepare();
         } catch (Exception e) {
