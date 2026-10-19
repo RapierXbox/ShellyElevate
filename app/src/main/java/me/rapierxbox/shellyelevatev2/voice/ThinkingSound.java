@@ -52,8 +52,8 @@ final class ThinkingSound {
         MediaPlayer p = new MediaPlayer();
         try {
             p.setAudioStreamType(AudioManager.STREAM_MUSIC);
-            AudioOutput.applyVoice(p);
             p.setDataSource(file.getPath());
+            AudioOutput.applyVoice(p);
             p.prepare();
         } catch (Exception e) {
             Log.w(TAG, "could not load the thinking sound: " + e.getMessage());
