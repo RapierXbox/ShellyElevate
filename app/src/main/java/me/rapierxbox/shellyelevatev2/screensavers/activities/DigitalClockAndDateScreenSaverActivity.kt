@@ -53,13 +53,14 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
     private fun updateAlarmIcon() {
         val b = binding ?: return
         val state = AlarmState.get()
+        // arming and pending are short transitions, keep the previous icon instead of flashing the away one
+        if (state == "arming" || state == "pending") return
         // the view alpha dims the colors further, disarmed stays plain white
         val (icon, color) = when {
             !ShellyElevateApplication.mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ALARM_ENABLED, false) -> 0 to 0
             state == "disarmed" -> R.drawable.ic_alarm_disarmed to Color.WHITE
             state == "armed_home" -> R.drawable.ic_alarm_home to 0xFF4CAF50.toInt()
-            state == "armed_night" -> R.drawable.ic_alarm_night to 0xFF7C6BFF.toInt()
-            state.startsWith("armed") || state == "triggered" || state == "arming" || state == "pending" ->
+            state.startsWith("armed") || state == "triggered" ->
                 R.drawable.ic_alarm_away to 0xFFF44336.toInt()
             else -> 0 to 0
         }
