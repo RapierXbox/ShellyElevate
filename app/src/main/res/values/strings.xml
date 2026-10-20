@@ -262,6 +262,9 @@
     <string name="night_mode_hint">Puts a dim red filter over the screen for dark rooms</string>
     <string name="screen_saver_brightness">Screensaver brightness</string>
     <string name="touch_to_wake">Touch to wake</string>
+    <string name="screen_saver_alarm_status">Show alarm status (clock screensavers)</string>
+    <string name="screen_saver_alarm_topic">MQTT topic</string>
+    <string name="screen_saver_alarm_topic_hint">home/alarm/state</string>
     <string name="sleep_opt_hint">How much the app saves power while the screensaver runs</string>
     <string name="http_server_hint">Local API on port 8080 without a login. Not needed with the Shelly Elevate integration</string>
     <string name="dynamic_temp_offset_hint">The display warms its own temperature sensor. This subtracts that heat</string>

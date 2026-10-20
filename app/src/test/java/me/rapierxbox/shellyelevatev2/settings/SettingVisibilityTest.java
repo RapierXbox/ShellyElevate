@@ -273,6 +273,20 @@ public class SettingVisibilityTest {
     }
 
     @Test
+    public void alarmStatusNeedsClockSaverAndMqtt() {
+        values.put(Constants.SP_SCREEN_SAVER_ID, 1);
+        assertFalse(visible(Constants.SP_SCREEN_SAVER_ALARM_ENABLED));
+        values.put(Constants.SP_MQTT_ENABLED, true);
+        assertTrue(visible(Constants.SP_SCREEN_SAVER_ALARM_ENABLED));
+        assertFalse(visible(Constants.SP_SCREEN_SAVER_ALARM_TOPIC));
+        values.put(Constants.SP_SCREEN_SAVER_ALARM_ENABLED, true);
+        assertTrue(visible(Constants.SP_SCREEN_SAVER_ALARM_TOPIC));
+        values.put(Constants.SP_SCREEN_SAVER_ID, 3);
+        assertFalse(visible(Constants.SP_SCREEN_SAVER_ALARM_ENABLED));
+        assertFalse(visible(Constants.SP_SCREEN_SAVER_ALARM_TOPIC));
+    }
+
+    @Test
     public void mqttSettingsNeedMqtt() {
         List<String> children = Arrays.asList(Constants.SP_MQTT_BROKER, Constants.SP_MQTT_CLIENTID,
                 Constants.SP_PUBLISH_THERMAL_SENSORS);
