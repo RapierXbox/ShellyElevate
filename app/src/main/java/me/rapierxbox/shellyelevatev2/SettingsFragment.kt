@@ -417,6 +417,11 @@ class SettingsFragment : Fragment() {
             row(SP_SCREEN_SAVER_MIN_BRIGHTNESS, b.minBrightnessScreenSaverLayout)
             +SwitchPref(b.touchToWake, SP_TOUCH_TO_WAKE, true)
             row(SP_TOUCH_TO_WAKE, b.touchToWake)
+            +SwitchPref(b.screenSaverAlarmStatus, SP_SCREEN_SAVER_ALARM_ENABLED, false)
+            row(SP_SCREEN_SAVER_ALARM_ENABLED, b.screenSaverAlarmStatus)
+            parent(b.screenSaverAlarmStatus)
+            +TextPref(b.screenSaverAlarmTopic, SP_SCREEN_SAVER_ALARM_TOPIC, trim = true)
+            row(SP_SCREEN_SAVER_ALARM_TOPIC, b.screenSaverAlarmTopicLayout)
         }
 
         b.screenSaverDelay.setOnEditorActionListener { _, actionId, _ ->

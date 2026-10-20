@@ -49,6 +49,11 @@ public class ShellyElevateMQTTCallback {
         }
 
         String payload = new String(message.getPayload(), StandardCharsets.UTF_8);
+        // retained on purpose so the state is there right after a reconnect
+        if (topic.equals(MQTTServer.getAlarmTopic())) {
+            AlarmState.set(payload);
+            return;
+        }
         String pattern = topicPattern(topic, server.getClientId());
         // a retained command would run again on every reconnect
         if (message.isRetained() && !MQTT_TOPIC_HOME_ASSISTANT_STATUS.equals(pattern)) {
