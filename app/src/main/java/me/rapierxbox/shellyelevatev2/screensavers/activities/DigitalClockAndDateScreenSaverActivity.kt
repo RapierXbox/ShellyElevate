@@ -6,16 +6,21 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.graphics.Color
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
 import androidx.core.view.isVisible
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import me.rapierxbox.shellyelevatev2.BuildConfig
+import me.rapierxbox.shellyelevatev2.Constants.INTENT_ALARM_STATE_CHANGED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_END_SCREENSAVER
+import me.rapierxbox.shellyelevatev2.Constants.SP_SCREEN_SAVER_ALARM_ENABLED
+import me.rapierxbox.shellyelevatev2.R
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mScreenSaverManager
 import me.rapierxbox.shellyelevatev2.databinding.DigitalClockAndDateScreenSaverBinding
+import me.rapierxbox.shellyelevatev2.mqtt.AlarmState
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -36,6 +41,33 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
     private val endScreenSaverReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
             finish()
+        }
+    }
+
+    private val alarmStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            updateAlarmIcon()
+        }
+    }
+
+    private fun updateAlarmIcon() {
+        val b = binding ?: return
+        val state = AlarmState.get()
+        // arming and pending are short transitions, keep the previous icon instead of flashing the away one
+        if (state == "arming" || state == "pending") return
+        // the view alpha dims the colors further, disarmed stays plain white
+        val (icon, color) = when {
+            !ShellyElevateApplication.mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ALARM_ENABLED, false) -> 0 to 0
+            state == "disarmed" -> R.drawable.ic_alarm_disarmed to Color.WHITE
+            state == "armed_home" -> R.drawable.ic_alarm_home to 0xFF4CAF50.toInt()
+            state.startsWith("armed") || state == "triggered" ->
+                R.drawable.ic_alarm_away to 0xFFF44336.toInt()
+            else -> 0 to 0
+        }
+        b.alarmStatusIcon.isVisible = icon != 0
+        if (icon != 0) {
+            b.alarmStatusIcon.setImageResource(icon)
+            b.alarmStatusIcon.setColorFilter(color)
         }
     }
 
@@ -61,6 +93,7 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
         binding.dateText.isVisible = showDate
 
         updateTime()
+        updateAlarmIcon()
 
         binding.swipeDetectionOverlay.setOnTouchListener { _, event ->
             if (BuildConfig.DEBUG) Log.d(TAG, "Received touch event: $event")
@@ -73,6 +106,8 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
         // local broadcast so other apps cannot spoof the end intent
         LocalBroadcastManager.getInstance(this)
             .registerReceiver(endScreenSaverReceiver, IntentFilter(INTENT_END_SCREENSAVER))
+        LocalBroadcastManager.getInstance(this)
+            .registerReceiver(alarmStateReceiver, IntentFilter(INTENT_ALARM_STATE_CHANGED))
         // a proximity wake right after the start can send the end before the receiver existed
         if (!mScreenSaverManager.isScreenSaverRunning) finish()
     }
@@ -82,6 +117,7 @@ class DigitalClockAndDateScreenSaverActivity : Activity() {
 
         unregisterReceiver(timeTickReceiver)
         LocalBroadcastManager.getInstance(this).unregisterReceiver(endScreenSaverReceiver)
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(alarmStateReceiver)
         binding = null
     }
 
