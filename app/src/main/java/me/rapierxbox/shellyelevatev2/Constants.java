@@ -84,6 +84,9 @@ public final class Constants {
     public static final String SP_PROXIMITY_KEEP_AWAKE_SECONDS = "proximityKeepAwakeSeconds";
     public static final String SP_SCREEN_SAVER_MIN_BRIGHTNESS = "screenSaverMinBrightness";
     public static final String SP_TOUCH_TO_WAKE = "touchToWake";
+    // alarm state icon on the clock screensavers, fed by a user defined mqtt topic
+    public static final String SP_SCREEN_SAVER_ALARM_ENABLED = "screenSaverAlarmStatus";
+    public static final String SP_SCREEN_SAVER_ALARM_TOPIC = "screenSaverAlarmTopic";
 
     // sleep optimization prefs
     public static final String SP_SLEEP_OPTIMIZATION_LEVEL = "sleepOptimizationLevel";
@@ -135,6 +138,7 @@ public final class Constants {
     // screen saver intents
     public static final String INTENT_SCREEN_SAVER_STARTED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STARTED";
     public static final String INTENT_SCREEN_SAVER_STOPPED = "me.rapierxbox.shellyelevatev2.SCREEN_SAVER_STOPPED";
+    public static final String INTENT_ALARM_STATE_CHANGED = "me.rapierxbox.shellyelevatev2.ALARM_STATE_CHANGED";
     public static final String INTENT_END_SCREENSAVER = "me.rapierxbox.shellyelevatev2.END_SCREENSAVER";
 
     public static final String INTENT_AOD_STARTED = "me.rapierxbox.shellyelevatev2.AOD_STARTED";

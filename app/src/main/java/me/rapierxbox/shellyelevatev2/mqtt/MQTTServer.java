@@ -403,7 +403,16 @@ public class MQTTServer {
         for (int num = 1; num < DeviceModel.getReportedDevice().relays; num++) {
             topics.add(parseTopic(MQTT_TOPIC_RELAY_COMMAND) + "_" + num);
         }
+        String alarmTopic = getAlarmTopic();
+        if (alarmTopic != null) topics.add(alarmTopic);
         return topics;
+    }
+
+    // user defined topic carrying the ha alarm state, null while the icon is off
+    public static String getAlarmTopic() {
+        if (!mSharedPreferences.getBoolean(SP_SCREEN_SAVER_ALARM_ENABLED, false)) return null;
+        String topic = mSharedPreferences.getString(SP_SCREEN_SAVER_ALARM_TOPIC, "");
+        return topic == null || topic.trim().isEmpty() ? null : topic.trim();
     }
 
     public void disconnect() {

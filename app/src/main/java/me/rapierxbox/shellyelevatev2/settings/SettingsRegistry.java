@@ -164,6 +164,14 @@ public final class SettingsRegistry {
                 .visibleIf(saverOn, eq(Constants.SP_WAKE_ON_PROXIMITY, true))
                 .requires(PROXIMITY));
         add(m, bool(Constants.SP_TOUCH_TO_WAKE, true, CATEGORY_SCREENSAVER, "Touch to wake").visibleIf(saverOn));
+        // the icon only exists on the clock savers and needs mqtt for the state
+        add(m, bool(Constants.SP_SCREEN_SAVER_ALARM_ENABLED, false, CATEGORY_SCREENSAVER, "Alarm status icon")
+                .description("Shows the alarm state received over MQTT on the clock screensavers")
+                .visibleIf(saverOn, in(Constants.SP_SCREEN_SAVER_ID, 1, 2), eq(Constants.SP_MQTT_ENABLED, true)));
+        add(m, string(Constants.SP_SCREEN_SAVER_ALARM_TOPIC, "", CATEGORY_SCREENSAVER, "Alarm status topic")
+                .description("MQTT topic carrying the alarm_control_panel state, published retained")
+                .visibleIf(saverOn, in(Constants.SP_SCREEN_SAVER_ID, 1, 2), eq(Constants.SP_MQTT_ENABLED, true),
+                        eq(Constants.SP_SCREEN_SAVER_ALARM_ENABLED, true)));
         add(m, new SettingDef.Builder(Constants.SP_SLEEP_OPTIMIZATION_LEVEL, TYPE_ENUM, Constants.SLEEP_OPT_NONE,
                 CATEGORY_SCREENSAVER, "Sleep optimization").options(Arrays.asList(
                         new SettingDef.Option(Constants.SLEEP_OPT_NONE, "None"),

@@ -113,6 +113,41 @@
             tools:ignore="UseSwitchCompatOrMaterialXml" />
 
         <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/screenSaverAlarmStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/screen_saver_alarm_status"
+            android:textSize="18sp"
+            tools:ignore="UseSwitchCompatOrMaterialXml" />
+
+        <LinearLayout
+            android:id="@+id/screenSaverAlarmTopicLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="48dp"
+            android:layout_marginTop="16dp"
+            android:orientation="horizontal">
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical"
+                android:layout_weight="1"
+                android:text="@string/screen_saver_alarm_topic"
+                android:textSize="18sp" />
+
+            <EditText
+                android:id="@+id/screenSaverAlarmTopic"
+                android:layout_width="200dp"
+                android:layout_height="wrap_content"
+                android:hint="@string/screen_saver_alarm_topic_hint"
+                android:imeOptions="actionDone"
+                android:inputType="textUri"
+                android:textSize="18sp" />
+        </LinearLayout>
+
+        <com.google.android.material.materialswitch.MaterialSwitch
             android:id="@+id/wakeOnProximity"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
