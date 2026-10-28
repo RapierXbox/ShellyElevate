@@ -149,6 +149,9 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private var webViewPausedForSleep = false
     private var inAODMode = false
 
+    // elapsedRealtime of the last finished page load, see aodTickPeriodMs
+    private var lastPageFinishedAt = 0L
+
     // a translucent activity like the switcher only pauses us so the page never stopped
     private var stoppedSinceResume = false
 
@@ -417,7 +420,11 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
     // each tick resumes the page, which fires visibilitychange, so pages that resubscribe or
     // redraw on visibility (ha cards like weather-forecast-card) do that once per tick
+    // a page that just loaded still fetches its data and builds its cards, so it keeps the
+    // one second tick for a while. otherwise aod right after a boot or reload leaves the
+    // dashboard half drawn until the next long tick
     private fun aodTickPeriodMs(): Long {
+        if (SystemClock.elapsedRealtime() - lastPageFinishedAt < AOD_PAGE_SETTLE_MS) return 1000L
         val seconds = mSharedPreferences.getInt(SP_AOD_REFRESH_SECONDS, AOD_REFRESH_DEFAULT_SECONDS)
         return seconds.coerceIn(1, 3600) * 1000L
     }
@@ -704,6 +711,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
+            lastPageFinishedAt = SystemClock.elapsedRealtime()
             reportShownUrl(url)
             RendererPriority.boostAsync()
         }
@@ -852,6 +860,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         )
 
         const val AOD_TICK_WINDOW_MS = 200L
+        const val AOD_PAGE_SETTLE_MS = 60_000L
 
         // long enough for the suspend script and the socket close to run before timers pause again
         const val HA_SUSPEND_RUN_MS = 2_000L
