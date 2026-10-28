@@ -272,6 +272,10 @@
     <string name="ignore_ssl_errors_summary">Only for a Home Assistant with a self signed certificate</string>
     <string name="extended_js_interface_summary">Lets the dashboard page control the display through JavaScript</string>
     <string name="voice_wake_show_community">Show community models</string>
+    <string name="voice_wake_import_own">Import own</string>
+    <string name="voice_wake_import_no_picker">No file picker on this device</string>
+    <string name="voice_wake_import_done">Model \'%1$s\' imported</string>
+    <string name="voice_wake_import_failed">Import failed... pick the .tflite and its .json</string>
     <string name="voice_wake_hide_community">Hide community models</string>
     <string name="confirm_reboot">Reboot the display?</string>
     <string name="confirm_exit">Close ShellyElevate?</string>

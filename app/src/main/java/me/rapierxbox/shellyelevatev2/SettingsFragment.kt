@@ -24,6 +24,7 @@ import androidx.annotation.StringRes
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.edit
 import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.MenuProvider
 import androidx.core.view.doOnNextLayout
 import androidx.core.view.isVisible
@@ -100,6 +101,10 @@ class SettingsFragment : Fragment() {
     // the stored model name the page knows so a save only writes a pick the user made
     private var storedModelName: String = ""
     private var downloadJob: Job? = null
+    // the tflite and json of an own model are picked together
+    private val pickModelFiles = registerForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        if (uris.isNotEmpty()) importModelFiles(uris)
+    }
 
     // pages are inflated on first open and stay null until then
     private var dashboardPage: SettingsPageDashboardBinding? = null
@@ -1221,7 +1226,38 @@ class SettingsFragment : Fragment() {
                 fetchAndMergeRemoteModels(WakeWordModelManager.getModelDirectory(requireContext()), reopenPicker = true)
             }
             .setNegativeButton(android.R.string.cancel, null)
+            .setPositiveButton(R.string.voice_wake_import_own) { _, _ ->
+                try {
+                    pickModelFiles.launch("*/*")
+                } catch (e: ActivityNotFoundException) {
+                    Toast.makeText(requireContext(), getString(R.string.voice_wake_import_no_picker), Toast.LENGTH_LONG).show()
+                }
+            }
             .show()
+    }
+
+    // copies the picked tflite and json into the model folder and uses the model
+    private fun importModelFiles(uris: List<android.net.Uri>) {
+        val context = requireContext().applicationContext
+        val wakewordsDir = WakeWordModelManager.getModelDirectory(context)
+        viewLifecycleOwner.lifecycleScope.launch {
+            try {
+                val name = withContext(Dispatchers.IO) {
+                    WakeWordModelManager.importLocalModel(context, uris, wakewordsDir)
+                }
+                val installed = WakeWordModelManager.getInstalledModels(wakewordsDir)
+                rebuildModelList(installed,
+                    modelList.filterIsInstance<WakeWordModel.Downloadable>(),
+                    modelList.filterIsInstance<WakeWordModel.Experimental>())
+                // an overwritten model with the same name has to be loaded again
+                mVoiceEngine?.invalidateLoadedModel()
+                useModel(name)
+                Toast.makeText(context, getString(R.string.voice_wake_import_done, name), Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Log.e("SettingsFragment", "Model import failed", e)
+                Toast.makeText(context, getString(R.string.voice_wake_import_failed), Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun labelFor(model: WakeWordModel): String = when (model) {

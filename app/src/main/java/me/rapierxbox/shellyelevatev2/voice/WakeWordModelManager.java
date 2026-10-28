@@ -1,6 +1,10 @@
 package me.rapierxbox.shellyelevatev2.voice;
 
+import android.content.ContentResolver;
 import android.content.Context;
+import android.database.Cursor;
+import android.net.Uri;
+import android.provider.OpenableColumns;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -8,12 +12,16 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader;
@@ -95,6 +103,73 @@ public final class WakeWordModelManager {
         }
         result.sort(Comparator.comparing(WakeWordModel.Installed::getName));
         return result;
+    }
+
+    // copies a tflite and its optional json picked on the device into the model folder
+    // returns the installed name. throws when no tflite was picked or a copy fails
+    public static String importLocalModel(Context context, List<Uri> uris, File wakewordsDir) throws IOException {
+        ContentResolver resolver = context.getContentResolver();
+        Uri tfliteUri = null;
+        Uri jsonUri = null;
+        String tfliteName = null;
+        for (Uri uri : uris) {
+            String fileName = displayName(resolver, uri);
+            if (fileName.endsWith(TFLITE_EXT) && tfliteUri == null) {
+                tfliteUri = uri;
+                tfliteName = fileName;
+            } else if (fileName.endsWith(JSON_EXT) && jsonUri == null) {
+                jsonUri = uri;
+            }
+        }
+        if (tfliteUri == null) throw new IOException("no tflite file picked");
+
+        String name = stripExtension(tfliteName, TFLITE_EXT).toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9_]+", "_").replaceAll("^_+|_+$", "");
+        if (name.isEmpty() || VAD_STEM.equals(name)) throw new IOException("bad model name " + tfliteName);
+
+        File tflite = new File(wakewordsDir, name + TFLITE_EXT);
+        File json = new File(wakewordsDir, name + JSON_EXT);
+        File tflitePart = WakeWordModelDownloader.partFile(wakewordsDir, name + TFLITE_EXT);
+        File jsonPart = WakeWordModelDownloader.partFile(wakewordsDir, name + JSON_EXT);
+        try {
+            copy(resolver, tfliteUri, tflitePart);
+            if (jsonUri != null) {
+                copy(resolver, jsonUri, jsonPart);
+                replace(jsonPart, json);
+            }
+            // the tflite last since its presence is what makes the model installed
+            replace(tflitePart, tflite);
+            return name;
+        } catch (IOException | RuntimeException e) {
+            tflitePart.delete();
+            jsonPart.delete();
+            throw e;
+        }
+    }
+
+    private static String displayName(ContentResolver resolver, Uri uri) {
+        String name = null;
+        try (Cursor c = resolver.query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) name = c.getString(0);
+        } catch (RuntimeException ignored) {}
+        if (name == null) name = uri.getLastPathSegment();
+        return name == null ? "" : name.toLowerCase(Locale.ROOT);
+    }
+
+    private static void copy(ContentResolver resolver, Uri from, File to) throws IOException {
+        try (InputStream in = resolver.openInputStream(from); OutputStream out = new FileOutputStream(to)) {
+            if (in == null) throw new IOException("could not open " + from);
+            byte[] buf = new byte[16 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
+        }
+    }
+
+    private static void replace(File from, File to) throws IOException {
+        if (from.renameTo(to)) return;
+        // not every filesystem lets a rename replace an existing file
+        if (to.delete() && from.renameTo(to)) return;
+        throw new IOException("could not rename " + from + " to " + to);
     }
 
     public static List<WakeWordModel.Downloadable> fetchOfficialModels(OkHttpClient client) throws IOException {
