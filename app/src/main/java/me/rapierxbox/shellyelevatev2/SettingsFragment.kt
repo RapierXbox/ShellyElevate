@@ -410,6 +410,8 @@ class SettingsFragment : Fragment() {
             +SpinnerPref(b.screenSaverType, SP_SCREEN_SAVER_ID, 0)
             row(SP_SCREEN_SAVER_ID, b.screenSaverTypeLayout)
             parent(b.screenSaverType)
+            +IntTextPref(b.aodRefreshSeconds, SP_AOD_REFRESH_SECONDS, AOD_REFRESH_DEFAULT_SECONDS, min = 1)
+            row(SP_AOD_REFRESH_SECONDS, b.aodRefreshLayout)
             +SpinnerPref(b.sleepOptimizationLevel, SP_SLEEP_OPTIMIZATION_LEVEL, SLEEP_OPT_NONE)
             row(SP_SLEEP_OPTIMIZATION_LEVEL, b.sleepOptimizationLevelLayout)
             +SwitchPref(b.wakeOnProximity, SP_WAKE_ON_PROXIMITY, true)

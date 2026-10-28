@@ -148,6 +148,8 @@
     <string name="proximity_keep_awake_seconds">Keep awake after proximity</string>
     <string name="proximity_keep_awake_hint">30</string>
     <string name="proximity_keep_awake_minimum">Keep awake time must be 0 seconds or more</string>
+    <string name="aod_refresh_seconds">Always-on refresh interval</string>
+    <string name="aod_refresh_hint">1</string>
     <string name="ignore_ssl_errors">Ignore SSL errors</string>
     <string name="webview_update_title">WebView update</string>
     <string name="webview_update_hint">Downloads the system WebView OTA published by Shelly, stages it at /cache/update.zip and reboots into recovery to install it. Needs ShellyElevate installed as a priv-app. Needed on Stargate to render Home Assistant.</string>

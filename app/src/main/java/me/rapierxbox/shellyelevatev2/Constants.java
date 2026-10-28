@@ -82,6 +82,9 @@ public final class Constants {
     public static final String SP_SCREEN_SAVER_ID = "screenSaverId";
     public static final String SP_WAKE_ON_PROXIMITY = "wakeOnProximity";
     public static final String SP_PROXIMITY_KEEP_AWAKE_SECONDS = "proximityKeepAwakeSeconds";
+    // how often the always-on display wakes the page to refresh it
+    public static final String SP_AOD_REFRESH_SECONDS = "aodRefreshSeconds";
+    public static final int AOD_REFRESH_DEFAULT_SECONDS = 1;
     public static final String SP_SCREEN_SAVER_MIN_BRIGHTNESS = "screenSaverMinBrightness";
     public static final String SP_TOUCH_TO_WAKE = "touchToWake";
 
