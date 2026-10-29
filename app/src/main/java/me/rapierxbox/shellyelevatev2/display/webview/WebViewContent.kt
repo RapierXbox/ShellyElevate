@@ -45,6 +45,8 @@ import me.rapierxbox.shellyelevatev2.Constants.EXTRA_SCREEN_SAVER_ID
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_HA_LOGIN_CHANGED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STARTED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_AOD_STOPPED
+import me.rapierxbox.shellyelevatev2.Constants.SP_AOD_REFRESH_SECONDS
+import me.rapierxbox.shellyelevatev2.Constants.AOD_REFRESH_DEFAULT_SECONDS
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_PROXIMITY_UPDATED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STARTED
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_SCREEN_SAVER_STOPPED
@@ -147,10 +149,13 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
     private var webViewPausedForSleep = false
     private var inAODMode = false
 
+    // elapsedRealtime of the last finished page load, see aodTickPeriodMs
+    private var lastPageFinishedAt = 0L
+
     // a translucent activity like the switcher only pauses us so the page never stopped
     private var stoppedSinceResume = false
 
-    // aod wakes the webview briefly once per second so widgets like the clock stay current
+    // aod wakes the webview briefly every aodRefreshSeconds (default once per second) so widgets like the clock stay current
     private val aodTickHandler = Handler(Looper.getMainLooper())
 
     private val aodTickPauseRunnable = Runnable {
@@ -173,7 +178,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             } catch (e: Exception) {
                 Log.w(TAG, "aod tick resume failed: ${e.message}")
             }
-            aodTickHandler.postDelayed(this, AOD_TICK_PERIOD_MS)
+            aodTickHandler.postDelayed(this, aodTickPeriodMs())
         }
     }
 
@@ -398,7 +403,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
         if (inAODMode) return
         inAODMode = true
         try {
-            // the webview stays visible and the ticker resumes its timers briefly each second
+            // the webview stays visible and the ticker resumes it briefly once per refresh interval
             webView.settings.offscreenPreRaster = false
             webView.onPause()
             webView.pauseTimers()
@@ -406,11 +411,22 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
                 webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_WAIVED, false)
             }
             aodTickHandler.removeCallbacksAndMessages(null)
-            aodTickHandler.postDelayed(aodTickRunnable, AOD_TICK_PERIOD_MS)
+            aodTickHandler.postDelayed(aodTickRunnable, aodTickPeriodMs())
             Log.i(TAG, "aod mode entered")
         } catch (e: Exception) {
             Log.w(TAG, "enterAODMode failed: ${e.message}")
         }
+    }
+
+    // each tick resumes the page, which fires visibilitychange, so pages that resubscribe or
+    // redraw on visibility (ha cards like weather-forecast-card) do that once per tick
+    // a page that just loaded still fetches its data and builds its cards, so it keeps the
+    // one second tick for a while. otherwise aod right after a boot or reload leaves the
+    // dashboard half drawn until the next long tick
+    private fun aodTickPeriodMs(): Long {
+        if (SystemClock.elapsedRealtime() - lastPageFinishedAt < AOD_PAGE_SETTLE_MS) return 1000L
+        val seconds = mSharedPreferences.getInt(SP_AOD_REFRESH_SECONDS, AOD_REFRESH_DEFAULT_SECONDS)
+        return seconds.coerceIn(1, 3600) * 1000L
     }
 
     private fun exitAODMode() {
@@ -695,6 +711,7 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
+            lastPageFinishedAt = SystemClock.elapsedRealtime()
             reportShownUrl(url)
             RendererPriority.boostAsync()
         }
@@ -842,8 +859,8 @@ class WebViewContent(private val host: DisplayHost) : DisplayContent {
             ConsoleMessage.MessageLevel.TIP,
         )
 
-        const val AOD_TICK_PERIOD_MS = 1000L
         const val AOD_TICK_WINDOW_MS = 200L
+        const val AOD_PAGE_SETTLE_MS = 60_000L
 
         // long enough for the suspend script and the socket close to run before timers pause again
         const val HA_SUSPEND_RUN_MS = 2_000L

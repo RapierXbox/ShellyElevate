@@ -151,6 +151,12 @@ public final class SettingsRegistry {
                         new SettingDef.Option(2, "Clock and date"),
                         new SettingDef.Option(3, "Always-on display")))
                 .visibleIf(saverOn));
+        // every refresh flips the page visible and back, so longer intervals keep busy dashboards quiet
+        add(m, integer(Constants.SP_AOD_REFRESH_SECONDS, Constants.AOD_REFRESH_DEFAULT_SECONDS, CATEGORY_SCREENSAVER,
+                "Always-on refresh interval")
+                .range(1, 3600).unit("s")
+                .description("Seconds between the short wakes that update the dashboard while the always-on display is shown")
+                .visibleIf(saverOn, eq(Constants.SP_SCREEN_SAVER_ID, 3)));
         // screen off and aod pin the backlight so only the clocks follow the light sensor
         add(m, integer(Constants.SP_SCREEN_SAVER_MIN_BRIGHTNESS, 48, CATEGORY_SCREENSAVER, "Screensaver brightness")
                 .range(0, 255)
