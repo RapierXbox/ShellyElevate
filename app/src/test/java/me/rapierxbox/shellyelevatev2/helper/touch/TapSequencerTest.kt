@@ -63,9 +63,21 @@ class TapSequencerTest {
     }
 
     @Test
-    fun multiFingerTapsAreReportedAtOnce() {
+    fun multiFingerTapsAreHeldBackToo() {
         val s = TapSequencer()
-        assertEquals(listOf(tap3), s.onTouchEnd(tap3, 1000, 1080))
+        assertEquals(emptyList<Gesture>(), s.onTouchEnd(tap3, 1000, 1080))
+        assertEquals(1380L, s.flushAtMs)
+        assertEquals(tap3, s.flush(1380))
+    }
+
+    @Test
+    fun twoMultiFingerTapsWithTheSameFingersAreADoubleTap() {
+        val s = TapSequencer()
+        s.onTouchEnd(tap3, 1000, 1080)
+        assertEquals(listOf(Gesture(Kind.DOUBLE_TAP, 3)), s.onTouchEnd(tap3, 1300, 1380))
+        assertEquals(-1L, s.flushAtMs)
+        // the hand bouncing after the double tap is dropped
+        assertEquals(emptyList<Gesture>(), s.onTouchEnd(tap1, 1540, 1590))
         assertEquals(-1L, s.flushAtMs)
     }
 
@@ -73,18 +85,29 @@ class TapSequencerTest {
     fun theBounceAfterAMultiFingerTapIsDropped() {
         val s = TapSequencer()
         s.onTouchEnd(tap3, 1000, 1080)
+        // one finger touches again 160 ms later: not a tap of its own and the tap stays held back
         assertEquals(emptyList<Gesture>(), s.onTouchEnd(tap1, 1240, 1290))
-        assertEquals(-1L, s.flushAtMs)
-        // past the bounce time taps count again
-        assertEquals(emptyList<Gesture>(), s.onTouchEnd(tap1, 1330, 1400))
-        assertEquals(tap1, s.flush(1700))
+        assertEquals(tap3, s.flush(1380))
+        // past the window taps count again
+        assertEquals(emptyList<Gesture>(), s.onTouchEnd(tap1, 1400, 1470))
+        assertEquals(tap1, s.flush(1770))
+    }
+
+    @Test
+    fun anotherFingerCountAfterTheBounceTimeIsItsOwnTap() {
+        val s = TapSequencer()
+        s.onTouchEnd(tap3, 1000, 1080)
+        // 270 ms later with two fingers: too late for a bounce and not the same fingers
+        assertEquals(listOf(tap3), s.onTouchEnd(Gesture(Kind.TAP, 2), 1350, 1420))
+        assertEquals(Gesture(Kind.TAP, 2), s.flush(1720))
     }
 
     @Test
     fun aMultiFingerTapAfterATapDoesNotDouble() {
         val s = TapSequencer()
         s.onTouchEnd(tap1, 1000, 1080)
-        assertEquals(listOf(tap1, tap3), s.onTouchEnd(tap3, 1200, 1280))
+        assertEquals(listOf(tap1), s.onTouchEnd(tap3, 1200, 1280))
+        assertEquals(tap3, s.flush(1580))
     }
 
     @Test

@@ -112,7 +112,7 @@ object GestureClassifier {
         val ids = ArrayList<String>()
         for (n in 1..MAX_FINGERS) {
             ids += Gesture(Kind.TAP, n).id
-            if (n == 1) ids += Gesture(Kind.DOUBLE_TAP, 1).id
+            ids += Gesture(Kind.DOUBLE_TAP, n).id
             ids += Gesture(Kind.LONG_PRESS, n).id
         }
         for (edge in Edge.entries) ids += Gesture(Kind.EDGE, 1, edge).id

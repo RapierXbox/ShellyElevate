@@ -56,7 +56,7 @@ object GestureActions {
             for (direction in DIRECTIONS) ids += "swipe_${fingers}_$direction"
         }
         for (fingers in 2..GestureClassifier.MAX_FINGERS) ids += Gesture(Kind.TAP, fingers).id
-        ids += Gesture(Kind.DOUBLE_TAP, 1).id
+        for (fingers in 1..GestureClassifier.MAX_FINGERS) ids += Gesture(Kind.DOUBLE_TAP, fingers).id
         for (fingers in 2..GestureClassifier.MAX_FINGERS) ids += Gesture(Kind.LONG_PRESS, fingers).id
         for (edge in GestureClassifier.Edge.entries) ids += Gesture(Kind.EDGE, 1, edge).id
         return ids
@@ -69,7 +69,8 @@ object GestureActions {
         return when {
             gestureId.startsWith("swipe_") && parts.size == 3 -> "${parts[1]} finger swipe ${parts[2]}"
             gestureId.startsWith("tap_") -> "${parts.last()} finger tap"
-            gestureId.startsWith("double_tap_") -> "Double tap"
+            gestureId == "double_tap_1" -> "Double tap"
+            gestureId.startsWith("double_tap_") -> "${parts.last()} finger double tap"
             gestureId.startsWith("long_press_") -> "${parts.last()} finger long press"
             gestureId.startsWith("edge_") -> "Swipe in from the ${parts.last()} edge"
             else -> gestureId
@@ -105,9 +106,9 @@ object GestureActions {
 
         if (mSharedPreferences.getBoolean(SP_PUBLISH_GESTURE_EVENTS, true)) ApiEvents.gesture(gesture.id)
 
-        // one finger long presses are an event only and a double tap acts only over other apps
+        // one finger long presses are an event only and a one finger double tap acts only over other apps
         if (gesture.kind == Kind.LONG_PRESS && gesture.fingers == 1) return
-        if (gesture.kind == Kind.DOUBLE_TAP && inOwnApp) return
+        if (gesture.kind == Kind.DOUBLE_TAP && gesture.fingers == 1 && inOwnApp) return
         runAssigned(gesture.id)
     }
 

@@ -97,8 +97,8 @@ class GestureClassifierTest {
     @Test
     fun allIdsAreUnique() {
         val ids = GestureClassifier.allIds()
-        assertEquals(15, ids.size)
+        assertEquals(19, ids.size)
         assertEquals(ids.size, ids.toSet().size)
-        assertTrue(ids.containsAll(listOf("tap_1", "double_tap_1", "long_press_5", "edge_top")))
+        assertTrue(ids.containsAll(listOf("tap_1", "double_tap_1", "double_tap_4", "long_press_5", "edge_top")))
     }
 }
