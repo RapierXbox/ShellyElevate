@@ -1,5 +1,7 @@
 package me.rapierxbox.shellyelevatev2.settings;
 
+import me.rapierxbox.shellyelevatev2.helper.touch.GestureActions;
+
 import static me.rapierxbox.shellyelevatev2.settings.SettingDef.TYPE_BOOL;
 import static me.rapierxbox.shellyelevatev2.settings.SettingDef.TYPE_ENUM;
 import static me.rapierxbox.shellyelevatev2.settings.SettingDef.TYPE_FLOAT;
@@ -181,6 +183,13 @@ public final class SettingsRegistry {
         // inputs
         add(m, bool(Constants.SP_SWITCH_ON_SWIPE, true, CATEGORY_INPUTS, "Toggle relay on swipe").requires(RELAYS, 1));
         add(m, bool(Constants.SP_PUBLISH_SWIPE_EVENTS, true, CATEGORY_INPUTS, "Publish swipe events"));
+        add(m, bool(Constants.SP_PUBLISH_GESTURE_EVENTS, true, CATEGORY_INPUTS, "Publish gesture events")
+                .description("Taps with several fingers, long presses, double taps and swipes in from an edge"));
+        for (String gestureId : GestureActions.assignableIds()) {
+            add(m, new SettingDef.Builder(GestureActions.settingKey(gestureId), TYPE_ENUM, Constants.GESTURE_ACTION_NONE,
+                    CATEGORY_INPUTS, GestureActions.label(gestureId)).options(gestureActionOptions())
+                    .description("What this gesture does besides its event. The app switcher gesture goes first"));
+        }
         add(m, bool(Constants.SP_POWER_BUTTON_AUTO_REBOOT, true, CATEGORY_INPUTS, "Power button reboots")
                 .requires(POWER_BUTTON));
         add(m, bool(Constants.SP_BUTTON_RELAY_ENABLED, false, CATEGORY_INPUTS, "Buttons switch relays")
@@ -445,6 +454,14 @@ public final class SettingsRegistry {
                 add(m, b.visibleIf(shown));
             }
         }
+    }
+
+    private static List<SettingDef.Option> gestureActionOptions() {
+        List<SettingDef.Option> options = new ArrayList<>();
+        for (String actionId : GestureActions.actionIds()) {
+            options.add(new SettingDef.Option(actionId, GestureActions.actionLabel(actionId)));
+        }
+        return options;
     }
 
     private static List<SettingDef.Option> switcherGestureOptions() {

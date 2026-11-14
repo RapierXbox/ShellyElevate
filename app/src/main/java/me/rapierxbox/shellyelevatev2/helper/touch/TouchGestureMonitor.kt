@@ -21,8 +21,8 @@ import java.io.IOException
 import java.io.InputStreamReader
 
 // reads the touchscreen straight from /dev/input so swipes work over any app in front
-// while one of our activities is resumed its own views handle touches through SwipeHelper
-// so nothing fires twice
+// while one of our activities is resumed its own views handle swipes through SwipeHelper
+// so nothing fires twice. taps long presses and edge swipes are always judged here
 // readers are tried from cheapest to most invasive: native read, native read after a chmod,
 // getevent, getevent through su and finally an edge strip overlay that needs no input access at all
 object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Listener {
@@ -47,6 +47,16 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val tracker = MultiTouchTracker(this)
+
+    // double taps and the bounce after a multi finger tap. only touched on the main thread
+    private val taps = TapSequencer()
+
+    // gesture whose long press already fired so its end reports nothing more. main thread only
+    private var longPressSerial = -1
+
+    // when the touch running right now went down
+    @Volatile
+    private var lastDownMs = 0L
 
     private lateinit var appContext: Context
     private var touchscreen: InputMonitor.Touchscreen? = null
@@ -174,6 +184,9 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
                 screenSize[0].toInt(), screenSize[1].toInt())
         }
         Log.i(TAG, "touch axis map ${axisMap.encode()}")
+        // the tracker judges resting fingers in raw units
+        tracker.stillSlopX = ((screen.maxX - screen.minX) * GestureClassifier.SLOP_FRACTION).toInt().coerceAtLeast(1)
+        tracker.stillSlopY = ((screen.maxY - screen.minY) * GestureClassifier.SLOP_FRACTION).toInt().coerceAtLeast(1)
     }
 
     // called on the native reader thread
@@ -193,6 +206,38 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
             // our own views reset the idle timer themselves
             if (!ForegroundActivities.anyResumed()) mScreenSaverManager?.onTouchEvent(null)
         }
+    }
+
+    // reader thread. the long press is checked once the fingers rested long enough
+    override fun onTouchDown(startMs: Long) {
+        lastDownMs = startMs
+        val serial = tracker.gestureSerial
+        mainHandler.postDelayed({ checkLongPress(serial, startMs) }, GestureClassifier.DEFAULT_LONG_PRESS_MS)
+    }
+
+    // fires while the fingers are still down so it does not wait for the release
+    private fun checkLongPress(serial: Int, downMs: Long) {
+        if (tracker.gestureSerial != serial || tracker.liveCount == 0 || tracker.liveMoved) return
+        longPressSerial = serial
+        val fingers = tracker.liveMaxPointers.coerceIn(1, GestureClassifier.MAX_FINGERS)
+        val press = GestureClassifier.Gesture(GestureClassifier.Kind.LONG_PRESS, fingers)
+        report(taps.onTouchEnd(press, downMs, SystemClock.uptimeMillis()))
+    }
+
+    private fun report(gestures: List<GestureClassifier.Gesture>) {
+        if (gestures.isEmpty()) return
+        val inOwnApp = ForegroundActivities.anyResumed()
+        for (gesture in gestures) GestureActions.dispatch(gesture, inOwnApp)
+    }
+
+    // a one finger tap is held back for the double tap window
+    private fun scheduleTapFlush() {
+        val at = taps.flushAtMs
+        if (at < 0) return
+        mainHandler.postAtTime({
+            val down = if (tracker.liveCount > 0) lastDownMs else -1L
+            taps.flush(SystemClock.uptimeMillis(), down)?.let { report(listOf(it)) }
+        }, at)
     }
 
     override fun onGestureStart(pointers: Int) {
@@ -236,8 +281,9 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
             val t = gesture.tracks[0]
             offerRawSample((t.endX - t.startX) / spanX, (t.endY - t.startY) / spanY, gesture.endMs)
         }
-        // our own views already handle this gesture
-        if (ForegroundActivities.anyResumed()) return
+        // our own views already handle swipes
+        val inOwnApp = ForegroundActivities.anyResumed()
+        val serial = tracker.gestureSerial
 
         val w = screenSize[0]
         val h = screenSize[1]
@@ -250,10 +296,21 @@ object TouchGestureMonitor : InputMonitor.TouchCallback, MultiTouchTracker.Liste
             SwipeClassifier.Track(start[0] * w, start[1] * h, end[0] * w, end[1] * h)
         }
         val duration = gesture.endMs - if (gesture.maxPointers > 1) gesture.lastJoinMs else gesture.startMs
-        val swipe = SwipeClassifier.classify(tracks, gesture.maxPointers, duration, minOf(w, h))
+        val totalMs = gesture.endMs - gesture.startMs
+        // a swipe in from an edge goes before a plain one finger swipe
+        val edge = GestureClassifier.classifyEdge(tracks, gesture.maxPointers, totalMs, w, h)
+        val swipe = if (edge != null || inOwnApp) null
+            else SwipeClassifier.classify(tracks, gesture.maxPointers, duration, minOf(w, h))
+        val press = if (edge != null || swipe != null) null
+            else GestureClassifier.classifyPress(tracks, gesture.maxPointers, totalMs, minOf(w, h))
 
         mainHandler.post {
-            if (ForegroundActivities.anyResumed()) return@post
+            // a long press that fired while the fingers were down is done
+            if (serial != longPressSerial) {
+                report(taps.onTouchEnd(edge ?: press, gesture.startMs, gesture.endMs))
+                scheduleTapFlush()
+            }
+            if (edge != null || ForegroundActivities.anyResumed()) return@post
             if (swipe != null) {
                 SwipeActions.dispatch(swipe)
             } else {

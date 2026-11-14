@@ -30,6 +30,10 @@ public final class Constants {
     // io prefs
     public static final String SP_SWITCH_ON_SWIPE = "switchOnSwipe";
     public static final String SP_PUBLISH_SWIPE_EVENTS = "publishSwipeEvents";
+    public static final String SP_PUBLISH_GESTURE_EVENTS = "publishGestureEvents";
+    // one setting per gesture id like gestureAction_tap_3
+    public static final String SP_GESTURE_ACTION_FORMAT = "gestureAction_%s";
+    public static final String GESTURE_ACTION_NONE = "none";
     public static final String SP_POWER_BUTTON_AUTO_REBOOT = "powerButtonAutoReboot";
     public static final String SP_BUTTON_RELAY_ENABLED = "buttonRelayEnabled";
     public static final String SP_BUTTON_RELAY_MAP_FORMAT = "buttonRelayMap%d";

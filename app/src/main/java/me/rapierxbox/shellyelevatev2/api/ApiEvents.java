@@ -43,6 +43,16 @@ public final class ApiEvents {
         }
     }
 
+    // taps long presses double taps and edge swipes by their gesture id like tap_3 or edge_left
+    public static void gesture(String id) {
+        if (!ApiHub.hasController()) return;
+        try {
+            ApiHub.event("gesture", new JSONObject().put("gesture", id));
+        } catch (JSONException e) {
+            Log.w(TAG, "Could not build gesture event", e);
+        }
+    }
+
     // a press on a wired sw input
     public static void input(int index, String pressType) {
         if (!ApiHub.hasController()) return;

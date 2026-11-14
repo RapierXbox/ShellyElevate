@@ -8,8 +8,12 @@ import android.view.MotionEvent;
 import java.util.ArrayList;
 import java.util.List;
 
+import android.util.DisplayMetrics;
+
+import me.rapierxbox.shellyelevatev2.helper.touch.GestureClassifier;
 import me.rapierxbox.shellyelevatev2.helper.touch.SwipeActions;
 import me.rapierxbox.shellyelevatev2.helper.touch.SwipeClassifier;
+import me.rapierxbox.shellyelevatev2.helper.touch.TouchGestureMonitor;
 
 // collects the pointers of an in app gesture and hands the finished gesture to SwipeClassifier
 // touches over other apps reach the same classifier through TouchGestureMonitor
@@ -116,6 +120,12 @@ public class SwipeHelper {
         for (int i = 0; i < pointers.size(); i++) {
             PointerInfo p = pointers.valueAt(i);
             tracks.add(new SwipeClassifier.Track(p.startX, p.startY, p.endX, p.endY));
+        }
+        // a swipe in from an edge is an edge gesture which the global touch reader reports
+        if (maxPointerCount == 1 && TouchGestureMonitor.isRunning()) {
+            DisplayMetrics metrics = mApplicationContext.getResources().getDisplayMetrics();
+            if (GestureClassifier.classifyEdge(tracks, 1, Math.max(1, endTime - gestureStartTime),
+                    metrics.widthPixels, metrics.heightPixels) != null) return;
         }
         SwipeClassifier.Swipe swipe = SwipeClassifier.classify(tracks, maxPointerCount, totalTime, screenPx);
         if (swipe != null) SwipeActions.dispatch(swipe);

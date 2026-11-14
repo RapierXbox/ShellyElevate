@@ -67,6 +67,9 @@ object SwipeActions {
             ApiEvents.swipe(swipe.direction.name, swipe.fingers)
         }
 
+        // the action set for a multi finger swipe runs next to its event
+        if (swipe.fingers >= 2) GestureActions.runAssigned(swipe.id)
+
         if (swipe.fingers == 1) {
             if (!mSharedPreferences.getBoolean(SP_SWITCH_ON_SWIPE, true)) return
             val relayIndex = 0
