@@ -4,9 +4,8 @@ import android.content.Intent
 import android.util.Log
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import me.rapierxbox.shellyelevatev2.BuildConfig
-import me.rapierxbox.shellyelevatev2.Constants.GESTURE_ACTION_NONE
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_WEBVIEW_REFRESH
-import me.rapierxbox.shellyelevatev2.Constants.SP_GESTURE_ACTION_FORMAT
+import me.rapierxbox.shellyelevatev2.Constants.SP_ACTION_GESTURES_FORMAT
 import me.rapierxbox.shellyelevatev2.Constants.SP_PUBLISH_GESTURE_EVENTS
 import me.rapierxbox.shellyelevatev2.SettingsActivity
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicationContext
@@ -18,8 +17,9 @@ import me.rapierxbox.shellyelevatev2.helper.touch.GestureClassifier.Gesture
 import me.rapierxbox.shellyelevatev2.helper.touch.GestureClassifier.Kind
 import me.rapierxbox.shellyelevatev2.switcher.AppSwitcher
 
-// what a gesture does besides its event. every gesture that can carry an action has one setting
-// gestureAction_<gesture id> holding one of the action ids below. called on the main thread
+// what a gesture does besides its event. every action below has one setting actionGestures_<action id>
+// holding the ids of the gestures that run it, so one action can have several gestures
+// called on the main thread
 object GestureActions {
     private const val TAG = "GestureActions"
 
@@ -36,7 +36,16 @@ object GestureActions {
     private val DIRECTIONS = arrayOf("up", "down", "left", "right")
 
     @JvmStatic
-    fun settingKey(gestureId: String): String = String.format(SP_GESTURE_ACTION_FORMAT, gestureId)
+    fun settingKey(actionId: String): String = String.format(SP_ACTION_GESTURES_FORMAT, actionId)
+
+    // index of the relay an action toggles or -1 for any other action
+    @JvmStatic
+    fun relayOf(actionId: String): Int =
+        if (actionId.startsWith(ACTION_RELAY_TOGGLE_PREFIX)) {
+            actionId.removePrefix(ACTION_RELAY_TOGGLE_PREFIX).toIntOrNull() ?: -1
+        } else {
+            -1
+        }
 
     // gestures that can carry an action. plain one finger taps and long presses are left out on purpose
     // since they belong to the dashboard under the finger
@@ -70,23 +79,19 @@ object GestureActions {
     // action ids in the order the settings show them
     @JvmStatic
     fun actionIds(): List<String> {
-        val ids = arrayListOf(
-            GESTURE_ACTION_NONE, ACTION_SETTINGS, ACTION_APP_SWITCHER, ACTION_RELOAD, ACTION_WAKE, ACTION_SLEEP
-        )
+        val ids = arrayListOf(ACTION_SETTINGS, ACTION_APP_SWITCHER, ACTION_RELOAD, ACTION_WAKE, ACTION_SLEEP)
         for (relay in 0 until MAX_RELAYS) ids += ACTION_RELAY_TOGGLE_PREFIX + relay
         return ids
     }
 
     @JvmStatic
     fun actionLabel(actionId: String): String = when {
-        actionId == GESTURE_ACTION_NONE -> "Event only"
         actionId == ACTION_SETTINGS -> "Open settings"
         actionId == ACTION_APP_SWITCHER -> "Open app switcher"
         actionId == ACTION_RELOAD -> "Reload dashboard"
         actionId == ACTION_WAKE -> "Wake screen"
         actionId == ACTION_SLEEP -> "Screen to sleep"
-        actionId.startsWith(ACTION_RELAY_TOGGLE_PREFIX) ->
-            "Toggle relay ${(actionId.removePrefix(ACTION_RELAY_TOGGLE_PREFIX).toIntOrNull() ?: 0) + 1}"
+        relayOf(actionId) >= 0 -> "Toggle relay ${relayOf(actionId) + 1}"
         else -> actionId
     }
 
@@ -106,17 +111,21 @@ object GestureActions {
         runAssigned(gesture.id)
     }
 
-    // runs the action set for this gesture id. true when one ran
+    // runs every action this gesture id is set for. true when one ran
     @JvmStatic
     fun runAssigned(gestureId: String): Boolean {
-        val action = mSharedPreferences.getString(settingKey(gestureId), GESTURE_ACTION_NONE) ?: GESTURE_ACTION_NONE
-        if (action == GESTURE_ACTION_NONE) return false
-        return try {
-            run(action)
-        } catch (e: Exception) {
-            Log.w(TAG, "action $action for $gestureId failed", e)
-            false
+        var ran = false
+        for (action in actionIds()) {
+            val gestures = mSharedPreferences.getStringSet(settingKey(action), null) ?: continue
+            if (gestureId !in gestures) continue
+            try {
+                if (BuildConfig.DEBUG) Log.d(TAG, "$gestureId runs $action")
+                if (run(action)) ran = true
+            } catch (e: Exception) {
+                Log.w(TAG, "action $action for $gestureId failed", e)
+            }
         }
+        return ran
     }
 
     private fun run(action: String): Boolean {
@@ -134,7 +143,8 @@ object GestureActions {
             // asked for by hand so it sleeps even with the screensaver setting off
             action == ACTION_SLEEP -> mScreenSaverManager?.startScreenSaver(true)
             action.startsWith(ACTION_RELAY_TOGGLE_PREFIX) -> {
-                val relay = action.removePrefix(ACTION_RELAY_TOGGLE_PREFIX).toIntOrNull() ?: return false
+                val relay = relayOf(action)
+                if (relay < 0) return false
                 mDeviceHelper.setRelay(relay, !mDeviceHelper.getRelay(relay))
             }
             else -> return false

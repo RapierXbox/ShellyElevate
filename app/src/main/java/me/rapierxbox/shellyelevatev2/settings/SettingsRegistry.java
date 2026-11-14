@@ -185,10 +185,13 @@ public final class SettingsRegistry {
         add(m, bool(Constants.SP_PUBLISH_SWIPE_EVENTS, true, CATEGORY_INPUTS, "Publish swipe events"));
         add(m, bool(Constants.SP_PUBLISH_GESTURE_EVENTS, true, CATEGORY_INPUTS, "Publish gesture events")
                 .description("Taps with several fingers, long presses, double taps and swipes in from an edge"));
-        for (String gestureId : GestureActions.assignableIds()) {
-            add(m, new SettingDef.Builder(GestureActions.settingKey(gestureId), TYPE_ENUM, Constants.GESTURE_ACTION_NONE,
-                    CATEGORY_INPUTS, GestureActions.label(gestureId)).options(gestureActionOptions())
-                    .description("What this gesture does besides its event. The app switcher gesture goes first"));
+        for (String actionId : GestureActions.actionIds()) {
+            SettingDef.Builder gestures = new SettingDef.Builder(GestureActions.settingKey(actionId), TYPE_STRING_LIST,
+                    new ArrayList<String>(), CATEGORY_INPUTS, GestureActions.actionLabel(actionId))
+                    .options(gestureOptions())
+                    .description("Gestures that do this besides their event. The app switcher gesture goes first");
+            int relay = GestureActions.relayOf(actionId);
+            add(m, relay >= 0 ? gestures.requires(RELAYS, relay + 1) : gestures);
         }
         add(m, bool(Constants.SP_POWER_BUTTON_AUTO_REBOOT, true, CATEGORY_INPUTS, "Power button reboots")
                 .requires(POWER_BUTTON));
@@ -456,10 +459,10 @@ public final class SettingsRegistry {
         }
     }
 
-    private static List<SettingDef.Option> gestureActionOptions() {
+    private static List<SettingDef.Option> gestureOptions() {
         List<SettingDef.Option> options = new ArrayList<>();
-        for (String actionId : GestureActions.actionIds()) {
-            options.add(new SettingDef.Option(actionId, GestureActions.actionLabel(actionId)));
+        for (String gestureId : GestureActions.assignableIds()) {
+            options.add(new SettingDef.Option(gestureId, GestureActions.label(gestureId)));
         }
         return options;
     }
@@ -573,6 +576,19 @@ public final class SettingsRegistry {
             }
         } else {
             throw new IllegalArgumentException(def.key + ": expected a list");
+        }
+        // a list with options only takes those
+        if (def.options != null && !def.options.isEmpty()) {
+            for (String item : out) {
+                boolean known = false;
+                for (SettingDef.Option option : def.options) {
+                    if (option.value.equals(item)) {
+                        known = true;
+                        break;
+                    }
+                }
+                if (!known) throw new IllegalArgumentException(def.key + ": " + item + " is not one of the options");
+            }
         }
         return out;
     }
