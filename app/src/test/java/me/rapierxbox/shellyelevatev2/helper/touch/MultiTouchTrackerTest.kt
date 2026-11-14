@@ -17,12 +17,17 @@ class MultiTouchTrackerTest {
 
     private val ended = mutableListOf<MultiTouchTracker.Gesture>()
     private val started = mutableListOf<Int>()
+    private val downs = mutableListOf<Long>()
     private lateinit var tracker: MultiTouchTracker
     private var now = 0L
 
     @Before
     fun setUp() {
         tracker = MultiTouchTracker(object : MultiTouchTracker.Listener {
+            override fun onTouchDown(startMs: Long) {
+                downs += startMs
+            }
+
             override fun onGestureStart(pointers: Int) {
                 started += pointers
             }
@@ -258,5 +263,57 @@ class MultiTouchTrackerTest {
         assertEquals(2, g.maxPointers)
         assertEquals(200, g.tracks[0].endY)
         assertEquals(600, g.tracks[0].startY)
+    }
+
+    @Test
+    fun touchDownIsReportedOncePerGesture() {
+        now = 5
+        slot(0, 10, 300, 300)
+        syn()
+        now = 20
+        slot(1, 11, 400, 300)
+        syn()
+        assertEquals(listOf(5L), downs)
+        assertEquals(1, tracker.gestureSerial)
+        assertEquals(2, tracker.liveMaxPointers)
+        slot(0, -1)
+        slot(1, -1)
+        syn()
+        assertEquals(0, tracker.liveMaxPointers)
+
+        now = 500
+        slot(0, 12, 100, 100)
+        syn()
+        assertEquals(listOf(5L, 500L), downs)
+        assertEquals(2, tracker.gestureSerial)
+    }
+
+    @Test
+    fun aRestingFingerDoesNotCountAsMoved() {
+        tracker.stillSlopX = 10
+        tracker.stillSlopY = 20
+        slot(0, 10, 300, 300)
+        syn()
+        slot(0, null, x = 308, y = 318)
+        syn()
+        assertEquals(false, tracker.liveMoved)
+        // it stays moved even when the finger comes back
+        slot(0, null, x = 311)
+        syn()
+        slot(0, null, x = 300)
+        syn()
+        assertTrue(tracker.liveMoved)
+        slot(0, -1)
+        syn()
+        assertEquals(false, tracker.liveMoved)
+    }
+
+    @Test
+    fun movementIsNotCheckedWithoutASlop() {
+        slot(0, 10, 300, 300)
+        syn()
+        slot(0, null, x = 600)
+        syn()
+        assertEquals(false, tracker.liveMoved)
     }
 }

@@ -1,5 +1,7 @@
 package me.rapierxbox.shellyelevatev2.helper.touch
 
+import kotlin.math.abs
+
 // turns raw linux multitouch events into gestures. handles protocol b (slots and tracking ids)
 // and the older protocol a (SYN_MT_REPORT separated contacts). no android types so it is unit tested
 // it sees every touch on the panel so a frame allocates nothing and only a new finger creates a Track
@@ -8,6 +10,9 @@ class MultiTouchTracker(private val listener: Listener) {
     interface Listener {
         // every frame with a finger down. keep it cheap
         fun onTouchActivity() {}
+
+        // the first finger of a gesture went down
+        fun onTouchDown(startMs: Long) {}
 
         // once per gesture as soon as two or more fingers are down together
         fun onGestureStart(pointers: Int) {}
@@ -63,7 +68,29 @@ class MultiTouchTracker(private val listener: Listener) {
     private var lastJoinMs = 0L
 
     // fingers down right now
+    @Volatile
     var liveCount = 0
+        private set
+
+    // how far a finger may stray from where it went down in raw units and still count as resting
+    // 0 turns the check off
+    var stillSlopX = 0
+    var stillSlopY = 0
+
+    // the running gesture as seen from another thread, for a long press timer
+    // counts up with every gesture so a timer can tell its gesture from the next one
+    @Volatile
+    var gestureSerial = 0
+        private set
+
+    // a finger of the running gesture left its spot
+    @Volatile
+    var liveMoved = false
+        private set
+
+    // most fingers down together in the running gesture so far
+    @Volatile
+    var liveMaxPointers = 0
         private set
 
     fun onEvent(type: Int, code: Int, value: Int, nowMs: Long) {
@@ -140,6 +167,7 @@ class MultiTouchTracker(private val listener: Listener) {
     private fun commitFrame(nowMs: Long) {
         if (protocolA) matchProtocolA()
         var count = 0
+        var began = false
         for (i in 0 until MAX_CONTACTS) {
             val id = slotId[i]
             val x = slotX[i]
@@ -161,12 +189,18 @@ class MultiTouchTracker(private val listener: Listener) {
                 if (!gestureActive) {
                     gestureActive = true
                     startMs = nowMs
+                    began = true
                 } else {
                     lastJoinMs = nowMs
                 }
             } else {
                 current.endX = x
                 current.endY = y
+                if (!liveMoved && stillSlopX > 0 &&
+                    (abs(x - current.startX) > stillSlopX || abs(y - current.startY) > stillSlopY)
+                ) {
+                    liveMoved = true
+                }
             }
         }
         frameCount = 0
@@ -174,6 +208,11 @@ class MultiTouchTracker(private val listener: Listener) {
 
         if (count > 0) {
             if (count > maxPointers) maxPointers = count
+            liveMaxPointers = maxPointers
+            if (began) {
+                gestureSerial++
+                listener.onTouchDown(nowMs)
+            }
             if (maxPointers >= 2 && !startNotified) {
                 startNotified = true
                 listener.onGestureStart(maxPointers)
@@ -284,6 +323,8 @@ class MultiTouchTracker(private val listener: Listener) {
         live.fill(null)
         liveId.fill(NO_ID)
         liveCount = 0
+        liveMoved = false
+        liveMaxPointers = 0
         done.clear()
         gestureActive = false
         startNotified = false
