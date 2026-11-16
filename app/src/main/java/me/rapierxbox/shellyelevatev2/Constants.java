@@ -114,6 +114,9 @@ public final class Constants {
     public static final String SP_VOICE_THINKING_SOUND_FILE = "voiceThinkingSoundFile";
     public static final String SP_VOICE_THINKING_SOUND_LOOP = "voiceThinkingSoundLoop";
     public static final String SP_VOICE_THINKING_SOUND_PITCH = "voiceThinkingSoundPitch"; // 0..50 percent
+    public static final String SP_VOICE_THINKING_SOUND_VOLUME = "voiceThinkingSoundVolume"; // 0..100 percent
+    public static final String SP_VOICE_THINKING_SOUND_FADE_IN = "voiceThinkingSoundFadeIn"; // milliseconds
+    public static final String SP_VOICE_THINKING_SOUND_FADE_OUT = "voiceThinkingSoundFadeOut"; // milliseconds
     public static final String SP_SPEAKER_ID_ENABLED = "speakerIdEnabled";
     public static final String SP_SPEAKER_ID_MODEL = "speakerIdModel";
     public static final String SP_SPEAKER_ID_STRICTNESS = "speakerIdStrictness"; // 0..100 where 50 is the model default

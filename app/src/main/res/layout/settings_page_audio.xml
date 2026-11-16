@@ -335,6 +335,84 @@
                     android:id="@+id/voiceThinkingPitchValue"
                     style="@style/Settings.SliderValue" />
             </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/voiceThinkingVolumeLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:text="@string/voice_thinking_volume"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/voiceThinkingVolume"
+                    style="@style/Settings.Slider"
+                    android:valueFrom="0"
+                    android:valueTo="100"
+                    android:stepSize="1" />
+
+                <TextView
+                    android:id="@+id/voiceThinkingVolumeValue"
+                    style="@style/Settings.SliderValue" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/voiceThinkingFadeInLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:text="@string/voice_thinking_fade_in"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/voiceThinkingFadeIn"
+                    style="@style/Settings.Slider"
+                    android:valueFrom="0"
+                    android:valueTo="3000"
+                    android:stepSize="100" />
+
+                <TextView
+                    android:id="@+id/voiceThinkingFadeInValue"
+                    style="@style/Settings.SliderValue" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/voiceThinkingFadeOutLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:text="@string/voice_thinking_fade_out"
+                    android:textSize="18sp" />
+
+                <com.google.android.material.slider.Slider
+                    android:id="@+id/voiceThinkingFadeOut"
+                    style="@style/Settings.Slider"
+                    android:valueFrom="0"
+                    android:valueTo="3000"
+                    android:stepSize="100" />
+
+                <TextView
+                    android:id="@+id/voiceThinkingFadeOutValue"
+                    style="@style/Settings.SliderValue" />
+            </LinearLayout>
         </LinearLayout>
 
         <com.google.android.material.materialswitch.MaterialSwitch

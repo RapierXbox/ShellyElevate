@@ -46,6 +46,11 @@ public final class AudioOutput {
         track.setVolume(gain(SP_VOICE_REPLY_VOLUME));
     }
 
+    // the voice reply level for a player that sets its own volume
+    public static float replyGain() {
+        return gain(SP_VOICE_REPLY_VOLUME);
+    }
+
     public static float announceGain() {
         return gain(SP_ANNOUNCE_VOLUME);
     }

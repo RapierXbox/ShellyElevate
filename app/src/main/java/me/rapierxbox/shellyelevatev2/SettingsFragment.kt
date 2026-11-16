@@ -694,6 +694,15 @@ class SettingsFragment : Fragment() {
             parent(b.voiceThinkingSound)
             row(SP_VOICE_THINKING_SOUND_LOOP, b.voiceThinkingOptions, b.voiceThinkingLoop)
             row(SP_VOICE_THINKING_SOUND_PITCH, b.voiceThinkingPitchLayout)
+            row(SP_VOICE_THINKING_SOUND_VOLUME, b.voiceThinkingVolumeLayout)
+            row(SP_VOICE_THINKING_SOUND_FADE_IN, b.voiceThinkingFadeInLayout)
+            row(SP_VOICE_THINKING_SOUND_FADE_OUT, b.voiceThinkingFadeOutLayout)
+            +SliderPref(b.voiceThinkingVolume, SP_VOICE_THINKING_SOUND_VOLUME, 100, b.voiceThinkingVolumeValue,
+                { getString(R.string.percent, it) })
+            +SliderPref(b.voiceThinkingFadeIn, SP_VOICE_THINKING_SOUND_FADE_IN, 0, b.voiceThinkingFadeInValue,
+                { getString(R.string.milliseconds, it) })
+            +SliderPref(b.voiceThinkingFadeOut, SP_VOICE_THINKING_SOUND_FADE_OUT, 0, b.voiceThinkingFadeOutValue,
+                { getString(R.string.milliseconds, it) })
             +SwitchPref(b.voiceThinkingLoop, SP_VOICE_THINKING_SOUND_LOOP, true)
             +SliderPref(b.voiceThinkingPitch, SP_VOICE_THINKING_SOUND_PITCH, 10, b.voiceThinkingPitchValue,
                 { getString(R.string.plus_minus_percent, it) })
