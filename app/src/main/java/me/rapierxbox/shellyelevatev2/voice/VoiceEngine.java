@@ -568,7 +568,11 @@ public class VoiceEngine {
         if (mode != Mode.CONTROLLER) throw ApiHub.CommandException.unsupported("voice through Home Assistant is off");
         if (muted) throw new ApiHub.CommandException("busy", "microphone muted");
         if (state != State.IDLE) throw new ApiHub.CommandException("busy", "voice session running");
+        // the wake word tone tells the user the display listens again, for example after a question
+        boolean tone = mSharedPreferences.getBoolean(SP_VOICE_WAKE_SOUND_ENABLED, true);
+        if (tone) wakeToneEndsAt = SystemClock.elapsedRealtime() + WAKE_TONE_GUARD_MS;
         if (!startSession(true, null)) throw new ApiHub.CommandException("busy", "voice session not started");
+        if (tone) tonePlayer.playWake();
     }
 
     // voice.stop_audio: the controller has enough audio

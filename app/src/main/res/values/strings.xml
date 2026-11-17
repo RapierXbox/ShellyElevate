@@ -255,6 +255,10 @@
     <string name="voice_thinking_no_file">No sound yet. Upload one in the Shelly Elevate panel in Home Assistant under Settings</string>
     <string name="voice_thinking_loop">Loop until the answer</string>
     <string name="voice_thinking_pitch">Pitch variation</string>
+    <string name="voice_thinking_volume">Volume</string>
+    <string name="voice_thinking_fade_in">Fade in</string>
+    <string name="voice_thinking_fade_out">Fade out</string>
+    <string name="milliseconds">%1$d ms</string>
     <string name="integration_api_hint">Turning this off disconnects Home Assistant and stops voice and the Bluetooth proxy</string>
     <string name="settings_advanced">Advanced</string>
     <string name="settings_advanced_closed">%1$s  ▸</string>

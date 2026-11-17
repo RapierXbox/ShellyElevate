@@ -257,6 +257,13 @@ public final class SettingsRegistry {
                 .visibleIf(voiceOn, thinkingOn));
         add(m, integer(Constants.SP_VOICE_THINKING_SOUND_PITCH, 10, CATEGORY_VOICE, "Thinking sound pitch variation")
                 .range(0, 50).unit("%").description("Random pitch change for every play").visibleIf(voiceOn, thinkingOn));
+        add(m, integer(Constants.SP_VOICE_THINKING_SOUND_VOLUME, 100, CATEGORY_VOICE, "Thinking sound volume")
+                .range(0, 100).unit("%").visibleIf(voiceOn, thinkingOn));
+        add(m, integer(Constants.SP_VOICE_THINKING_SOUND_FADE_IN, 0, CATEGORY_VOICE, "Thinking sound fade in")
+                .range(0, 3000).unit("ms").visibleIf(voiceOn, thinkingOn));
+        add(m, integer(Constants.SP_VOICE_THINKING_SOUND_FADE_OUT, 0, CATEGORY_VOICE, "Thinking sound fade out")
+                .range(0, 3000).unit("ms").description("The answer starts speaking while the sound fades")
+                .visibleIf(voiceOn, thinkingOn));
         add(m, bool(Constants.SP_SPEAKER_ID_ENABLED, false, CATEGORY_VOICE, "Speaker recognition")
                 .description("Recognise who speaks from the wake word and the command").visibleIf(voiceOn));
         SettingDef.Condition speakerOn = eq(Constants.SP_SPEAKER_ID_ENABLED, true);
