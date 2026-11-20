@@ -440,6 +440,8 @@ class MainActivity : ComponentActivity(), DisplayHost {
     // the global touch reader learns the panel axes from touches the dashboard sees
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         TouchCalibrator.onTouch(ev)
+        // any touch silences a ringing timer
+        if (ev.action == MotionEvent.ACTION_DOWN) ShellyElevateApplication.mVoiceEngine?.timers()?.dismiss()
         return super.dispatchTouchEvent(ev)
     }
 

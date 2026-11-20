@@ -17,6 +17,9 @@ import me.rapierxbox.shellyelevatev2.R;
 public class VoiceTimers {
     private static final long TICK_MS = 1_000L;
     private static final long DONE_SHOW_MS = 5_000L;
+    // a finished timer rings until the bubble is tapped, a voice session starts or this runs out
+    private static final long RING_MS = 120_000L;
+    private static final long RING_EVERY_MS = 5_000L;
 
     private static final class Timer {
         String name;
@@ -37,7 +40,9 @@ public class VoiceTimers {
     private final Map<String, Timer> timers = new LinkedHashMap<>();
     private long holdUntil = 0L;
     private boolean showing = false;
+    private long ringUntil = 0L;
     private final Runnable tick = this::tick;
+    private final Runnable ring = this::ring;
 
     VoiceTimers(VoiceEngine engine) {
         this.engine = engine;
@@ -55,9 +60,14 @@ public class VoiceTimers {
             Timer done = timers.remove(id);
             String label = name.isEmpty() && done != null ? done.name : name;
             if (label.isEmpty()) label = mApplicationContext.getString(R.string.voice_timer_default_name);
-            engine.playAlertTone();
-            holdUntil = SystemClock.elapsedRealtime() + DONE_SHOW_MS;
+            engine.playAlarmTone();
+            long now = SystemClock.elapsedRealtime();
+            // the controller announces the timer meanwhile, ring() skips the tone while that plays
+            ringUntil = now + RING_MS;
+            holdUntil = ringUntil;
             show(mApplicationContext.getString(R.string.voice_timer_done, label));
+            handler.removeCallbacks(ring);
+            handler.postDelayed(ring, RING_EVERY_MS);
         } else {
             Timer timer = timers.get(id);
             if (timer == null) {
@@ -97,6 +107,36 @@ public class VoiceTimers {
         handler.postDelayed(tick, TICK_MS);
     }
 
+    private void ring() {
+        if (ringUntil == 0L) return;
+        VoiceEngine.State state = engine.getState();
+        if (SystemClock.elapsedRealtime() >= ringUntil
+                || state == VoiceEngine.State.LISTENING || state == VoiceEngine.State.PROCESSING) {
+            // a wake word ("stop") ends it too. the session owns the bubble then, so leave its text
+            stopRinging(state == VoiceEngine.State.IDLE || state == VoiceEngine.State.DISABLED);
+            return;
+        }
+        // speaking is the announcement or an answer: wait for it
+        if (state == VoiceEngine.State.IDLE) engine.playAlarmTone();
+        handler.postDelayed(ring, RING_EVERY_MS);
+    }
+
+    private void stopRinging(boolean clearBubble) {
+        ringUntil = 0L;
+        holdUntil = 0L;
+        handler.removeCallbacks(ring);
+        if (!clearBubble) showing = false;
+        handler.removeCallbacks(tick);
+        tick();
+    }
+
+    // a tap on the voice bubble
+    public void dismiss() {
+        handler.post(() -> {
+            if (ringUntil != 0L) stopRinging(true);
+        });
+    }
+
     private void show(String text) {
         showing = !text.isEmpty();
         engine.showText(text);
@@ -112,6 +152,7 @@ public class VoiceTimers {
 
     void onDestroy() {
         handler.removeCallbacks(tick);
+        handler.removeCallbacks(ring);
         handler.post(timers::clear);
     }
 }
