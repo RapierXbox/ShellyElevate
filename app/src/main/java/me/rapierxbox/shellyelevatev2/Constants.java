@@ -102,6 +102,8 @@ public final class Constants {
     // voice through the paired controller over the v1 websocket
     public static final String SP_HA_VOICE_ENABLED = "haVoiceEnabled";
     public static final String SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS = "voiceAssistantMaxRecordSeconds";
+    // size of the voice bubble (listening, thinking, timers) in percent of its normal size
+    public static final String SP_VOICE_BUBBLE_SCALE = "voiceBubbleScale";
     public static final String SP_VOICE_WAKE_ENABLED = "voiceWakeEnabled";
     public static final String SP_VOICE_WAKE_MODEL_NAME = "voiceWakeModelName";
     public static final String SP_VOICE_WAKE_SOUND_ENABLED = "voiceWakeSoundEnabled";

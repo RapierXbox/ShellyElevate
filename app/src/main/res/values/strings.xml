@@ -209,6 +209,9 @@
     <string name="sw_input_invert">Invert input</string>
     <string name="voice_assistant_max_seconds">Max listening time</string>
     <string name="voice_assistant_max_seconds_hint">10</string>
+    <string name="voice_bubble_scale">Voice bubble size</string>
+    <string name="voice_bubble_scale_hint">100</string>
+    <string name="unit_percent">%</string>
     <string name="voice_wake_enabled">Wake word detection</string>
     <string name="voice_wake_model_name">Wake word model</string>
     <string name="voice_wake_model_status_loaded">Ready</string>
