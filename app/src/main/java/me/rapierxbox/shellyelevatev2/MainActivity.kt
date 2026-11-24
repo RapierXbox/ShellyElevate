@@ -12,6 +12,7 @@ import android.os.Bundle
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import android.util.TypedValue
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
@@ -38,6 +39,7 @@ import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_TEXT
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_TEXT_KEY
 import me.rapierxbox.shellyelevatev2.Constants.INTENT_VOICE_THRESHOLD_KEY
 import me.rapierxbox.shellyelevatev2.Constants.SP_SETTINGS_EVER_SHOWN
+import me.rapierxbox.shellyelevatev2.Constants.SP_VOICE_BUBBLE_SCALE
 import me.rapierxbox.shellyelevatev2.Constants.SP_VOICE_SCORE_BAR_ENABLED
 import me.rapierxbox.shellyelevatev2.Constants.SP_WEBVIEW_UPDATE_PROMPTED
 import me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mButtonHandler
@@ -139,10 +141,28 @@ class MainActivity : ComponentActivity(), DisplayHost {
             if (text.isEmpty()) {
                 binding.voiceBubble.visibility = View.GONE
             } else {
+                applyVoiceBubbleScale()
                 binding.voiceBubbleText.text = text
                 binding.voiceBubble.visibility = View.VISIBLE
             }
         }
+    }
+
+    // the bubble's size setting, read each time it shows so a change applies to the next text
+    private var voiceBubbleScale = 0
+
+    private fun applyVoiceBubbleScale() {
+        val percent = mSharedPreferences.getInt(SP_VOICE_BUBBLE_SCALE, 100).coerceIn(100, 300)
+        if (percent == voiceBubbleScale) return
+        voiceBubbleScale = percent
+        val s = percent / 100f
+        val dp = resources.displayMetrics.density
+        val text = binding.voiceBubbleText
+        text.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f * s)
+        text.setPadding((20 * s * dp).toInt(), (10 * s * dp).toInt(), (20 * s * dp).toInt(), (10 * s * dp).toInt())
+        // wider with the text, but never past the screen
+        text.maxWidth = minOf((300 * s * dp).toInt(), resources.displayMetrics.widthPixels - (32 * dp).toInt())
+        binding.voiceBubble.radius = 20 * s * dp
     }
 
     // lifecycle

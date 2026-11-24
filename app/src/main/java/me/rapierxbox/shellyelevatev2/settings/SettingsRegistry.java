@@ -231,6 +231,8 @@ public final class SettingsRegistry {
         SettingDef.Condition wakeOn = eq(Constants.SP_VOICE_WAKE_ENABLED, true);
         add(m, integer(Constants.SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, CATEGORY_VOICE, "Max recording")
                 .range(1, 60).unit("s").visibleIf(voiceOn));
+        add(m, integer(Constants.SP_VOICE_BUBBLE_SCALE, 100, CATEGORY_VOICE, "Voice bubble size")
+                .range(100, 300).unit("%").description("Listening, thinking and timer text").visibleIf(voiceOn));
         add(m, bool(Constants.SP_VOICE_ASSISTANT_MUTED, false, CATEGORY_VOICE, "Microphone muted").visibleIf(voiceOn));
         add(m, bool(Constants.SP_VOICE_WAKE_ENABLED, true, CATEGORY_VOICE, "Wake word").visibleIf(voiceOn));
         add(m, string(Constants.SP_VOICE_WAKE_MODEL_NAME, "", CATEGORY_VOICE, "Wake word model")

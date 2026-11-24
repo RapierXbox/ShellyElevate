@@ -670,6 +670,8 @@ class SettingsFragment : Fragment() {
             // the voice block shares the rule of max listening time which only needs voice on
             row(SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, b.voiceEngineLayout, b.voiceAssistantMaxSecondsLayout)
             +IntTextPref(b.voiceAssistantMaxSeconds, SP_VOICE_ASSISTANT_MAX_RECORD_SECONDS, 10, min = 1, max = 60)
+            row(SP_VOICE_BUBBLE_SCALE, b.voiceBubbleScaleLayout)
+            +IntTextPref(b.voiceBubbleScale, SP_VOICE_BUBBLE_SCALE, 100, min = 100, max = 300)
             +SwitchPref(b.voiceWakeEnabled, SP_VOICE_WAKE_ENABLED, true)
             row(SP_VOICE_WAKE_ENABLED, b.voiceWakeEnabled)
             parent(b.voiceWakeEnabled)

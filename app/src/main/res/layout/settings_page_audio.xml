@@ -550,6 +550,40 @@
             </LinearLayout>
 
             <LinearLayout
+                android:id="@+id/voiceBubbleScaleLayout"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:layout_weight="1"
+                    android:text="@string/voice_bubble_scale"
+                    android:textSize="18sp" />
+
+                <EditText
+                    android:id="@+id/voiceBubbleScale"
+                    android:layout_width="80dp"
+                    android:layout_height="wrap_content"
+                    android:gravity="end"
+                    android:hint="@string/voice_bubble_scale_hint"
+                    android:imeOptions="actionDone"
+                    android:inputType="number"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_gravity="center_vertical"
+                    android:layout_marginStart="4dp"
+                    android:text="@string/unit_percent"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <LinearLayout
                 android:id="@+id/voiceWakeCooldownLayout"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
