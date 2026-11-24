@@ -11,6 +11,7 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -122,8 +123,28 @@ public final class WakeWordModelManager {
             }
         }
         if (tfliteUri == null) throw new IOException("no tflite file picked");
+        Uri tfliteFrom = tfliteUri;
+        Uri jsonFrom = jsonUri;
+        return installModel(wakewordsDir, tfliteName,
+                () -> resolver.openInputStream(tfliteFrom),
+                jsonFrom == null ? null : () -> resolver.openInputStream(jsonFrom));
+    }
 
-        String name = stripExtension(tfliteName, TFLITE_EXT).toLowerCase(Locale.ROOT)
+    // a model sent by home assistant: the tflite and its optional json as bytes
+    public static String importModelBytes(File wakewordsDir, String tfliteName, byte[] tflite, byte[] json) throws IOException {
+        if (!tfliteName.toLowerCase(Locale.ROOT).endsWith(TFLITE_EXT)) tfliteName += TFLITE_EXT;
+        return installModel(wakewordsDir, tfliteName,
+                () -> new ByteArrayInputStream(tflite),
+                json == null ? null : () -> new ByteArrayInputStream(json));
+    }
+
+    interface Source {
+        InputStream open() throws IOException;
+    }
+
+    // stores the model under the tflite's file name made safe, the json first so a model is never half installed
+    private static String installModel(File wakewordsDir, String tfliteName, Source tfliteSource, Source jsonSource) throws IOException {
+        String name = stripExtension(tfliteName.toLowerCase(Locale.ROOT), TFLITE_EXT)
                 .replaceAll("[^a-z0-9_]+", "_").replaceAll("^_+|_+$", "");
         if (name.isEmpty() || VAD_STEM.equals(name)) throw new IOException("bad model name " + tfliteName);
 
@@ -132,9 +153,9 @@ public final class WakeWordModelManager {
         File tflitePart = WakeWordModelDownloader.partFile(wakewordsDir, name + TFLITE_EXT);
         File jsonPart = WakeWordModelDownloader.partFile(wakewordsDir, name + JSON_EXT);
         try {
-            copy(resolver, tfliteUri, tflitePart);
-            if (jsonUri != null) {
-                copy(resolver, jsonUri, jsonPart);
+            copy(tfliteSource, tflitePart);
+            if (jsonSource != null) {
+                copy(jsonSource, jsonPart);
                 replace(jsonPart, json);
             }
             // the tflite last since its presence is what makes the model installed
@@ -156,9 +177,9 @@ public final class WakeWordModelManager {
         return name == null ? "" : name.toLowerCase(Locale.ROOT);
     }
 
-    private static void copy(ContentResolver resolver, Uri from, File to) throws IOException {
-        try (InputStream in = resolver.openInputStream(from); OutputStream out = new FileOutputStream(to)) {
-            if (in == null) throw new IOException("could not open " + from);
+    private static void copy(Source from, File to) throws IOException {
+        try (InputStream in = from.open(); OutputStream out = new FileOutputStream(to)) {
+            if (in == null) throw new IOException("could not open the model file");
             byte[] buf = new byte[16 * 1024];
             int n;
             while ((n = in.read(buf)) > 0) out.write(buf, 0, n);

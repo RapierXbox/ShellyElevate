@@ -4,12 +4,14 @@ import static me.rapierxbox.shellyelevatev2.ShellyElevateApplication.mApplicatio
 
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Base64;
 import android.util.Log;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -18,6 +20,7 @@ import me.rapierxbox.shellyelevatev2.R;
 import me.rapierxbox.shellyelevatev2.SettingsParser;
 import me.rapierxbox.shellyelevatev2.voice.VoiceEngine;
 import me.rapierxbox.shellyelevatev2.voice.VoiceTransport;
+import me.rapierxbox.shellyelevatev2.voice.WakeWordModelManager;
 
 // voice through the paired controller (protocol v1 section 5 and 6)
 // the display sends voice.wake then mic audio on channel 0x01 and the controller runs the pipeline
@@ -27,6 +30,8 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
     public static final int CHANNEL_AUDIO = 0x01;
     // the assist satellite entity subscribes a moment after the connection so the config goes out again
     private static final long CONFIG_RESEND_MS = 10_000;
+    // microwakeword models are 50 to 200 KB
+    private static final int MAX_MODEL_BYTES = 2 * 1024 * 1024;
 
     private static final Handler configHandler = new Handler(Looper.getMainLooper());
     private static volatile String lastConfig;
@@ -157,6 +162,22 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
             sendConfig(engine, true);
             return null;
         });
+        // a wake word model from home assistant: the tflite, its optional json and whether to use it right away
+        ApiHub.registerCommand("voice.wake_word_upload", params -> {
+            byte[] tflite = decodeModelFile(params, "tflite_b64");
+            if (tflite == null) throw ApiHub.CommandException.invalid("tflite_b64 is required");
+            byte[] json = decodeModelFile(params, "json_b64");
+            String id;
+            try {
+                id = WakeWordModelManager.importModelBytes(WakeWordModelManager.getModelDirectory(mApplicationContext),
+                        params.optString("name", "wake_word"), tflite, json);
+            } catch (IOException e) {
+                throw ApiHub.CommandException.invalid(e.getMessage());
+            }
+            if (params.optBoolean("activate", false)) engine.setActiveWakeWord(id);
+            sendConfig(engine, true);
+            return new JSONObject().put("id", id);
+        });
         ApiHub.registerCommand("timer.update", params -> {
             JSONObject timer = params.optJSONObject("timer");
             String event = params.optString("event", "");
@@ -185,6 +206,20 @@ public class ControllerVoiceTransport implements VoiceTransport, ApiHub.Controll
                 sendConfig(engine, false);
             }
         });
+    }
+
+    // null when the key is missing or empty
+    private static byte[] decodeModelFile(JSONObject params, String key) throws ApiHub.CommandException {
+        String b64 = params.isNull(key) ? "" : params.optString(key, "");
+        if (b64.isEmpty()) return null;
+        byte[] data;
+        try {
+            data = Base64.decode(b64, Base64.NO_WRAP);
+        } catch (IllegalArgumentException e) {
+            throw ApiHub.CommandException.invalid(key + " is not base64");
+        }
+        if (data.length == 0 || data.length > MAX_MODEL_BYTES) throw ApiHub.CommandException.invalid(key + " must be 1 byte to 2 MB");
+        return data;
     }
 
     private static void contributeState(VoiceEngine engine, Map<String, Object> state) {
