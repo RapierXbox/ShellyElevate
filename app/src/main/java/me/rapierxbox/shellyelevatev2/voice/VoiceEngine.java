@@ -692,10 +692,14 @@ public class VoiceEngine {
     }
 
     // okay_nabu or hey_jarvis_v2 -> Okay Nabu or Hey Jarvis
+    //   v2, models (esphome models/v2), experiments, microWakeWordsV6 (community repo folders)
+    private static final String FOLDER_PART = "(?i)v\\d+|models|experiments|microwakewords(v\\d+)?";
+
     public static String phraseOf(String id) {
         StringBuilder phrase = new StringBuilder();
         for (String part : id.split("[_\\-\\s]+")) {
-            if (part.isEmpty() || part.matches("(?i)v\\d+")) continue;
+            // the version and the repo folder a downloaded model is named after are not part of the phrase
+            if (part.isEmpty() || part.matches(FOLDER_PART)) continue;
             if (phrase.length() > 0) phrase.append(' ');
             phrase.append(part.substring(0, 1).toUpperCase(Locale.ROOT)).append(part.substring(1));
         }

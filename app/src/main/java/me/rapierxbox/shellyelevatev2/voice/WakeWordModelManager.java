@@ -19,9 +19,11 @@ import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 import me.rapierxbox.shellyelevatev2.helper.HttpDownloader;
@@ -35,7 +37,9 @@ public final class WakeWordModelManager {
     private static final String TAG = "WakeWordModelManager";
 
     private static final String OFFICIAL_REPO = "esphome/micro-wake-word-models";
-    private static final String EXPERIMENTAL_REPO = "TaterTotterson/microWakeWords";
+    // the maker's current repo; the old TaterTotterson/microWakeWords is archived
+    // each training round is a folder microWakeWordsV1, V2 ... and only the newest per word is offered
+    private static final String EXPERIMENTAL_REPO = "TaterTotterson/Tater-Wake-Words";
     // one trees call returns every blob and dodges the 60 per hour contents api limit
     private static final String TREES_URL = "https://api.github.com/repos/%s/git/trees/HEAD?recursive=1";
     // raw downloads are unauthenticated and do not count against the api limit
@@ -173,15 +177,15 @@ public final class WakeWordModelManager {
     }
 
     public static List<WakeWordModel.Downloadable> fetchOfficialModels(OkHttpClient client) throws IOException {
-        return fetchModelsFromRepo(client, OFFICIAL_REPO, WakeWordModel.Downloadable::new);
+        return fetchModelsFromRepo(client, OFFICIAL_REPO, WakeWordModel.Downloadable::new, false);
     }
 
     public static List<WakeWordModel.Experimental> fetchExperimentalModels(OkHttpClient client) throws IOException {
-        return fetchModelsFromRepo(client, EXPERIMENTAL_REPO, WakeWordModel.Experimental::new);
+        return fetchModelsFromRepo(client, EXPERIMENTAL_REPO, WakeWordModel.Experimental::new, true);
     }
 
     private static <T extends WakeWordModel.Remote> List<T> fetchModelsFromRepo(
-            OkHttpClient client, String repo, RemoteFactory<T> factory) throws IOException {
+            OkHttpClient client, String repo, RemoteFactory<T> factory, boolean newestOnly) throws IOException {
         JSONObject response = fetchJsonObject(client, String.format(TREES_URL, repo));
         JSONArray tree = response.optJSONArray("tree");
         if (tree == null) return Collections.emptyList();
@@ -198,6 +202,7 @@ public final class WakeWordModelManager {
             allPaths.add(path);
             if (path.endsWith(TFLITE_EXT)) tflitePaths.add(path);
         }
+        if (newestOnly) tflitePaths = newestPerStem(tflitePaths);
 
         List<T> results = new ArrayList<>();
         for (String tflitePath : tflitePaths) {
@@ -217,6 +222,33 @@ public final class WakeWordModelManager {
 
         results.sort(Comparator.comparing(WakeWordModel.Remote::getName));
         return results;
+    }
+
+    // keeps one model per stem, the one whose folder ends in the highest number
+    //   microWakeWordsV3/hey_glados and microWakeWordsV6/hey_glados -> microWakeWordsV6/hey_glados
+    static List<String> newestPerStem(List<String> tflitePaths) {
+        Map<String, String> newest = new HashMap<>();
+        for (String path : tflitePaths) {
+            int lastSlash = path.lastIndexOf('/');
+            String stem = path.substring(lastSlash + 1);
+            String current = newest.get(stem);
+            if (current == null || folderVersion(path) > folderVersion(current)) newest.put(stem, path);
+        }
+        return new ArrayList<>(newest.values());
+    }
+
+    // trailing number of the folder, 0 when there is none
+    private static int folderVersion(String path) {
+        int lastSlash = path.lastIndexOf('/');
+        if (lastSlash < 0) return 0;
+        int end = lastSlash, start = end;
+        while (start > 0 && Character.isDigit(path.charAt(start - 1))) start--;
+        if (start == end) return 0;
+        try {
+            return Integer.parseInt(path.substring(start, end));
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     // two repos can ship the same stem so the unique folder parts are appended
