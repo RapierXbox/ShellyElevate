@@ -85,11 +85,6 @@ final class ThinkingSound {
         float range = mSharedPreferences.getInt(SP_VOICE_THINKING_SOUND_PITCH, 10) / 100f;
         int fadeInMs = first ? mSharedPreferences.getInt(SP_VOICE_THINKING_SOUND_FADE_IN, 0) : 0;
         try {
-            // the Rockchip player stays silent after seekTo or setPlaybackParams, so only touch them when needed
-            if (range > 0f) {
-                float pitch = 1f + (random.nextFloat() * 2f - 1f) * range;
-                player.setPlaybackParams(player.getPlaybackParams().setPitch(pitch));
-            }
             if (first) level = fadeInMs > 0 ? 0f : 1f;
             volume(player, level);
             player.start();
@@ -97,6 +92,18 @@ final class ThinkingSound {
         } catch (RuntimeException e) {
             Log.w(TAG, "thinking sound failed: " + e.getMessage());
             release();
+            return;
+        }
+        // after start: the Rockchip player never starts when setPlaybackParams comes before start(),
+        // and a failed pitch must not stop the sound
+        if (range > 0f) setPitch(1f + (random.nextFloat() * 2f - 1f) * range);
+    }
+
+    private void setPitch(float pitch) {
+        try {
+            player.setPlaybackParams(player.getPlaybackParams().setPitch(pitch));
+        } catch (RuntimeException e) {
+            Log.w(TAG, "thinking sound pitch not applied: " + e.getMessage());
         }
     }
 
