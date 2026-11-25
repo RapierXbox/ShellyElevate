@@ -771,8 +771,8 @@ public class VoiceEngine {
         broadcastText(text);
     }
 
-    public void playAlertTone() {
-        tonePlayer.playWake();
+    public void playAlarmTone() {
+        tonePlayer.playAlarm();
     }
 
     private void broadcastState(State s) {

@@ -19,19 +19,28 @@ public class TonePlayer {
     private static final double END_FREQ = 440.0;
     private static final double END_DURATION_SEC = 0.5;
     private static final double END_DECAY = 9.0;
+    // timer alarm: beep beep, higher and flatter than the wake ding so the two are not mixed up
+    private static final double ALARM_FREQ = 1000.0;
+    private static final double ALARM_BEEP_SEC = 0.12;
+    private static final double ALARM_GAP_SEC = 0.10;
+    private static final int ALARM_BEEPS = 2;
+    private static final double ALARM_DURATION_SEC = ALARM_BEEPS * (ALARM_BEEP_SEC + ALARM_GAP_SEC);
 
     private final Executor executor;
     private final short[] wakeBuffer;
     private final short[] endBuffer;
+    private final short[] alarmBuffer;
 
     public TonePlayer(Executor executor) {
         this.executor = executor;
         this.wakeBuffer = render(WAKE_FREQ, WAKE_DURATION_SEC, WAKE_DECAY);
         this.endBuffer = render(END_FREQ, END_DURATION_SEC, END_DECAY);
+        this.alarmBuffer = renderBeeps();
     }
 
     public void playWake() { play(wakeBuffer, WAKE_DURATION_SEC); }
     public void playEnd() { play(endBuffer, END_DURATION_SEC); }
+    public void playAlarm() { play(alarmBuffer, ALARM_DURATION_SEC); }
 
     private void play(short[] buf, double durationSec) {
         executor.execute(() -> {
@@ -54,6 +63,14 @@ public class TonePlayer {
                 if (track != null) { try { track.release(); } catch (Exception ignored) {} }
             }
         });
+    }
+
+    private static short[] renderBeeps() {
+        short[] beep = render(ALARM_FREQ, ALARM_BEEP_SEC, 1.5);
+        int step = beep.length + (int) (SAMPLE_RATE * ALARM_GAP_SEC);
+        short[] buf = new short[step * ALARM_BEEPS];
+        for (int i = 0; i < ALARM_BEEPS; i++) System.arraycopy(beep, 0, buf, i * step, beep.length);
+        return buf;
     }
 
     // renders a sine tone with a 5 ms linear attack and exponential decay
